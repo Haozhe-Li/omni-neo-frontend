@@ -4,12 +4,13 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowRight } from 'lucide-react'
 
 interface SearchHomeProps {
-  onSearch: (query: string) => void
+  onSearch: (query: string, threadId: string) => void
 }
 
 export function SearchHome({ onSearch }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
+  const [threadId, setThreadId] = useState<string>('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Mouse glow state — we track both "target" (instant mouse) and "rendered" (smoothed)
@@ -118,6 +119,36 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
       }
     }
 
+    // Initialize thread ID
+    const fetchThreadId = async () => {
+      if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
+        const mockId = 'mock-thread-id-' + Date.now()
+        setThreadId(mockId)
+        return mockId
+      }
+
+      const endpoint = process.env.NEXT_PUBLIC_BACKEND_URL
+        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/get_thread_id`
+        : '/api/get_thread_id'
+
+      try {
+        const res = await fetch(endpoint)
+        if (res.ok) {
+          const data = await res.json()
+          if (data && typeof data === 'string') {
+            setThreadId(data)
+            return data
+          } else if (data && data.thread_id) {
+            setThreadId(data.thread_id)
+            return data.thread_id as string
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch thread ID', e)
+      }
+      return null
+    }
+
     // 1. Check local storage first
     const stored = getStoredStatus()
     if (stored === 'ready') {
@@ -130,12 +161,34 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
       intervalIdRef.current = setInterval(checkHealth, 5000)
     }
 
+    fetchThreadId()
+
     return () => {
       if (intervalIdRef.current) {
         clearInterval(intervalIdRef.current)
       }
     }
   }, [])
+
+  // Re-fetch thread ID if backend becomes ready and we don't have one
+  useEffect(() => {
+    if (backendStatus === 'ready' && !threadId) {
+      const fetchAgain = async () => {
+        const endpoint = process.env.NEXT_PUBLIC_BACKEND_URL
+          ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/get_thread_id`
+          : '/api/get_thread_id'
+        try {
+          const res = await fetch(endpoint)
+          if (res.ok) {
+            const data = await res.json()
+            if (data && typeof data === 'string') setThreadId(data)
+            else if (data && data.thread_id) setThreadId(data.thread_id)
+          }
+        } catch (e) { }
+      }
+      fetchAgain()
+    }
+  }, [backendStatus, threadId])
 
 
   // Auto-resize textarea
@@ -155,8 +208,18 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (backendStatus !== 'ready') return
+
+    // Ensure threadId is present
+    if (!threadId) {
+      console.warn("Thread ID missing, attempting to fetch...")
+      // We can't easily await here without refactoring `fetchThreadId` out of useEffect
+      // But the useEffect above should catch it.
+      // If still missing, we might want to block or show error.
+      return
+    }
+
     if (query.trim()) {
-      onSearch(query.trim())
+      onSearch(query.trim(), threadId)
     }
   }
 
@@ -226,10 +289,10 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
-                disabled={backendStatus !== 'ready'}
+                disabled={backendStatus !== 'ready' || !threadId}
                 placeholder={
                   backendStatus === 'ready'
-                    ? "Ask anything..."
+                    ? (threadId ? "Ask anything..." : "Initializing session...")
                     : isCheckPending
                       ? "Connecting to brain..."
                       : "Backend is not ready, please wait..."
@@ -242,7 +305,7 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
               <div className="absolute bottom-3 right-3 flex items-center gap-2">
                 <button
                   type="submit"
-                  disabled={!query.trim() || backendStatus !== 'ready'}
+                  disabled={!query.trim() || backendStatus !== 'ready' || !threadId}
                   className={`
                     flex items-center justify-center h-9 w-9 rounded-xl transition-all duration-200
                     ${query.trim() && backendStatus === 'ready'
@@ -271,7 +334,7 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
               <button
                 key={suggestion}
                 type="button"
-                onClick={() => onSearch(suggestion)}
+                onClick={() => threadId && onSearch(suggestion, threadId)}
                 className="px-4 py-2 text-xs text-muted-foreground rounded-full border border-border bg-card hover:bg-secondary hover:text-foreground transition-all duration-200 cursor-pointer"
               >
                 {suggestion}

@@ -10,12 +10,13 @@ import type { SSEMessage, TodoItem } from '@/lib/types'
 
 interface CanvasViewProps {
   query: string
+  threadId: string
   onNewSearch: () => void
 }
 
 type ActiveView = 'steps' | 'answer'
 
-export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
+export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
   const [messages, setMessages] = useState<SSEMessage[]>([])
   const [finalAnswer, setFinalAnswer] = useState<{
     answer: string
@@ -36,6 +37,20 @@ export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
       setTodos((prev) =>
         prev.map((t) => ({ ...t, status: 'completed' as const }))
       )
+
+      // Save to local storage
+      if (typeof window !== 'undefined' && threadId) {
+        const chatData = {
+          thread_id: threadId,
+          query,
+          messages,
+          final_answer: finalAnswer,
+          todos: todos.map(t => ({ ...t, status: 'completed' })),
+          timestamp: Date.now()
+        }
+        localStorage.setItem(threadId, JSON.stringify(chatData))
+      }
+
       const timer = setTimeout(() => {
         setTodos((prev) =>
           prev.map((t) => ({ ...t, status: 'completed' as const }))
@@ -107,6 +122,33 @@ export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
 
   useEffect(() => {
     const fetchData = async () => {
+      // 1. Try to load from local storage
+      if (typeof window !== 'undefined' && threadId) {
+        try {
+          const stored = localStorage.getItem(threadId)
+          if (stored) {
+            const data = JSON.parse(stored)
+            // Ensure it matches the requested query or just load it?
+            // Usually threadId is unique enough.
+            if (data.thread_id === threadId) {
+              setMessages(data.messages || [])
+              setFinalAnswer(data.final_answer || null)
+              setTodos(data.todos || [])
+              setIsComplete(true)
+              isCompleteRef.current = true
+              answerReceivedRef.current = true
+              if (data.final_answer) {
+                setActiveView('answer')
+              }
+              return // Skip network fetch
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load thread from storage", e)
+        }
+      }
+
+      // 2. If not found, fetch from API
       try {
         const apiEndpoint =
           process.env.NEXT_PUBLIC_USE_MOCK === 'true'
@@ -116,7 +158,7 @@ export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
         const response = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
+          body: JSON.stringify({ query, thread_id: threadId }),
         })
 
         if (!response.ok) throw new Error('Failed to fetch')
@@ -143,7 +185,7 @@ export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
       }
     }
     fetchData()
-  }, [query, handleSSELine])
+  }, [query, threadId, handleSSELine])
 
   // Timeout logic
   useEffect(() => {

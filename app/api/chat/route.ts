@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { query } = await request.json()
+    const { query, thread_id } = await request.json()
 
     if (!query) {
       return new Response('Query is required', { status: 400 })
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, thread_id }),
     })
 
     if (!response.ok) {
