@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info } from 'lucide-react'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -14,13 +14,24 @@ interface StoredChat {
 }
 
 interface AppSidebarProps {
-    currentThreadId: string | null
-    onSelectThread: (threadId: string, query: string) => void
-    onNewChat: () => void
+    currentThreadId?: string | null
+    onSelectThread?: (threadId: string, query: string) => void
+    onNewChat?: () => void
     className?: string
+    variant?: 'chat' | 'settings'
+    activeSection?: string
+    onSelectSection?: (section: string) => void
 }
 
-export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, className = '' }: AppSidebarProps) {
+export function AppSidebar({
+    currentThreadId,
+    onSelectThread,
+    onNewChat,
+    className = '',
+    variant = 'chat',
+    activeSection,
+    onSelectSection
+}: AppSidebarProps) {
     const router = useRouter()
     const [history, setHistory] = useState<StoredChat[]>([])
     const [isOpen, setIsOpen] = useState(true)
@@ -75,19 +86,17 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, classNa
     }, [])
 
     useEffect(() => {
-        loadHistory()
-        // Listen for storage events (e.g. new chat created in another tab or this tab)
-        const handleStorage = () => loadHistory()
-        window.addEventListener('storage', handleStorage)
-
-        // Poll occasionally to keep it simple and robust
-        const interval = setInterval(loadHistory, 2000)
-
-        return () => {
-            window.removeEventListener('storage', handleStorage)
-            clearInterval(interval)
+        if (variant === 'chat') {
+            loadHistory()
+            const handleStorage = () => loadHistory()
+            window.addEventListener('storage', handleStorage)
+            const interval = setInterval(loadHistory, 2000)
+            return () => {
+                window.removeEventListener('storage', handleStorage)
+                clearInterval(interval)
+            }
         }
-    }, [loadHistory])
+    }, [loadHistory, variant])
 
     const handleDelete = (e: React.MouseEvent, threadId: string) => {
         e.stopPropagation()
@@ -95,7 +104,7 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, classNa
             localStorage.removeItem(threadId)
             loadHistory()
             // If deleted active thread, maybe go to new chat?
-            if (threadId === currentThreadId) {
+            if (threadId === currentThreadId && onNewChat) {
                 onNewChat()
             }
         }
@@ -110,7 +119,9 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, classNa
             {/* Header / Toggle */}
             <div className="flex items-center justify-between p-4 h-14">
                 {isExpanded && (
-                    <span className="font-medium text-sm text-[var(--foreground)] opacity-60">History</span>
+                    <span className="font-medium text-sm text-[var(--foreground)] opacity-60">
+                        {variant === 'settings' ? 'Settings' : 'History'}
+                    </span>
                 )}
                 <button
                     onClick={() => setIsOpen(!isOpen)}
@@ -121,72 +132,128 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, classNa
                 </button>
             </div>
 
-            {/* New Chat Button */}
+            {/* Main Action Button (New Chat or Back to Home) */}
             <div className="px-3 pb-2">
-                <button
-                    onClick={() => {
-                        onNewChat()
-                        if (isMobile) setIsOpen(false)
-                    }}
-                    className={`
-            flex items-center gap-3 w-full p-2 rounded-lg 
-            hover:bg-[var(--secondary)] 
-            text-[var(--foreground)]
-            transition-all duration-200
-            ${!isExpanded ? 'justify-center' : ''}
-          `}
-                    title="New Chat"
-                >
-                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <Plus size={18} />
-                    </div>
-                    {isExpanded && <span className="text-sm font-medium">New Thread</span>}
-                </button>
-            </div>
-
-            {/* History List */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
-                {history.map((chat) => (
+                {variant === 'chat' ? (
                     <button
-                        key={chat.thread_id}
                         onClick={() => {
-                            onSelectThread(chat.thread_id, chat.query)
+                            if (onNewChat) onNewChat()
                             if (isMobile) setIsOpen(false)
                         }}
                         className={`
-              group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
-              ${currentThreadId === chat.thread_id
-                                ? 'bg-[var(--secondary)] text-[var(--foreground)]'
-                                : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
-                            }
-              ${!isExpanded ? 'justify-center' : ''}
-            `}
-                        title={chat.query}
+                    flex items-center gap-3 w-full p-2 rounded-lg 
+                    hover:bg-[var(--secondary)] 
+                    text-[var(--foreground)]
+                    transition-all duration-200
+                    ${!isExpanded ? 'justify-center' : ''}
+                `}
+                        title="New Chat"
                     >
-                        <MessageSquare size={16} className="min-w-[16px]" />
-                        {isExpanded && (
-                            <>
-                                <span className="text-sm truncate pr-6 flex-1">
-                                    {chat.query}
-                                </span>
-                            </>
-                        )}
-                        {isExpanded && (
-                            <div
-                                onClick={(e) => handleDelete(e, chat.thread_id)}
-                                className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--secondary)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
-                                role="button"
-                                aria-label="Delete chat"
+                        <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                            <Plus size={18} />
+                        </div>
+                        {isExpanded && <span className="text-sm font-medium">New Thread</span>}
+                    </button>
+                ) : (
+                    <button
+                        onClick={() => {
+                            router.push('/')
+                            if (isMobile) setIsOpen(false)
+                        }}
+                        className={`
+                    flex items-center gap-3 w-full p-2 rounded-lg 
+                    hover:bg-[var(--secondary)] 
+                    text-[var(--foreground)]
+                    transition-all duration-200
+                    ${!isExpanded ? 'justify-center' : ''}
+                `}
+                        title="Back to Home"
+                    >
+                        <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                            <ArrowLeft size={18} />
+                        </div>
+                        {isExpanded && <span className="text-sm font-medium">Back to Home</span>}
+                    </button>
+                )}
+            </div>
+
+            {/* List Content (History or Settings Sections) */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
+                {variant === 'chat' ? (
+                    <>
+                        {history.map((chat) => (
+                            <button
+                                key={chat.thread_id}
+                                onClick={() => {
+                                    if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
+                                    if (isMobile) setIsOpen(false)
+                                }}
+                                className={`
+                      group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
+                      ${currentThreadId === chat.thread_id
+                                        ? 'bg-[var(--secondary)] text-[var(--foreground)]'
+                                        : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
+                                    }
+                      ${!isExpanded ? 'justify-center' : ''}
+                    `}
+                                title={chat.query}
                             >
-                                <Trash2 size={12} />
+                                <MessageSquare size={16} className="min-w-[16px]" />
+                                {isExpanded && (
+                                    <>
+                                        <span className="text-sm truncate pr-6 flex-1">
+                                            {chat.query}
+                                        </span>
+                                    </>
+                                )}
+                                {isExpanded && (
+                                    <div
+                                        onClick={(e) => handleDelete(e, chat.thread_id)}
+                                        className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--secondary)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
+                                        role="button"
+                                        aria-label="Delete chat"
+                                    >
+                                        <Trash2 size={12} />
+                                    </div>
+                                )}
+                            </button>
+                        ))}
+                        {history.length === 0 && isExpanded && (
+                            <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
+                                No history yet
                             </div>
                         )}
-                    </button>
-                ))}
-                {history.length === 0 && isExpanded && (
-                    <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
-                        No history yet
-                    </div>
+                    </>
+                ) : (
+                    /* Settings Sections Navigation */
+                    <>
+                        {['Appearance', 'AI', 'About'].map((section) => (
+                            <button
+                                key={section}
+                                onClick={() => {
+                                    if (onSelectSection) onSelectSection(section)
+                                    if (isMobile) setIsOpen(false)
+                                }}
+                                className={`
+                      group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
+                      ${activeSection === section
+                                        ? 'bg-[var(--secondary)] text-[var(--foreground)] font-medium'
+                                        : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
+                                    }
+                      ${!isExpanded ? 'justify-center' : ''}
+                    `}
+                            >
+                                <div className="text-[var(--muted-foreground)]">
+                                    {section === 'Appearance' && <Palette size={16} />}
+                                    {section === 'AI' && <Bot size={16} />}
+                                    {section === 'About' && <Info size={16} />}
+                                </div>
+                                {isExpanded && (
+                                    <span className="text-sm">{section}</span>
+                                )}
+                            </button>
+                        ))}
+                    </>
                 )}
             </div>
 
@@ -194,7 +261,9 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, classNa
             <div className="p-3 border-t border-[var(--border-subtle)]">
                 <button
                     onClick={() => {
-                        router.push('/settings')
+                        if (variant !== 'settings') {
+                            router.push('/settings')
+                        }
                         if (isMobile) setIsOpen(false)
                     }}
                     className={`
@@ -203,6 +272,7 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, classNa
                 hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
                 transition-all duration-200
                 ${!isExpanded ? 'justify-center' : ''}
+                ${variant === 'settings' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : ''}
             `}
                 >
                     <Settings size={18} />

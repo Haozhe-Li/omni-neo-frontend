@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
+import { AppSidebar } from '@/components/app-sidebar'
 import {
-    ArrowLeft,
     Globe,
     Palette,
     Bot,
@@ -12,8 +12,6 @@ import {
     Languages,
     Info,
     ExternalLink,
-    ChevronRight,
-    Check,
     Sun,
     Moon,
     Monitor,
@@ -31,6 +29,7 @@ export default function SettingsPage() {
 
     const [chatModel, setChatModel] = useState<ModelType>('auto')
     const [mounted, setMounted] = useState(false)
+    const [activeSection, setActiveSection] = useState('Appearance')
 
     // Load saved preferences
     useEffect(() => {
@@ -43,6 +42,31 @@ export default function SettingsPage() {
         }
     }, [])
 
+    // Scroll spy effect to update activeSection based on scroll position
+    useEffect(() => {
+        const handleScroll = () => {
+            const sections = ['Appearance', 'AI', 'About']
+            for (const section of sections) {
+                const el = document.getElementById(section)
+                if (el) {
+                    const rect = el.getBoundingClientRect()
+                    // If element is approx in upper half of view
+                    if (rect.top >= 0 && rect.top < window.innerHeight / 2) {
+                        setActiveSection(section)
+                        break
+                    }
+                }
+            }
+        }
+
+        // Find the main scroll container
+        const main = document.querySelector('main')
+        if (main) {
+            main.addEventListener('scroll', handleScroll)
+            return () => main.removeEventListener('scroll', handleScroll)
+        }
+    }, [mounted])
+
     const handleModelChange = (newModel: ModelType) => {
         setChatModel(newModel)
         localStorage.setItem('omni_model_preference', newModel)
@@ -50,6 +74,14 @@ export default function SettingsPage() {
 
     const handleThemeChange = (newTheme: ThemeType) => {
         setTheme(newTheme)
+    }
+
+    const scrollToSection = (section: string) => {
+        setActiveSection(section)
+        const element = document.getElementById(section)
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
     }
 
     if (!mounted) {
@@ -61,135 +93,137 @@ export default function SettingsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-            {/* Top bar */}
-            <header className="sticky top-0 z-20 backdrop-blur-md bg-[var(--background)]/80 border-b border-[var(--border-subtle)]">
-                <div className="max-w-2xl mx-auto px-6 h-14 flex items-center gap-3">
-                    <button
-                        onClick={() => router.push('/')}
-                        className="p-1.5 -ml-1.5 rounded-lg hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors duration-200"
-                        aria-label="Go back"
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
-                    <h1 className="text-base font-medium">Settings</h1>
+        <div className="flex h-screen w-full bg-background overflow-hidden relative">
+            {/* Sidebar with settings variant */}
+            <AppSidebar
+                variant="settings"
+                activeSection={activeSection}
+                onSelectSection={scrollToSection}
+                className="flex-shrink-0 z-50 relative"
+            />
+
+            {/* Main Content Area */}
+            <main className="flex-1 min-w-0 h-full relative overflow-y-auto bg-[var(--background)]">
+                <div className="max-w-3xl mx-auto px-6 py-12 space-y-16 pb-32">
+
+                    <div className="flex flex-col gap-2">
+                        <h1 className="text-2xl font-semibold text-[var(--foreground)]">Settings</h1>
+                        <p className="text-[var(--muted-foreground)]">Manage your preferences and application settings.</p>
+                    </div>
+
+                    {/* ───────── Appearance ───────── */}
+                    <section id="Appearance" className="scroll-mt-6">
+                        <SectionHeader icon={<Palette size={16} />} title="Appearance" />
+
+                        <div className="mt-4 space-y-1 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
+                            {/* Language */}
+                            <SettingsRow
+                                label="Language"
+                                description="Interface display language"
+                                icon={<Globe size={16} className="text-[var(--muted-foreground)]" />}
+                            >
+                                <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                                    <span>English</span>
+                                </div>
+                            </SettingsRow>
+
+                            <Divider />
+
+                            {/* Theme */}
+                            <SettingsRow
+                                label="Theme"
+                                description="Choose your preferred appearance"
+                                icon={<Sun size={16} className="text-[var(--muted-foreground)]" />}
+                            >
+                                <ThemePicker
+                                    value={theme as ThemeType}
+                                    onChange={handleThemeChange}
+                                />
+                            </SettingsRow>
+                        </div>
+                    </section>
+
+                    {/* ───────── AI ───────── */}
+                    <section id="AI" className="scroll-mt-6">
+                        <SectionHeader icon={<Bot size={16} />} title="AI" />
+
+                        <div className="mt-4 space-y-1 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
+                            {/* Chat Model */}
+                            <SettingsRow
+                                label="Chat Model"
+                                description="Select how the AI responds to your queries"
+                                icon={<MessageSquare size={16} className="text-[var(--muted-foreground)]" />}
+                            >
+                                <ModelPicker
+                                    value={chatModel}
+                                    onChange={handleModelChange}
+                                />
+                            </SettingsRow>
+
+                            <Divider />
+
+                            {/* Model Language */}
+                            <SettingsRow
+                                label="Model Language"
+                                description="Language the AI uses to respond"
+                                icon={<Languages size={16} className="text-[var(--muted-foreground)]" />}
+                            >
+                                <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                                    <span>Auto</span>
+                                </div>
+                            </SettingsRow>
+                        </div>
+                    </section>
+
+                    {/* ───────── About ───────── */}
+                    <section id="About" className="scroll-mt-6">
+                        <SectionHeader icon={<Info size={16} />} title="About" />
+
+                        <div className="mt-4 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
+                            <div className="p-5 space-y-4">
+                                {/* App info */}
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-xl bg-[var(--secondary)] flex items-center justify-center">
+                                        <Bot size={24} className="text-[var(--accent)]" />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-sm">{APP_NAME}</p>
+                                        <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                                            Version {APP_VERSION}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
+                                    An advanced AI-powered research agent that thinks, searches, and provides comprehensive answers. Built with care for a seamless research experience.
+                                </p>
+
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                    <AboutLink
+                                        href="https://omniknows.xyz"
+                                        label="Website"
+                                    />
+                                    <AboutLink
+                                        href="https://github.com/Haozhe-Li"
+                                        label="GitHub"
+                                    />
+                                </div>
+                            </div>
+
+                            <Divider />
+
+                            <div className="px-5 py-3 flex items-center justify-between">
+                                <span className="text-xs text-[var(--muted-foreground)]">
+                                    © {new Date().getFullYear()} {APP_NAME}
+                                </span>
+                                <span className="text-xs text-[var(--muted-foreground)] opacity-60">
+                                    Made with ♥
+                                </span>
+                            </div>
+                        </div>
+                    </section>
+
                 </div>
-            </header>
-
-            {/* Content */}
-            <main className="max-w-2xl mx-auto px-6 py-8 space-y-10 pb-24">
-
-                {/* ───────── Appearance ───────── */}
-                <section>
-                    <SectionHeader icon={<Palette size={16} />} title="Appearance" />
-
-                    <div className="mt-4 space-y-1 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
-                        {/* Language */}
-                        <SettingsRow
-                            label="Language"
-                            description="Interface display language"
-                            icon={<Globe size={16} className="text-[var(--muted-foreground)]" />}
-                        >
-                            <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                                <span>English</span>
-                            </div>
-                        </SettingsRow>
-
-                        <Divider />
-
-                        {/* Theme */}
-                        <SettingsRow
-                            label="Theme"
-                            description="Choose your preferred appearance"
-                            icon={<Sun size={16} className="text-[var(--muted-foreground)]" />}
-                        >
-                            <ThemePicker
-                                value={theme as ThemeType}
-                                onChange={handleThemeChange}
-                            />
-                        </SettingsRow>
-                    </div>
-                </section>
-
-                {/* ───────── AI ───────── */}
-                <section>
-                    <SectionHeader icon={<Bot size={16} />} title="AI" />
-
-                    <div className="mt-4 space-y-1 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
-                        {/* Chat Model */}
-                        <SettingsRow
-                            label="Chat Model"
-                            description="Select how the AI responds to your queries"
-                            icon={<MessageSquare size={16} className="text-[var(--muted-foreground)]" />}
-                        >
-                            <ModelPicker
-                                value={chatModel}
-                                onChange={handleModelChange}
-                            />
-                        </SettingsRow>
-
-                        <Divider />
-
-                        {/* Model Language */}
-                        <SettingsRow
-                            label="Model Language"
-                            description="Language the AI uses to respond"
-                            icon={<Languages size={16} className="text-[var(--muted-foreground)]" />}
-                        >
-                            <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                                <span>Auto</span>
-                            </div>
-                        </SettingsRow>
-                    </div>
-                </section>
-
-                {/* ───────── About ───────── */}
-                <section>
-                    <SectionHeader icon={<Info size={16} />} title="About" />
-
-                    <div className="mt-4 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
-                        <div className="p-5 space-y-4">
-                            {/* App info */}
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-[var(--secondary)] flex items-center justify-center">
-                                    <Bot size={24} className="text-[var(--accent)]" />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-sm">{APP_NAME}</p>
-                                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                                        Version {APP_VERSION}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
-                                An advanced AI-powered research agent that thinks, searches, and provides comprehensive answers. Built with care for a seamless research experience.
-                            </p>
-
-                            <div className="flex flex-wrap gap-2 pt-1">
-                                <AboutLink
-                                    href="https://omniknows.xyz"
-                                    label="Website"
-                                />
-                                <AboutLink
-                                    href="https://github.com/Haozhe-Li"
-                                    label="GitHub"
-                                />
-                            </div>
-                        </div>
-
-                        <Divider />
-
-                        <div className="px-5 py-3 flex items-center justify-between">
-                            <span className="text-xs text-[var(--muted-foreground)]">
-                                © {new Date().getFullYear()} {APP_NAME}
-                            </span>
-                            <span className="text-xs text-[var(--muted-foreground)] opacity-60">
-                                Made with ♥
-                            </span>
-                        </div>
-                    </div>
-                </section>
             </main>
         </div>
     )
