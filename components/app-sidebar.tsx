@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu } from 'lucide-react'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -16,11 +17,11 @@ interface AppSidebarProps {
     currentThreadId: string | null
     onSelectThread: (threadId: string, query: string) => void
     onNewChat: () => void
-    onOpenSettings: () => void
     className?: string
 }
 
-export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, onOpenSettings, className = '' }: AppSidebarProps) {
+export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, className = '' }: AppSidebarProps) {
+    const router = useRouter()
     const [history, setHistory] = useState<StoredChat[]>([])
     const [isOpen, setIsOpen] = useState(true)
     const [isMobile, setIsMobile] = useState(false)
@@ -193,7 +194,7 @@ export function AppSidebar({ currentThreadId, onSelectThread, onNewChat, onOpenS
             <div className="p-3 border-t border-[var(--border-subtle)]">
                 <button
                     onClick={() => {
-                        onOpenSettings()
+                        router.push('/settings')
                         if (isMobile) setIsOpen(false)
                     }}
                     className={`

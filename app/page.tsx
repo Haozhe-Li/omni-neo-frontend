@@ -5,24 +5,33 @@ import { SearchHome } from '@/components/search-home'
 import { CanvasView } from '@/components/canvas-view'
 import { LightChatView } from '@/components/light-chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
-import { SettingsModal } from '@/components/settings-modal'
+import { toast } from 'sonner'
 
-type ModelType = 'canvas' | 'light'
+type ModelType = 'canvas' | 'light' | 'auto'
 
 export default function Home() {
   const [view, setView] = useState<'home' | 'canvas' | 'light'>('home')
   const [currentQuery, setCurrentQuery] = useState('')
   const [currentThreadId, setCurrentThreadId] = useState('')
-  const [model, setModel] = useState<ModelType>('canvas')
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [model, setModel] = useState<ModelType>('auto')
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false)
 
-  // Load model preference from local storage
+  // Load model preference from local storage (and re-read on window focus for settings page sync)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('omni_model_preference')
-      if (saved === 'canvas' || saved === 'light') {
-        setModel(saved)
+    const loadModel = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('omni_model_preference')
+        if (saved === 'canvas' || saved === 'light' || saved === 'auto') {
+          setModel(saved)
+        }
       }
+    }
+    loadModel()
+    window.addEventListener('focus', loadModel)
+    window.addEventListener('storage', loadModel)
+    return () => {
+      window.removeEventListener('focus', loadModel)
+      window.removeEventListener('storage', loadModel)
     }
   }, [])
 
@@ -31,28 +40,86 @@ export default function Home() {
     localStorage.setItem('omni_model_preference', newModel)
   }
 
-  const handleSearch = useCallback((query: string, threadId: string) => {
+  const handleSearch = useCallback(async (query: string, threadId: string) => {
     setCurrentQuery(query)
     setCurrentThreadId(threadId)
-    // Use the current model setting to determine view
-    setView(model)
+
+    if (model === 'auto') {
+      // Auto mode: call /get_model first
+      setIsAutoDetecting(true)
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
+        const endpoint = baseUrl.endsWith('/') ? `${baseUrl}get_model` : `${baseUrl}/get_model`
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, thread_id: threadId })
+        })
+
+        if (!res.ok) throw new Error('Failed to get model recommendation')
+
+        let data = await res.json()
+        // Handle double-encoded JSON (backend might return a JSON string)
+        if (typeof data === 'string') {
+          try {
+            data = JSON.parse(data)
+          } catch (e) {
+            // Not double-encoded, use as-is
+          }
+        }
+
+        console.log('[Auto Model] Raw response:', data)
+
+        // Extract model from response - handle various response formats
+        let recommendedModel: 'canvas' | 'light' = 'canvas'
+        if (typeof data === 'object' && data !== null) {
+          const rawModel = data.model
+          if (typeof rawModel === 'string' && rawModel.toLowerCase().includes('light')) {
+            recommendedModel = 'light'
+          } else if (typeof rawModel === 'string' && rawModel.toLowerCase().includes('canvas')) {
+            recommendedModel = 'canvas'
+          }
+        } else if (typeof data === 'string') {
+          if (data.toLowerCase().includes('light')) {
+            recommendedModel = 'light'
+          }
+        }
+
+        console.log('[Auto Model] Resolved model:', recommendedModel)
+
+        setIsAutoDetecting(false)
+
+        if (recommendedModel === 'light') {
+          toast.info('Auto selected: Light Mode', { duration: 2000 })
+          setView('light')
+        } else {
+          toast.info('Auto selected: Canvas Mode', { duration: 2000 })
+          setView('canvas')
+        }
+      } catch (e) {
+        console.error('Failed to auto-detect model, falling back to canvas', e)
+        setIsAutoDetecting(false)
+        toast.error('Auto detection failed, using Canvas mode')
+        setView('canvas')
+      }
+    } else {
+      // Manual mode: use the selected model directly
+      setView(model)
+    }
   }, [model])
 
   const handleNewSearch = useCallback(() => {
     setView('home')
     setCurrentQuery('')
     setCurrentThreadId('')
+    setIsAutoDetecting(false)
   }, [])
 
   const handleSelectThread = useCallback((threadId: string, query: string) => {
     setCurrentThreadId(threadId)
     setCurrentQuery(query)
 
-    // Determine model from saved history if possible, or default to current model?
-    // Ideally we check history type. But for now let's just use current model or try to detect.
-    // LightChatView and CanvasView have logic to load history.
-    // If we load a Canvas history in Light view, it might be weird.
-    // Let's see if we can peek at storage?
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(threadId)
       if (stored) {
@@ -74,15 +141,7 @@ export default function Home() {
         currentThreadId={currentThreadId}
         onSelectThread={handleSelectThread}
         onNewChat={handleNewSearch}
-        onOpenSettings={() => setIsSettingsOpen(true)}
         className="flex-shrink-0 z-50 relative"
-      />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        model={model}
-        onModelChange={handleModelChange}
       />
 
       <main className="flex-1 min-w-0 h-full relative overflow-hidden">
@@ -101,7 +160,7 @@ export default function Home() {
             onNewSearch={handleNewSearch}
           />
         ) : (
-          <SearchHome onSearch={handleSearch} />
+          <SearchHome onSearch={handleSearch} isAutoDetecting={isAutoDetecting} />
         )}
       </main>
     </div>

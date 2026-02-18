@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Sparkles } from 'lucide-react'
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string) => void
+  isAutoDetecting?: boolean
 }
 
-export function SearchHome({ onSearch }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
@@ -232,6 +233,23 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
 
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-between px-4 overflow-hidden">
+      {/* Auto-detecting overlay */}
+      {isAutoDetecting && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 animate-fade-up">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center">
+                <Sparkles className="h-6 w-6 text-accent animate-pulse" />
+              </div>
+              <div className="absolute inset-0 rounded-2xl bg-accent/5 animate-ping" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">Selecting best model...</p>
+              <p className="text-xs text-muted-foreground mt-1">Analyzing your query</p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Mouse-following glow — sits behind everything via z-0 */}
       <div
         ref={glowRef}
