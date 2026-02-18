@@ -263,7 +263,7 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
     <div className="h-screen flex flex-col bg-background overflow-hidden relative">
       {/* ── Global Header (Unchanged) ── */}
       <header className="flex-shrink-0 border-b border-border bg-background/80 backdrop-blur-xl z-30">
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 px-6">
+        <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 pl-14 pr-6 md:px-6">
           <button
             onClick={onNewSearch}
             className="flex items-center gap-2 text-sm text-foreground/70 hover:text-foreground transition-colors duration-200 cursor-pointer flex-shrink-0"
