@@ -180,6 +180,43 @@ export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
     return `${m}m ${s}s`
   }
 
+  const [title, setTitle] = useState(query)
+
+  useEffect(() => {
+    const fetchTitle = async () => {
+      try {
+        const apiEndpoint =
+          process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+            ? '/api/mock-get-title'
+            : process.env.NEXT_PUBLIC_BACKEND_URL
+              ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/get_title`
+              : '/api/get_title'
+
+        if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') return;
+
+        const response = await fetch(apiEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query }),
+        })
+
+        if (!response.ok) throw new Error('Failed to fetch title')
+
+        const data = await response.json()
+        if (data && typeof data === 'string') {
+          setTitle(data)
+        } else if (data && data.title) {
+          setTitle(data.title)
+        }
+      } catch (error) {
+        console.error('Failed to fetch title:', error)
+      }
+    }
+
+    // Only fetch if not using mock, or if mock has a specific endpoint (omitted for now)
+    fetchTitle()
+  }, [query])
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden relative">
       {/* ── Global Header (Unchanged) ── */}
@@ -187,14 +224,14 @@ export function CanvasView({ query, onNewSearch }: CanvasViewProps) {
         <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 px-6">
           <button
             onClick={onNewSearch}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer flex-shrink-0"
+            className="flex items-center gap-2 text-sm text-foreground/70 hover:text-foreground transition-colors duration-200 cursor-pointer flex-shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
             <span className="hidden sm:inline">New search</span>
           </button>
           <div className="flex-1 text-center">
-            <span className="text-sm font-light tracking-tight text-muted-foreground line-clamp-1 text-pretty">
-              {query}
+            <span className="text-sm font-medium tracking-tight text-foreground/90 line-clamp-1 text-pretty">
+              {title}
             </span>
           </div>
           <div className="w-20 sm:w-24 flex-shrink-0 flex justify-end">
