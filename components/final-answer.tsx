@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, memo } from 'react'
+import { useState, memo, useRef } from 'react'
 import { ChevronDown, ChevronRight, ExternalLink, BookOpen, Copy, Check } from 'lucide-react'
+import { TextSelectionMenu } from '@/components/text-selection-menu'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -118,9 +119,11 @@ const markdownComponents: Components = {
 
 export const FinalAnswer = memo(function FinalAnswer({ answer, sources }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm">
+    <div ref={containerRef} className="rounded-xl border border-border bg-card shadow-sm relative">
+      <TextSelectionMenu containerRef={containerRef} />
       {/* Answer body */}
       <div className="px-8 py-8 sm:px-10 sm:py-10">
         <div className="max-w-none markdown-body">
