@@ -60,6 +60,9 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
   const [backendStatus, setBackendStatus] = useState<'unknown' | 'ready' | 'not-ready'>('unknown')
   const [isCheckPending, setIsCheckPending] = useState(true)
 
+  // Use refs for the interval ID to keep it accessible in cleanup
+  const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
+
   useEffect(() => {
     // Determine backend URL
     const backendUrl = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
@@ -69,10 +72,28 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
         : '/api/health'
 
     if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
-      // Mock always ready
       setBackendStatus('ready')
       setIsCheckPending(false)
       return
+    }
+
+    const STORAGE_KEY = 'backend_health_status'
+    const EXPIRY_KEY = 'backend_health_expiry'
+    const EXPIRY_TIME = 10 * 60 * 1000 // 10 minutes
+
+    const getStoredStatus = () => {
+      if (typeof window === 'undefined') return null
+      const status = localStorage.getItem(STORAGE_KEY)
+      const expiry = localStorage.getItem(EXPIRY_KEY)
+      if (status === 'ready' && expiry && parseInt(expiry) > Date.now()) {
+        return 'ready'
+      }
+      return null
+    }
+
+    const setStoredStatus = () => {
+      localStorage.setItem(STORAGE_KEY, 'ready')
+      localStorage.setItem(EXPIRY_KEY, (Date.now() + EXPIRY_TIME).toString())
     }
 
     const checkHealth = async () => {
@@ -80,22 +101,56 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
         const res = await fetch(backendUrl)
         if (res.ok) {
           setBackendStatus('ready')
+          setIsCheckPending(false)
+          setStoredStatus()
+          // Stop polling if we become ready
+          if (intervalIdRef.current) {
+            clearInterval(intervalIdRef.current)
+            intervalIdRef.current = null
+          }
         } else {
           setBackendStatus('not-ready')
+          setIsCheckPending(false)
         }
       } catch (error) {
         setBackendStatus('not-ready')
-      } finally {
         setIsCheckPending(false)
       }
     }
 
-    checkHealth()
+    // 1. Check local storage first
+    const stored = getStoredStatus()
+    if (stored === 'ready') {
+      setBackendStatus('ready')
+      setIsCheckPending(false)
+    } else {
+      // 2. If not stored/expired, check immediately
+      checkHealth()
+      // 3. And start polling every 5s
+      intervalIdRef.current = setInterval(checkHealth, 5000)
+    }
 
-    // Poll every 5s, cleared on unmount (when starting chat)
-    const interval = setInterval(checkHealth, 5000)
-    return () => clearInterval(interval)
+    return () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current)
+      }
+    }
   }, [])
+
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      // Reset height to auto to correctly calculate shrink
+      inputRef.current.style.height = 'auto'
+      const newHeight = inputRef.current.scrollHeight
+      // Max height ~ 200px (more expansion)
+      const maxHeight = 200
+
+      inputRef.current.style.height = `${Math.min(newHeight, maxHeight)}px`
+      inputRef.current.style.overflowY = newHeight > maxHeight ? 'auto' : 'hidden'
+    }
+  }, [query])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -179,8 +234,8 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
                       ? "Connecting to brain..."
                       : "Backend is not ready, please wait..."
                 }
-                className={`w-full resize-none bg-transparent px-6 pt-5 pb-14 text-lg text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed`}
-                style={{ minHeight: '64px', maxHeight: '200px' }}
+                className={`w-full resize-none bg-transparent px-6 pt-5 pb-14 text-base text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
+                style={{ minHeight: '84px' }}
               />
 
               {/* Bottom bar */}
@@ -227,7 +282,7 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
       </div>
 
       {/* Footer Status */}
-      <footer className="w-full py-6 flex justify-center items-center animate-fade-up" style={{ animationDelay: '500ms' }}>
+      <footer className="w-full py-6 flex flex-col gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: '500ms' }}>
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-border/50">
           <div className={`w-2 h-2 rounded-full ${backendStatus === 'ready' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' :
             backendStatus === 'not-ready' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' :
@@ -238,6 +293,15 @@ export function SearchHome({ onSearch }: SearchHomeProps) {
               backendStatus === 'not-ready' ? 'System Offline / Starting' :
                 'Connecting...'}
           </span>
+        </div>
+
+        <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
+          <p>
+            &copy; {new Date().getFullYear()} <a href="/" className="hover:text-foreground transition-colors">Omni Knows</a>. All rights reserved.
+          </p>
+          <p>
+            Made with love by <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors underline decoration-border hover:decoration-foreground">Haozhe Li</a>
+          </p>
         </div>
       </footer>
     </main>
