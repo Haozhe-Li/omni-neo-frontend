@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import { AppSidebar } from '@/components/app-sidebar'
+import { useIsMobile } from '@/hooks/use-mobile'
 import {
     Globe,
     Palette,
@@ -18,7 +19,8 @@ import {
     Monitor,
     Check,
     ChevronDown,
-    Database
+    Database,
+    Menu
 } from 'lucide-react'
 import {
     Select,
@@ -42,6 +44,24 @@ export default function SettingsPage() {
     const [chatModel, setChatModel] = useState<ModelType>('auto')
     const [mounted, setMounted] = useState(false)
     const [activeSection, setActiveSection] = useState('Appearance')
+
+    // Sidebar state
+    const isMobileCheck = useIsMobile()
+    const isMobile = isMobileCheck === undefined ? true : isMobileCheck
+    const [sidebarOpen, setSidebarOpen] = useState(false)
+
+    // Initialize sidebar state based on device
+    useEffect(() => {
+        if (isMobile) {
+            setSidebarOpen(false)
+        } else {
+            setSidebarOpen(true)
+        }
+    }, [isMobile])
+
+    const toggleSidebar = useCallback(() => {
+        setSidebarOpen(prev => !prev)
+    }, [])
 
     // Load saved preferences
     useEffect(() => {
@@ -88,13 +108,23 @@ export default function SettingsPage() {
         setTheme(newTheme)
     }
 
-    const scrollToSection = (section: string) => {
-        setActiveSection(section)
-        const element = document.getElementById(section)
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }
-    }
+    const handleNewChat = useCallback(() => {
+        router.push('/')
+    }, [router])
+
+    const handleSelectThread = useCallback((threadId: string) => {
+        // Navigate to home with thread selected.
+        // Since we store state in localStorage and URL isn't fully query-param based for thread yet?
+        // Wait, Home page uses `currentThreadId` state.
+        // Ideally we should support `/?threadId=xyz`.
+        // But for now, just going to home might be enough if we can't deep direct.
+        // Actually, let's just push to home. The user can select from sidebar there too.
+        // NOTE: If we want to open a specific thread, we need URL support in Home.
+        // Assuming we don't have that easily right now (Home uses internal state + history).
+        // Let's just go home for now.
+        router.push('/')
+    }, [router])
+
 
     if (!mounted) {
         return (
@@ -106,19 +136,33 @@ export default function SettingsPage() {
 
     return (
         <div className="flex h-screen w-full bg-background overflow-hidden relative">
-            {/* Sidebar with settings variant */}
+            {/* Sidebar */}
             <AppSidebar
-                variant="settings"
-                activeSection={activeSection}
-                onSelectSection={scrollToSection}
                 className="flex-shrink-0 z-50 relative"
+                isOpen={sidebarOpen}
+                onToggle={toggleSidebar}
+                isMobile={isMobile}
+                onNewChat={handleNewChat}
+                onSelectThread={handleSelectThread}
             />
 
             {/* Main Content Area */}
-            <main className="flex-1 min-w-0 h-full relative overflow-y-auto bg-[var(--background)]">
+            <main className="flex-1 min-w-0 h-full relative overflow-y-auto bg-[var(--background)] pt-14 md:pt-0">
+
+                {/* Mobile Header */}
+                <header className="fixed top-0 left-0 right-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-center z-40 md:hidden">
+                    <button
+                        onClick={toggleSidebar}
+                        className="absolute left-4 p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                    >
+                        <Menu size={20} />
+                    </button>
+                    <span className="font-medium text-sm text-[var(--foreground)] tracking-tight">Settings</span>
+                </header>
+
                 <div className="max-w-3xl mx-auto px-6 py-12 space-y-16 pb-32">
 
-                    <div className="flex flex-col gap-2">
+                    <div className="hidden md:flex flex-col gap-2">
                         <h1 className="text-2xl font-semibold text-[var(--foreground)]">Settings</h1>
                         <p className="text-[var(--muted-foreground)]">Manage your preferences and application settings.</p>
                     </div>
@@ -232,8 +276,8 @@ export default function SettingsPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="auto">Auto Detect</SelectItem>
-                                            <SelectItem value="en" disabled>English</SelectItem>
-                                            <SelectItem value="zh" disabled>Chinese</SelectItem>
+                                            <SelectItem value="en" disabled>English (Coming Soon)</SelectItem>
+                                            <SelectItem value="zh" disabled>Chinese (Coming Soon)</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>

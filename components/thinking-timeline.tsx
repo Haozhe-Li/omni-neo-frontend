@@ -256,8 +256,8 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
           icon: <Search className="h-3.5 w-3.5" />,
           label: 'Searching',
           detail: (
-            <div className="flex flex-wrap gap-2">
-              <span className="text-[var(--muted-foreground)] text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate max-w-[300px]" title={args.query}>
+            <div className="flex flex-wrap gap-2 w-full min-w-0">
+              <span className="block text-[var(--muted-foreground)] text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate w-full sm:w-auto hover:w-auto transition-all" title={args.query}>
                 {args.query || ''}
               </span>
             </div>
@@ -265,11 +265,15 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
         }
       case 'skimming_web_pages': {
         const urls: string[] = args.urls || []
+        // On mobile, stack them. On desktop, keep row.
+        // We use flex-col for mobile (default) and sm:flex-row for desktop?
+        // Actually user asked for "stack five webpages vertically" specifically.
+        // Let's make it responsive: stacked on small screens.
         return {
           icon: <FileText className="h-3.5 w-3.5" />,
           label: 'Reviewing Sources',
           detail: (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full min-w-0 mt-1 sm:mt-0">
               {urls.map((u, i) => {
                 let hostname = u
                 try {
@@ -277,18 +281,17 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
                   if (hostname.startsWith('www.')) hostname = hostname.slice(4)
                 } catch { /* keep raw */ }
 
-                const display = hostname.length > 20 ? hostname.slice(0, 20) + '...' : hostname
-
+                // Mobile: allow more width but truncate.
                 return (
                   <a
                     key={i}
                     href={u}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)]"
+                    className="block w-full sm:w-auto text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate max-w-full sm:max-w-[200px]"
                     title={u}
                   >
-                    {display}
+                    {hostname}
                   </a>
                 )
               })}
@@ -304,21 +307,19 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
           if (hostname.startsWith('www.')) hostname = hostname.slice(4)
         } catch { /* keep raw */ }
 
-        const display = hostname.length > 25 ? hostname.slice(0, 25) + '...' : hostname
-
         return {
           icon: <BookOpen className="h-3.5 w-3.5" />,
           label: 'Reading',
           detail: (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full min-w-0 mt-1 sm:mt-0">
               <a
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)]"
+                className="block w-full sm:w-auto text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate max-w-full sm:max-w-[250px]"
                 title={url}
               >
-                {display}
+                {hostname}
               </a>
             </div>
           ),
@@ -328,24 +329,14 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
         return {
           icon: <ShieldCheck className="h-3.5 w-3.5" />,
           label: 'Verifying',
-          detail: <span className="text-foreground/80">{args.fact || ''}</span>,
+          detail: <span className="text-foreground/80 truncate block w-full">{args.fact || ''}</span>,
         }
-      // case 'check_python_compile':
-      //   return {
-      //     icon: <Code className="h-3.5 w-3.5" />,
-      //     label: 'Checking python code',
-      //     detail: (
-      //       <button onClick={() => setCodeVisible(!codeVisible)} className="text-muted-foreground text-xs hover:text-foreground hover:underline cursor-pointer transition-colors">
-      //         {codeVisible ? 'hide code' : 'show code'}
-      //       </button>
-      //     ),
-      //   }
       case 'run_python_tool':
         return {
           icon: <Terminal className="h-3.5 w-3.5" />,
           label: 'Running python code',
           detail: (
-            <button onClick={() => setCodeVisible(!codeVisible)} className="text-muted-foreground text-xs hover:text-foreground hover:underline cursor-pointer transition-colors">
+            <button onClick={() => setCodeVisible(!codeVisible)} className="text-muted-foreground text-xs hover:text-foreground hover:underline cursor-pointer transition-colors whitespace-nowrap">
               {codeVisible ? 'hide code' : 'show code'}
             </button>
           ),
@@ -361,21 +352,21 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
 
   const { icon, label, detail } = getToolInfo()
 
-  const iconClass = isActive
-    ? 'bg-accent/15 text-accent'
-    : 'bg-muted text-muted-foreground'
-
   return (
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3 text-sm">
-        <div className={`flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-md ${iconClass} transition-colors duration-300`}>
-          {icon}
+      <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 text-sm">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground mt-0.5">
+            {icon}
+          </div>
+          <span className="font-medium text-muted-foreground">{label}</span>
         </div>
-        <span className={`flex-shrink-0 ${isActive ? 'text-accent/80' : 'text-muted-foreground/80'} transition-colors duration-300`}>{label}</span>
-        <span className="flex-1 min-w-0 truncate">{detail}</span>
+        <div className="flex-1 min-w-0 w-full sm:mt-0.5 pl-8 sm:pl-0">
+          {detail}
+        </div>
       </div>
       {codeVisible && args.code && (
-        <pre className="mt-2 ml-9 rounded-lg bg-secondary p-3 text-xs font-mono overflow-x-auto text-foreground">
+        <pre className="mt-2 ml-0 sm:ml-9 rounded-lg bg-secondary p-3 text-xs font-mono overflow-x-auto text-foreground">
           <code>{args.code}</code>
         </pre>
       )}

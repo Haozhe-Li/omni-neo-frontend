@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database } from 'lucide-react'
@@ -20,9 +20,10 @@ interface AppSidebarProps {
     onSelectThread?: (threadId: string, query: string) => void
     onNewChat?: () => void
     className?: string
-    variant?: 'chat' | 'settings'
-    activeSection?: string
-    onSelectSection?: (section: string) => void
+    // Variant props removed as we unified the sidebar
+    isOpen?: boolean
+    onToggle?: () => void
+    isMobile?: boolean
 }
 
 export function AppSidebar({
@@ -30,36 +31,15 @@ export function AppSidebar({
     onSelectThread,
     onNewChat,
     className = '',
-    variant = 'chat',
-    activeSection,
-    onSelectSection
+    // Variant props removed from interface but might be passed for compatibility, ignoring them
+    isOpen = true,
+    onToggle,
+    isMobile = false
 }: AppSidebarProps) {
     const router = useRouter()
+    const pathname = usePathname()
     const [history, setHistory] = useState<StoredChat[]>([])
-    const [isOpen, setIsOpen] = useState(true)
-    const [isMobile, setIsMobile] = useState(false)
-
-    useEffect(() => {
-        const checkMobile = () => {
-            const isMobileView = window.innerWidth < 768
-            setIsMobile(isMobileView)
-            if (isMobileView) {
-                setIsOpen(false)
-            } else {
-                setIsOpen(true)
-            }
-        }
-
-        checkMobile()
-
-        const handleResize = () => {
-            const isMobileView = window.innerWidth < 768
-            setIsMobile(isMobileView)
-        }
-
-        window.addEventListener('resize', handleResize)
-        return () => window.removeEventListener('resize', handleResize)
-    }, [])
+    // Removed internal state for isOpen/isMobile as they are now controlled
 
     const loadHistory = useCallback(() => {
         if (typeof window === 'undefined') return
@@ -72,10 +52,10 @@ export function AppSidebar({
                 if (!raw) continue
                 const data = JSON.parse(raw)
                 // Simple validation to ensure it's our chat data
-                if (data.thread_id && data.query && data.timestamp) {
+                if (data.thread_id && (data.query || data.title) && data.timestamp) {
                     items.push({
                         thread_id: data.thread_id,
-                        query: data.query,
+                        query: data.title || data.query, // Prefer title if available
                         timestamp: data.timestamp,
                         model: data.model // Add model loading
                     })
@@ -89,17 +69,15 @@ export function AppSidebar({
     }, [])
 
     useEffect(() => {
-        if (variant === 'chat') {
-            loadHistory()
-            const handleStorage = () => loadHistory()
-            window.addEventListener('storage', handleStorage)
-            const interval = setInterval(loadHistory, 2000)
-            return () => {
-                window.removeEventListener('storage', handleStorage)
-                clearInterval(interval)
-            }
+        loadHistory()
+        const handleStorage = () => loadHistory()
+        window.addEventListener('storage', handleStorage)
+        const interval = setInterval(loadHistory, 2000)
+        return () => {
+            window.removeEventListener('storage', handleStorage)
+            clearInterval(interval)
         }
-    }, [loadHistory, variant])
+    }, [loadHistory])
 
     const handleDelete = (e: React.MouseEvent, threadId: string) => {
         e.stopPropagation()
@@ -135,21 +113,23 @@ export function AppSidebar({
                                     className="object-cover"
                                 />
                             </div>
-                            {/* <span className="font-semibold text-lg text-[var(--foreground)] tracking-tight">
-                                Omni
-                            </span> */}
                         </Link>
-                        <button
-                            onClick={() => setIsOpen(!isOpen)}
-                            className="p-1.5 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                            title="Collapse sidebar"
-                        >
-                            <PanelLeftClose size={18} />
-                        </button>
+                        {!isMobile && (
+                            <button
+                                onClick={onToggle}
+                                className="p-1.5 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                                title="Collapse sidebar"
+                            >
+                                <PanelLeftClose size={18} />
+                            </button>
+                        )}
+                        {/* Mobile close button is usually handled by clicking outside, but we can add an X if needed.
+                            For now, let's keep the desktop approach or just hide the toggle on mobile since it's a drawer. 
+                        */}
                     </>
                 ) : (
                     <button
-                        onClick={() => setIsOpen(true)}
+                        onClick={onToggle}
                         className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-[var(--border-subtle)] group hover:border-[var(--muted-foreground)] transition-all"
                         title="Expand sidebar"
                     >
@@ -168,136 +148,81 @@ export function AppSidebar({
                 )}
             </div>
 
-            {/* Main Action Button (New Chat or Back to Home) */}
+            {/* Main Action Button (New Chat) */}
             <div className="px-3 pb-2">
-                {variant === 'chat' ? (
-                    <button
-                        onClick={() => {
-                            if (onNewChat) onNewChat()
-                            if (isMobile) setIsOpen(false)
-                        }}
-                        className={`
+                <button
+                    onClick={() => {
+                        if (onNewChat) onNewChat()
+                        if (isMobile && onToggle) onToggle()
+                    }}
+                    className={`
                     flex items-center gap-3 w-full p-2 rounded-lg 
                     hover:bg-[var(--secondary)] 
                     text-[var(--foreground)]
                     transition-all duration-200
                     ${!isExpanded ? 'justify-center' : ''}
                 `}
-                        title="New Chat"
-                    >
-                        <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                            <Plus size={18} />
-                        </div>
-                        {isExpanded && <span className="text-sm font-medium">New Thread</span>}
-                    </button>
-                ) : (
-                    <button
-                        onClick={() => {
-                            router.push('/')
-                            if (isMobile) setIsOpen(false)
-                        }}
-                        className={`
-                    flex items-center gap-3 w-full p-2 rounded-lg 
-                    hover:bg-[var(--secondary)] 
-                    text-[var(--foreground)]
-                    transition-all duration-200
-                    ${!isExpanded ? 'justify-center' : ''}
-                `}
-                        title="Back to Home"
-                    >
-                        <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                            <ArrowLeft size={18} />
-                        </div>
-                        {isExpanded && <span className="text-sm font-medium">Back to Home</span>}
-                    </button>
-                )}
+                    title="New Chat"
+                >
+                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                        <Plus size={18} />
+                    </div>
+                    {isExpanded && <span className="text-sm font-medium">New Thread</span>}
+                </button>
             </div>
 
-            {/* List Content (History or Settings Sections) */}
+            {/* List Content (History) */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
-                {variant === 'chat' ? (
-                    isExpanded ? (
-                        <>
-                            {history.map((chat) => (
-                                <button
-                                    key={chat.thread_id}
-                                    onClick={() => {
-                                        if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
-                                        if (isMobile) setIsOpen(false)
-                                    }}
-                                    className={`
-                      group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
-                      ${currentThreadId === chat.thread_id
-                                            ? 'bg-[var(--secondary)] text-[var(--foreground)]'
-                                            : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
-                                        }
-                    `}
-                                    title={chat.query}
-                                >
-                                    {chat.model === 'canvas' ? (
-                                        <Layout size={16} className="min-w-[16px]" />
-                                    ) : (
-                                        <MessageSquare size={16} className="min-w-[16px]" />
-                                    )}
-                                    <span className="text-sm truncate pr-6 flex-1">
-                                        {chat.query}
-                                    </span>
-                                    <div
-                                        onClick={(e) => handleDelete(e, chat.thread_id)}
-                                        className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--secondary)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
-                                        role="button"
-                                        aria-label="Delete chat"
-                                    >
-                                        <Trash2 size={12} />
-                                    </div>
-                                </button>
-                            ))}
-                            {history.length === 0 && (
-                                <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
-                                    No history yet
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        <button
-                            onClick={() => setIsOpen(true)}
-                            className="flex items-center justify-center w-full p-2 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-all duration-200"
-                            title="Show History"
-                        >
-                            <History size={18} />
-                        </button>
-                    )
-                ) : (
-                    /* Settings Sections Navigation */
+                {isExpanded ? (
                     <>
-                        {['Appearance', 'AI', 'Data Controls', 'About'].map((section) => (
+                        {history.map((chat) => (
                             <button
-                                key={section}
+                                key={chat.thread_id}
                                 onClick={() => {
-                                    if (onSelectSection) onSelectSection(section)
-                                    if (isMobile) setIsOpen(false)
+                                    if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
+                                    if (isMobile && onToggle) onToggle()
                                 }}
                                 className={`
                       group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
-                      ${activeSection === section
-                                        ? 'bg-[var(--secondary)] text-[var(--foreground)] font-medium'
+                      ${currentThreadId === chat.thread_id
+                                        ? 'bg-[var(--secondary)] text-[var(--foreground)]'
                                         : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
                                     }
-                      ${!isExpanded ? 'justify-center' : ''}
                     `}
+                                title={chat.query}
                             >
-                                <div className="text-[var(--muted-foreground)]">
-                                    {section === 'Appearance' && <Palette size={16} />}
-                                    {section === 'AI' && <Bot size={16} />}
-                                    {section === 'Data Controls' && <Database size={16} />}
-                                    {section === 'About' && <Info size={16} />}
-                                </div>
-                                {isExpanded && (
-                                    <span className="text-sm">{section}</span>
+                                {chat.model === 'canvas' ? (
+                                    <Layout size={16} className="min-w-[16px]" />
+                                ) : (
+                                    <MessageSquare size={16} className="min-w-[16px]" />
                                 )}
+                                <span className="text-sm truncate pr-6 flex-1">
+                                    {chat.query}
+                                </span>
+                                <div
+                                    onClick={(e) => handleDelete(e, chat.thread_id)}
+                                    className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--secondary)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
+                                    role="button"
+                                    aria-label="Delete chat"
+                                >
+                                    <Trash2 size={12} />
+                                </div>
                             </button>
                         ))}
+                        {history.length === 0 && (
+                            <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
+                                No history yet
+                            </div>
+                        )}
                     </>
+                ) : (
+                    <button
+                        onClick={onToggle}
+                        className="flex items-center justify-center w-full p-2 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-all duration-200"
+                        title="Show History"
+                    >
+                        <History size={18} />
+                    </button>
                 )}
             </div>
 
@@ -305,10 +230,10 @@ export function AppSidebar({
             <div className="p-3 border-t border-[var(--border-subtle)]">
                 <button
                     onClick={() => {
-                        if (variant !== 'settings') {
+                        if (pathname !== '/settings') {
                             router.push('/settings')
                         }
-                        if (isMobile) setIsOpen(false)
+                        if (isMobile && onToggle) onToggle()
                     }}
                     className={`
                 flex items-center gap-3 w-full p-2 rounded-lg 
@@ -316,7 +241,7 @@ export function AppSidebar({
                 hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
                 transition-all duration-200
                 ${!isExpanded ? 'justify-center' : ''}
-                ${variant === 'settings' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : ''}
+                ${pathname === '/settings' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : ''}
             `}
                 >
                     <Settings size={18} />
@@ -329,23 +254,14 @@ export function AppSidebar({
     if (isMobile) {
         return (
             <>
-                <button
-                    onClick={() => setIsOpen(true)}
-                    className={cn(
-                        "fixed top-3 left-3 z-50 p-2 rounded-md bg-background/80 backdrop-blur-md border border-border shadow-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-300",
-                        isOpen ? "opacity-0 pointer-events-none scale-90" : "opacity-100 scale-100"
-                    )}
-                    aria-label="Open sidebar"
-                >
-                    <Menu size={20} />
-                </button>
+                {/* Fixed toggle button removed - now handled by page headers */}
 
                 <div
                     className={cn(
                         "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm transition-all duration-300",
                         isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                     )}
-                    onClick={() => setIsOpen(false)}
+                    onClick={onToggle}
                 />
 
                 <aside

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, ArrowUp, Copy, ThumbsUp, ThumbsDown, Share } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, ThumbsUp, ThumbsDown, Share, Menu } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -11,6 +11,8 @@ interface LightChatViewProps {
     query: string
     threadId: string
     onNewSearch: () => void
+    onToggleSidebar?: () => void
+    isMobile?: boolean
 }
 
 interface Message {
@@ -18,7 +20,7 @@ interface Message {
     content: string
 }
 
-export function LightChatView({ query, threadId, onNewSearch }: LightChatViewProps) {
+export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: LightChatViewProps) {
     const [messages, setMessages] = useState<Message[]>([
         { role: 'user', content: query },
         { role: 'assistant', content: '...' } // Loading placeholder
@@ -27,6 +29,8 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
     const [isLoading, setIsLoading] = useState(true)
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
+    const [title, setTitle] = useState(query)
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
@@ -34,6 +38,64 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
     useEffect(() => {
         scrollToBottom()
     }, [messages])
+
+    // Fetch Title effect
+    useEffect(() => {
+        const fetchTitle = async () => {
+            try {
+                const apiEndpoint =
+                    process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+                        ? '/api/mock-get-title'
+                        : process.env.NEXT_PUBLIC_BACKEND_URL
+                            ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/get_title`
+                            : '/api/get_title'
+
+                if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') return;
+
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query }),
+                })
+
+                if (!response.ok) throw new Error('Failed to fetch title')
+
+                const data = await response.json()
+                if (data && typeof data === 'string') {
+                    setTitle(data)
+                    // Persist to local storage immediately
+                    if (typeof window !== 'undefined' && threadId) {
+                        const stored = localStorage.getItem(threadId)
+                        if (stored) {
+                            try {
+                                const chatData = JSON.parse(stored)
+                                chatData.title = data
+                                localStorage.setItem(threadId, JSON.stringify(chatData))
+                            } catch (e) { }
+                        }
+                    }
+                } else if (data && data.title) {
+                    setTitle(data.title)
+                    // Persist to local storage immediately
+                    if (typeof window !== 'undefined' && threadId) {
+                        const stored = localStorage.getItem(threadId)
+                        if (stored) {
+                            try {
+                                const chatData = JSON.parse(stored)
+                                chatData.title = data.title
+                                localStorage.setItem(threadId, JSON.stringify(chatData))
+                            } catch (e) { }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch title:', error)
+            }
+        }
+
+        // Only fetch if not using mock, or if mock has a specific endpoint
+        fetchTitle()
+    }, [query, threadId])
 
     // Load from LocalStorage OR Fetch initial
     useEffect(() => {
@@ -48,6 +110,7 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
                             // 1. Check for Light Mode history (Preferred)
                             if (data.type === 'light' && data.chat_history && Array.isArray(data.chat_history)) {
                                 setMessages(data.chat_history)
+                                if (data.title) setTitle(data.title)
                                 setIsLoading(false)
                                 return
                             }
@@ -109,7 +172,8 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
                         query,
                         type: 'light',
                         chat_history: newMessages,
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
+                        title: title || query
                     }
                     localStorage.setItem(threadId, JSON.stringify(historyData))
                 }
@@ -149,7 +213,8 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
                 query: query,
                 type: 'light',
                 chat_history: newHistory,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                title: title || query
             }
             localStorage.setItem(threadId, JSON.stringify(historyData))
         }
@@ -188,7 +253,8 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
                         type: 'light',
                         model: 'light',
                         chat_history: copy,
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
+                        title: title || query
                     }
                     localStorage.setItem(threadId, JSON.stringify(historyData))
                 }
@@ -220,10 +286,18 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
     return (
         <div className="flex flex-col h-screen bg-[var(--background)] relative">
             {/* Header */}
-            <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center pl-14 pr-4 md:px-4 z-10 sticky top-0">
+            <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center px-4 md:px-4 z-30 sticky top-0">
+                {isMobile && (
+                    <button
+                        onClick={onToggleSidebar}
+                        className="p-2 -ml-2 mr-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                    >
+                        <Menu size={20} />
+                    </button>
+                )}
 
                 <div className="flex-1 text-center font-medium text-[var(--foreground)] truncate">
-                    {query}
+                    {title || query}
                 </div>
                 <div className="w-10" /> {/* Spacer */}
             </header>

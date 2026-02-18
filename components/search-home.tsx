@@ -1,14 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Sparkles } from 'lucide-react'
+import { ArrowRight, Sparkles, Menu } from 'lucide-react'
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string) => void
   isAutoDetecting?: boolean
+  onToggleSidebar?: () => void
+  isMobile?: boolean
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
@@ -232,7 +234,18 @@ export function SearchHome({ onSearch, isAutoDetecting = false }: SearchHomeProp
   }
 
   return (
-    <main className="relative min-h-screen flex flex-col items-center justify-between px-4 overflow-hidden">
+    <main className="relative min-h-screen flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
+
+      {/* Mobile Header */}
+      <header className="fixed top-0 left-0 right-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-center z-40 md:hidden">
+        <button
+          onClick={onToggleSidebar}
+          className="absolute left-4 p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+        >
+          <Menu size={20} />
+        </button>
+      </header>
+
       {/* Auto-detecting overlay */}
       {isAutoDetecting && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">

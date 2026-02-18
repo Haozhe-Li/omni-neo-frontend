@@ -7,6 +7,9 @@ import { LightChatView } from '@/components/light-chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
 import { toast } from 'sonner'
 
+// ... imports
+import { useIsMobile } from '@/hooks/use-mobile'
+
 type ModelType = 'canvas' | 'light' | 'auto'
 
 export default function Home() {
@@ -15,6 +18,20 @@ export default function Home() {
   const [currentThreadId, setCurrentThreadId] = useState('')
   const [model, setModel] = useState<ModelType>('auto')
   const [isAutoDetecting, setIsAutoDetecting] = useState(false)
+
+  // Sidebar state
+  const isMobileCheck = useIsMobile()
+  const isMobile = isMobileCheck === undefined ? true : isMobileCheck
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Initialize sidebar state based on device
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarOpen(false)
+    } else {
+      setSidebarOpen(true)
+    }
+  }, [isMobile])
 
   // Load model preference from local storage (and re-read on window focus for settings page sync)
   useEffect(() => {
@@ -135,6 +152,10 @@ export default function Home() {
     setView('canvas')
   }, [])
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen(prev => !prev)
+  }, [])
+
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden relative">
       <AppSidebar
@@ -142,6 +163,9 @@ export default function Home() {
         onSelectThread={handleSelectThread}
         onNewChat={handleNewSearch}
         className="flex-shrink-0 z-50 relative"
+        isOpen={sidebarOpen}
+        onToggle={toggleSidebar}
+        isMobile={isMobile}
       />
 
       <main className="flex-1 min-w-0 h-full relative overflow-hidden">
@@ -151,6 +175,8 @@ export default function Home() {
             query={currentQuery}
             threadId={currentThreadId}
             onNewSearch={handleNewSearch}
+            onToggleSidebar={toggleSidebar}
+            isMobile={isMobile}
           />
         ) : view === 'light' ? (
           <LightChatView
@@ -158,9 +184,16 @@ export default function Home() {
             query={currentQuery}
             threadId={currentThreadId}
             onNewSearch={handleNewSearch}
+            onToggleSidebar={toggleSidebar}
+            isMobile={isMobile}
           />
         ) : (
-          <SearchHome onSearch={handleSearch} isAutoDetecting={isAutoDetecting} />
+          <SearchHome
+            onSearch={handleSearch}
+            isAutoDetecting={isAutoDetecting}
+            onToggleSidebar={toggleSidebar}
+            isMobile={isMobile}
+          />
         )}
       </main>
     </div>

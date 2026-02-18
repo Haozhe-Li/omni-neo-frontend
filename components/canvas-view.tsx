@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { ArrowLeft, CheckCircle2, ChevronDown, Sparkles, ChevronUp, Clock, FileText } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronDown, Sparkles, ChevronUp, Clock, FileText, Menu } from 'lucide-react'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
 import { FinalAnswer } from '@/components/final-answer'
@@ -12,11 +12,13 @@ interface CanvasViewProps {
   query: string
   threadId: string
   onNewSearch: () => void
+  onToggleSidebar?: () => void
+  isMobile?: boolean
 }
 
 type ActiveView = 'steps' | 'answer'
 
-export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
+export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: CanvasViewProps) {
   const [messages, setMessages] = useState<SSEMessage[]>([])
   const [finalAnswer, setFinalAnswer] = useState<{
     answer: string
@@ -27,6 +29,7 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
   const [hasTimedOut, setHasTimedOut] = useState(false)
   const [activeView, setActiveView] = useState<ActiveView>('steps')
   const [isFading, setIsFading] = useState(false)
+  const [title, setTitle] = useState(query)
   const lastMessageTime = useRef<number>(Date.now())
   const answerReceivedRef = useRef(false)
   const isCompleteRef = useRef(false)
@@ -48,6 +51,7 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
           todos: todos.map(t => ({ ...t, status: 'completed' })),
           timestamp: Date.now(),
           model: 'canvas',
+          title: title || query,
         }
         localStorage.setItem(threadId, JSON.stringify(chatData))
       }
@@ -60,7 +64,7 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
       }, 1000)
       return () => clearTimeout(timer)
     }
-  }, [isComplete, finalAnswer])
+  }, [isComplete, finalAnswer, title])
 
   const switchView = (to: ActiveView) => {
     if (to === activeView) return
@@ -223,7 +227,7 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
     return `${m}m ${s}s`
   }
 
-  const [title, setTitle] = useState(query)
+
 
   useEffect(() => {
     const fetchTitle = async () => {
@@ -248,8 +252,28 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
         const data = await response.json()
         if (data && typeof data === 'string') {
           setTitle(data)
+          if (typeof window !== 'undefined' && threadId) {
+            const stored = localStorage.getItem(threadId)
+            if (stored) {
+              try {
+                const chatData = JSON.parse(stored)
+                chatData.title = data
+                localStorage.setItem(threadId, JSON.stringify(chatData))
+              } catch (e) { }
+            }
+          }
         } else if (data && data.title) {
           setTitle(data.title)
+          if (typeof window !== 'undefined' && threadId) {
+            const stored = localStorage.getItem(threadId)
+            if (stored) {
+              try {
+                const chatData = JSON.parse(stored)
+                chatData.title = data.title
+                localStorage.setItem(threadId, JSON.stringify(chatData))
+              } catch (e) { }
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to fetch title:', error)
@@ -264,7 +288,15 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
     <div className="h-screen flex flex-col bg-background overflow-hidden relative">
       {/* ── Global Header (Unchanged) ── */}
       <header className="flex-shrink-0 border-b border-border bg-background/80 backdrop-blur-xl z-30">
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 pl-14 pr-6 md:px-6">
+        <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 px-4 md:px-6">
+          {isMobile && (
+            <button
+              onClick={onToggleSidebar}
+              className="p-2 -ml-2 mr-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <Menu size={20} />
+            </button>
+          )}
 
           <div className="flex-1 text-center">
             <span className="text-sm font-medium tracking-tight text-foreground/90 line-clamp-1 text-pretty">
@@ -307,12 +339,12 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
               {activeView === 'answer' ? (
                 <>
                   <ChevronDown className="h-3.5 w-3.5" />
-                  Show Progress
+                  <span className="hidden sm:inline">Show Progress</span>
                 </>
               ) : (
                 <>
                   <ChevronUp className="h-3.5 w-3.5" />
-                  Hide Progress
+                  <span className="hidden sm:inline">Hide Progress</span>
                 </>
               )}
             </button>
