@@ -46,7 +46,8 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
           messages,
           final_answer: finalAnswer,
           todos: todos.map(t => ({ ...t, status: 'completed' })),
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          model: 'canvas',
         }
         localStorage.setItem(threadId, JSON.stringify(chatData))
       }
@@ -264,13 +265,7 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
       {/* ── Global Header (Unchanged) ── */}
       <header className="flex-shrink-0 border-b border-border bg-background/80 backdrop-blur-xl z-30">
         <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 pl-14 pr-6 md:px-6">
-          <button
-            onClick={onNewSearch}
-            className="flex items-center gap-2 text-sm text-foreground/70 hover:text-foreground transition-colors duration-200 cursor-pointer flex-shrink-0"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">New search</span>
-          </button>
+
           <div className="flex-1 text-center">
             <span className="text-sm font-medium tracking-tight text-foreground/90 line-clamp-1 text-pretty">
               {title}
@@ -333,45 +328,63 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
         >
           {activeView === 'steps' ? (
             /* ═══ View 1: Steps (Thinking Process) — Strict Two-Container Layout ═══ */
-            <div className="flex-1 flex flex-col min-h-0">
+            /* ═══ View 1: Steps (Thinking Process) — Professional Split Layout ═══ */
+            <div className="flex-1 flex flex-col min-h-0 bg-[var(--background)]">
 
-              {/* Container 1 (Top): Research Progress (Always Visible) */}
-              <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border/40 bg-background z-10">
-                <div className="mx-auto max-w-[1200px]">
-                  {todos.length > 0 ? (
+              {/* Top Panel: Research Plan */}
+              <div className="flex-shrink-0 border-b border-[var(--border-subtle)] bg-[var(--secondary)]/10 max-h-[35%] flex flex-col">
+                <div className="px-6 py-3 select-none flex-shrink-0">
+                  <div className="mx-auto max-w-[1200px] w-full flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Research Plan</span>
+                      {todos.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)] text-[10px] font-medium border border-[var(--border-subtle)]">
+                          {todos.filter(t => t.status === 'completed').length} / {todos.length}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {/* Scroll container moved INSIDE to match max-w-1200px */}
+                <div className="flex-1 min-h-0 px-6 pb-4">
+                  <div className="mx-auto max-w-[1200px] w-full h-full overflow-y-auto custom-scrollbar">
                     <ResearchProgress
                       todos={isComplete ? todos.map(t => ({ ...t, status: 'completed' as const })) : todos}
                       isComplete={isComplete}
                     />
-                  ) : (
-                    /* Empty state for progress */
-                    <div className="animate-fade-up">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground">
-                          <Sparkles className="h-3.5 w-3.5" />
-                        </div>
-                        <h3 className="text-sm font-medium text-foreground">Omni's Notebook</h3>
-                        <span className="text-xs text-muted-foreground">— Omni's Notebook is empty!</span>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
 
-              {/* Container 2 (Bottom): Thinking Timeline (Scrollable) */}
-              <div className="flex-1 min-h-0 overflow-hidden px-6">
-                <div className="mx-auto max-w-[1200px] h-full py-8">
-                  <ThinkingTimeline
-                    messages={messages}
-                    isStreaming={isStreaming}
-                    isComplete={isComplete}
-                    hasError={hasTimedOut}
-                  />
+              {/* Bottom Panel: Activity Stream */}
+              <div className="flex-1 flex flex-col min-h-0 bg-[var(--background)]">
+                <div className="px-6 py-3 border-b border-[var(--border-subtle)]/50 select-none flex-shrink-0">
+                  <div className="mx-auto max-w-[1200px] w-full flex items-center gap-2">
+                    <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">THINKING STEPS</span>
+                    {isStreaming && (
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-75"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]"></span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Scroll container delegated to ThinkingTimeline inside max-w-1200px */}
+                <div className="flex-1 min-h-0 px-6 pb-4">
+                  <div className="mx-auto max-w-[1200px] w-full h-full">
+                    <ThinkingTimeline
+                      messages={messages}
+                      isStreaming={isStreaming}
+                      isComplete={isComplete}
+                      hasError={hasTimedOut}
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Note: Floating buttons removed as requested, replaced by Sub-Header toggle */}
             </div>
+
+            /* ═══ View 1: Steps (Thinking Process) — Split Layout ═══ */
           ) : (
             /* ═══ View 2: Answer (Final Result) ═══ */
             <div className="flex-1 flex flex-col min-h-0 bg-background relative">
@@ -386,7 +399,6 @@ export function CanvasView({ query, threadId, onNewSearch }: CanvasViewProps) {
                   </div>
                 )}
               </div>
-              {/* Note: Floating buttons removed as requested, replaced by Sub-Header toggle */}
             </div>
           )}
         </div>

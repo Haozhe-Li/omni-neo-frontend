@@ -7,9 +7,8 @@ const _inter = Inter({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Omni Knows Neo - AI Research Agent',
+  title: 'Omni Knows Neo',
   description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers',
-  generator: 'v0.app',
   icons: {
     icon: [
       { url: '/favicon.ico' },

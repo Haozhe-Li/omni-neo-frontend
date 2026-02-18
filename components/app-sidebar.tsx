@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info } from 'lucide-react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database } from 'lucide-react'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -10,7 +12,7 @@ interface StoredChat {
     thread_id: string
     query: string
     timestamp: number
-    // We only need these for the list preview/ordering
+    model?: string
 }
 
 interface AppSidebarProps {
@@ -74,7 +76,8 @@ export function AppSidebar({
                     items.push({
                         thread_id: data.thread_id,
                         query: data.query,
-                        timestamp: data.timestamp
+                        timestamp: data.timestamp,
+                        model: data.model // Add model loading
                     })
                 }
             } catch (e) {
@@ -117,19 +120,52 @@ export function AppSidebar({
     const SidebarContent = (
         <>
             {/* Header / Toggle */}
-            <div className="flex items-center justify-between p-4 h-14">
-                {isExpanded && (
-                    <span className="font-medium text-sm text-[var(--foreground)] opacity-60">
-                        {variant === 'settings' ? 'Settings' : 'History'}
-                    </span>
+            <div className={`
+                flex items-center p-4 
+                ${isExpanded ? 'h-16 justify-between' : 'flex-col gap-4 py-4'}
+            `}>
+                {isExpanded ? (
+                    <>
+                        <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity group">
+                            <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-[var(--border-subtle)]">
+                                <Image
+                                    src="/android-chrome-512x512.png"
+                                    alt="Omni Logo"
+                                    fill
+                                    className="object-cover"
+                                />
+                            </div>
+                            {/* <span className="font-semibold text-lg text-[var(--foreground)] tracking-tight">
+                                Omni
+                            </span> */}
+                        </Link>
+                        <button
+                            onClick={() => setIsOpen(!isOpen)}
+                            className="p-1.5 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                            title="Collapse sidebar"
+                        >
+                            <PanelLeftClose size={18} />
+                        </button>
+                    </>
+                ) : (
+                    <button
+                        onClick={() => setIsOpen(true)}
+                        className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-[var(--border-subtle)] group hover:border-[var(--muted-foreground)] transition-all"
+                        title="Expand sidebar"
+                    >
+                        <div className="absolute inset-0 transition-opacity duration-200 group-hover:opacity-0">
+                            <Image
+                                src="/android-chrome-512x512.png"
+                                alt="Omni Logo"
+                                fill
+                                className="object-cover"
+                            />
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center bg-[var(--secondary)] opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[var(--foreground)]">
+                            <PanelLeftOpen size={18} />
+                        </div>
+                    </button>
                 )}
-                <button
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="p-1 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)]"
-                    title={isOpen ? "Collapse sidebar" : "Expand sidebar"}
-                >
-                    {isOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
-                </button>
             </div>
 
             {/* Main Action Button (New Chat or Back to Home) */}
@@ -180,33 +216,32 @@ export function AppSidebar({
             {/* List Content (History or Settings Sections) */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
                 {variant === 'chat' ? (
-                    <>
-                        {history.map((chat) => (
-                            <button
-                                key={chat.thread_id}
-                                onClick={() => {
-                                    if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
-                                    if (isMobile) setIsOpen(false)
-                                }}
-                                className={`
+                    isExpanded ? (
+                        <>
+                            {history.map((chat) => (
+                                <button
+                                    key={chat.thread_id}
+                                    onClick={() => {
+                                        if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
+                                        if (isMobile) setIsOpen(false)
+                                    }}
+                                    className={`
                       group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
                       ${currentThreadId === chat.thread_id
-                                        ? 'bg-[var(--secondary)] text-[var(--foreground)]'
-                                        : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
-                                    }
-                      ${!isExpanded ? 'justify-center' : ''}
+                                            ? 'bg-[var(--secondary)] text-[var(--foreground)]'
+                                            : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
+                                        }
                     `}
-                                title={chat.query}
-                            >
-                                <MessageSquare size={16} className="min-w-[16px]" />
-                                {isExpanded && (
-                                    <>
-                                        <span className="text-sm truncate pr-6 flex-1">
-                                            {chat.query}
-                                        </span>
-                                    </>
-                                )}
-                                {isExpanded && (
+                                    title={chat.query}
+                                >
+                                    {chat.model === 'canvas' ? (
+                                        <Layout size={16} className="min-w-[16px]" />
+                                    ) : (
+                                        <MessageSquare size={16} className="min-w-[16px]" />
+                                    )}
+                                    <span className="text-sm truncate pr-6 flex-1">
+                                        {chat.query}
+                                    </span>
                                     <div
                                         onClick={(e) => handleDelete(e, chat.thread_id)}
                                         className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--secondary)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
@@ -215,19 +250,27 @@ export function AppSidebar({
                                     >
                                         <Trash2 size={12} />
                                     </div>
-                                )}
-                            </button>
-                        ))}
-                        {history.length === 0 && isExpanded && (
-                            <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
-                                No history yet
-                            </div>
-                        )}
-                    </>
+                                </button>
+                            ))}
+                            {history.length === 0 && (
+                                <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
+                                    No history yet
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <button
+                            onClick={() => setIsOpen(true)}
+                            className="flex items-center justify-center w-full p-2 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-all duration-200"
+                            title="Show History"
+                        >
+                            <History size={18} />
+                        </button>
+                    )
                 ) : (
                     /* Settings Sections Navigation */
                     <>
-                        {['Appearance', 'AI', 'About'].map((section) => (
+                        {['Appearance', 'AI', 'Data Controls', 'About'].map((section) => (
                             <button
                                 key={section}
                                 onClick={() => {
@@ -246,6 +289,7 @@ export function AppSidebar({
                                 <div className="text-[var(--muted-foreground)]">
                                     {section === 'Appearance' && <Palette size={16} />}
                                     {section === 'AI' && <Bot size={16} />}
+                                    {section === 'Data Controls' && <Database size={16} />}
                                     {section === 'About' && <Info size={16} />}
                                 </div>
                                 {isExpanded && (

@@ -9,118 +9,69 @@ interface ResearchProgressProps {
 }
 
 export function ResearchProgress({ todos, isComplete }: ResearchProgressProps) {
-  const completedCount = todos.filter((t) => t.status === 'completed').length
-
   // Empty state
   if (todos.length === 0) {
     if (isComplete) {
-      // Answer arrived with no research progress — show empty state
       return (
-        <div className="animate-fade-up">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground">
-              <ClipboardList className="h-3.5 w-3.5" />
-            </div>
-            <h3 className="text-sm font-medium text-foreground">Omni's Notebook</h3>
-            <span className="text-xs text-muted-foreground">— No research tasks</span>
-          </div>
+        <div className="animate-fade-up text-center py-8">
+          <p className="text-sm text-[var(--muted-foreground)]">No research tasks recorded.</p>
         </div>
       )
     }
-    // Still streaming — show skeleton loader
+    // Still streaming — show minimal skeleton
     return (
-      <div className="animate-fade-up">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground">
-            <ClipboardList className="h-3.5 w-3.5" />
+      <div className="animate-fade-up py-2 space-y-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-[var(--border-subtle)] animate-pulse" />
+            <div className="h-2 rounded-full bg-[var(--border-subtle)]/50 animate-pulse" style={{ width: `${60 - i * 15}%` }} />
           </div>
-          <h3 className="text-sm font-medium text-foreground">Omni's Notebook</h3>
-        </div>
-        <div className="flex items-center gap-3 rounded-lg bg-muted/30 px-4 py-3">
-          <Sparkles className="h-4 w-4 text-muted-foreground animate-pulse flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            <p className="text-xs text-muted-foreground">Building research plan...</p>
-            <div className="h-1 rounded-full bg-border overflow-hidden">
-              <div className="h-full w-1/3 rounded-full bg-muted-foreground/30 animate-shimmer-bar" />
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
     )
   }
 
   return (
     <div className="animate-fade-up">
-      {/* Header row with icon and progress bar */}
-      <div className="flex items-center gap-3 mb-0">
-        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground flex-shrink-0">
-          <ClipboardList className="h-3.5 w-3.5" />
-        </div>
-        <h3 className="text-sm font-medium text-foreground flex-shrink-0">
-          Omni's Notebook
-        </h3>
-        <div className="flex-1 h-1 rounded-full bg-secondary overflow-hidden">
-          <div
-            className="h-full rounded-full bg-accent/60 transition-all duration-500 ease-out"
-            style={{
-              width: `${todos.length > 0 ? (completedCount / todos.length) * 100 : 0}%`,
-            }}
-          />
-        </div>
-        <span className="text-xs text-muted-foreground tabular-nums flex-shrink-0">
-          {completedCount}/{todos.length}
-        </span>
-      </div>
-
-      {/* Compact horizontal todo chips */}
-      <div className="flex flex-wrap gap-2 mt-3">
+      <div className="flex flex-col gap-2">
         {todos.map((todo, idx) => (
-          <TodoChip key={idx} todo={todo} />
+          <TodoItemRow key={idx} todo={todo} />
         ))}
       </div>
     </div>
   )
 }
 
-function TodoChip({ todo }: { todo: TodoItem }) {
+function TodoItemRow({ todo }: { todo: TodoItem }) {
+  const isCompleted = todo.status === 'completed'
+  const isInProgress = todo.status === 'in_progress'
+
   return (
-    <div
-      className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs transition-all duration-300 ${todo.status === 'completed'
-        ? 'bg-muted text-muted-foreground'
-        : todo.status === 'in_progress'
-          ? 'bg-accent/10 text-accent ring-1 ring-accent/20'
-          : 'bg-secondary/50 text-muted-foreground/40'
-        }`}
-    >
-      <StatusDot status={todo.status} />
-      <span className={todo.status === 'completed' ? 'line-through opacity-70' : ''}>
+    <div className={`
+            group flex items-start gap-3 p-2 rounded-lg transition-all duration-200
+            ${isInProgress ? 'bg-[var(--secondary)]/50' : 'hover:bg-[var(--secondary)]/30'}
+        `}>
+      <div className={`mt-0.5 flex-shrink-0 transition-colors duration-300 ${isInProgress ? 'text-[var(--accent)]' : (isCompleted ? 'text-[var(--muted-foreground)]' : 'text-[var(--border)]')}`}>
+        <StatusIcon status={todo.status} />
+      </div>
+      <span className={`text-sm leading-relaxed transition-colors duration-300 ${isCompleted ? 'text-[var(--muted-foreground)] line-through opacity-80' : 'text-[var(--foreground)]'}`}>
         {todo.content}
       </span>
     </div>
   )
 }
 
-function StatusDot({ status }: { status: TodoItem['status'] }) {
+function StatusIcon({ status }: { status: TodoItem['status'] }) {
   switch (status) {
     case 'completed':
-      return (
-        <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-muted-foreground/20">
-          <Check className="h-2.5 w-2.5 text-muted-foreground" />
-        </div>
-      )
+      return <Check className="h-4 w-4" />
     case 'in_progress':
-      return (
-        <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full border border-accent/50">
-          <MoreHorizontal className="h-2.5 w-2.5 text-accent animate-pulse" />
-        </div>
-      )
+      return <MoreHorizontal className="h-4 w-4 animate-pulse" />
     case 'pending':
-      return (
-        <div className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center">
-          <Circle className="h-3 w-3 text-muted-foreground/30" />
-        </div>
-      )
+      return <Circle className="h-4 w-4" />
     default:
-      return null
+      return <Circle className="h-4 w-4" />
   }
 }
+
+

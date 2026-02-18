@@ -29,43 +29,63 @@ export function ThinkingTimeline({
   isComplete,
   hasError,
 }: ThinkingTimelineProps) {
+  /* ── Better Auto-Scrolling Logic ── */
   const scrollRef = useRef<HTMLDivElement>(null)
+  const userHasScrolledRef = useRef(false)
+  const isAutoScrolling = useRef(false)
 
-  // Auto-scroll within the container as new messages arrive
+  // 1. Scroll to bottom when new content arrives (unless user scrolled up)
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
+    // Only auto-scroll if we are streaming/loading and user hasn't scrolled up
+    if (scrollRef.current && !userHasScrolledRef.current) {
+
+      // Mark that we are programmatically scrolling
+      isAutoScrolling.current = true
+
+      // Use requestAnimationFrame to ensure DOM is updated
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTo({
+            top: scrollRef.current.scrollHeight,
+            behavior: 'smooth',
+          })
+        }
+        // Reset the flag after animation finishes (~300ms for smooth scroll)
+        setTimeout(() => {
+          isAutoScrolling.current = false
+        }, 300)
       })
     }
-  }, [messages])
+  }, [messages]) // Trigger on new messages
+
+  // 2. Detect user scroll interactions
+  const handleScroll = () => {
+    // Ignore scroll events triggered by our auto-scroll logic
+    if (isAutoScrolling.current) return
+    if (!scrollRef.current) return
+
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+
+    // Check if user is near the bottom (tolerance of 20px)
+    const isAtBottom = scrollHeight - scrollTop - clientHeight <= 50
+
+    if (isAtBottom) {
+      // User is at the bottom -> Resume auto-scroll
+      userHasScrolledRef.current = false
+    } else {
+      // User scrolled up -> Pause auto-scroll
+      userHasScrolledRef.current = true
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Section header */}
-      <div className="flex items-center gap-2 mb-3 flex-shrink-0">
-        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground">
-          <Brain className="h-3.5 w-3.5" />
-        </div>
-        <span className="text-sm font-medium text-foreground">Thinking</span>
-        {messages.length > 0 && (
-          <span className="text-xs text-muted-foreground">{messages.length} steps</span>
-        )}
-        {isStreaming && (
-          <span className="ml-auto flex items-center gap-1.5 text-xs text-accent">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-            </span>
-            Streaming
-          </span>
-        )}
-      </div>
+
 
       {/* Scrollable timeline container — no vertical line */}
       <div
         ref={scrollRef}
+        onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative"
       >
         {messages.length === 0 && isStreaming && <ThinkingLoader />}
@@ -213,7 +233,7 @@ function ReasoningContent({ content }: { content: string }) {
         {hasMore && (
           <button
             onClick={() => setExpanded(!expanded)}
-            className="ml-1.5 text-accent text-xs hover:underline cursor-pointer"
+            className="ml-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xs hover:underline cursor-pointer transition-colors"
           >
             {expanded ? 'less' : 'more'}
           </button>
@@ -235,39 +255,72 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
         return {
           icon: <Search className="h-3.5 w-3.5" />,
           label: 'Searching',
-          detail: <span className="text-foreground/80">{args.query || ''}</span>,
+          detail: (
+            <div className="flex flex-wrap gap-2">
+              <span className="text-[var(--muted-foreground)] text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate max-w-[300px]" title={args.query}>
+                {args.query || ''}
+              </span>
+            </div>
+          ),
         }
       case 'skimming_web_pages': {
         const urls: string[] = args.urls || []
         return {
           icon: <FileText className="h-3.5 w-3.5" />,
-          label: 'Skimming',
+          label: 'Reviewing Sources',
           detail: (
-            <span>
-              <span className="text-foreground/80">{args.purpose || ''}</span>
-              {urls.length > 0 && (
-                <span className="block mt-0.5 text-xs text-muted-foreground/50">
-                  {urls.slice(0, 3).map((u: string) => {
-                    try { return new URL(u).hostname } catch { return u }
-                  }).join(', ')}
-                  {urls.length > 3 && ` +${urls.length - 3} more`}
-                </span>
-              )}
-            </span>
+            <div className="flex flex-wrap gap-2">
+              {urls.map((u, i) => {
+                let hostname = u
+                try {
+                  hostname = new URL(u).hostname
+                  if (hostname.startsWith('www.')) hostname = hostname.slice(4)
+                } catch { /* keep raw */ }
+
+                const display = hostname.length > 20 ? hostname.slice(0, 20) + '...' : hostname
+
+                return (
+                  <a
+                    key={i}
+                    href={u}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)]"
+                    title={u}
+                  >
+                    {display}
+                  </a>
+                )
+              })}
+            </div>
           ),
         }
       }
       case 'get_full_text': {
         const url = args.url || ''
         let hostname = url
-        try { hostname = new URL(url).hostname } catch { /* keep raw */ }
+        try {
+          hostname = new URL(url).hostname
+          if (hostname.startsWith('www.')) hostname = hostname.slice(4)
+        } catch { /* keep raw */ }
+
+        const display = hostname.length > 25 ? hostname.slice(0, 25) + '...' : hostname
+
         return {
           icon: <BookOpen className="h-3.5 w-3.5" />,
           label: 'Reading',
           detail: (
-            <a href={url} target="_blank" rel="noopener noreferrer" className="text-foreground/80 hover:text-foreground hover:underline transition-colors">
-              {hostname}
-            </a>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)]"
+                title={url}
+              >
+                {display}
+              </a>
+            </div>
           ),
         }
       }
@@ -277,16 +330,16 @@ function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: bo
           label: 'Verifying',
           detail: <span className="text-foreground/80">{args.fact || ''}</span>,
         }
-      case 'check_python_compile':
-        return {
-          icon: <Code className="h-3.5 w-3.5" />,
-          label: 'Checking python code',
-          detail: (
-            <button onClick={() => setCodeVisible(!codeVisible)} className="text-muted-foreground text-xs hover:text-foreground hover:underline cursor-pointer transition-colors">
-              {codeVisible ? 'hide code' : 'show code'}
-            </button>
-          ),
-        }
+      // case 'check_python_compile':
+      //   return {
+      //     icon: <Code className="h-3.5 w-3.5" />,
+      //     label: 'Checking python code',
+      //     detail: (
+      //       <button onClick={() => setCodeVisible(!codeVisible)} className="text-muted-foreground text-xs hover:text-foreground hover:underline cursor-pointer transition-colors">
+      //         {codeVisible ? 'hide code' : 'show code'}
+      //       </button>
+      //     ),
+      //   }
       case 'run_python_tool':
         return {
           icon: <Terminal className="h-3.5 w-3.5" />,

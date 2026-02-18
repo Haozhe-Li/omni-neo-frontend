@@ -186,6 +186,7 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
                         thread_id: threadId,
                         query: query, // Main query remains the first one?
                         type: 'light',
+                        model: 'light',
                         chat_history: copy,
                         timestamp: Date.now()
                     }
@@ -220,12 +221,7 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
         <div className="flex flex-col h-screen bg-[var(--background)] relative">
             {/* Header */}
             <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center pl-14 pr-4 md:px-4 z-10 sticky top-0">
-                <button
-                    onClick={onNewSearch}
-                    className="p-2 mr-2 rounded-full hover:bg-[var(--secondary)] text-[var(--muted-foreground)] transition-colors"
-                >
-                    <ArrowLeft size={20} />
-                </button>
+
                 <div className="flex-1 text-center font-medium text-[var(--foreground)] truncate">
                     {query}
                 </div>
@@ -316,7 +312,7 @@ export function LightChatView({ query, threadId, onNewSearch }: LightChatViewPro
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                         placeholder="Ask a follow-up..."
                         disabled={isLoading}
-                        className="w-full bg-[var(--secondary)] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm"
+                        className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
                     />
                     <button
                         onClick={handleSend}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import { AppSidebar } from '@/components/app-sidebar'
 import {
@@ -15,7 +16,18 @@ import {
     Sun,
     Moon,
     Monitor,
+    Check,
+    ChevronDown,
+    Database
 } from 'lucide-react'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 type ModelType = 'auto' | 'canvas' | 'light'
 type ThemeType = 'system' | 'dark' | 'light'
@@ -45,7 +57,7 @@ export default function SettingsPage() {
     // Scroll spy effect to update activeSection based on scroll position
     useEffect(() => {
         const handleScroll = () => {
-            const sections = ['Appearance', 'AI', 'About']
+            const sections = ['Appearance', 'AI', 'Data Controls', 'About']
             for (const section of sections) {
                 const el = document.getElementById(section)
                 if (el) {
@@ -112,93 +124,182 @@ export default function SettingsPage() {
                     </div>
 
                     {/* ───────── Appearance ───────── */}
-                    <section id="Appearance" className="scroll-mt-6">
+                    <section id="Appearance" className="scroll-mt-6 space-y-6">
                         <SectionHeader icon={<Palette size={16} />} title="Appearance" />
 
-                        <div className="mt-4 space-y-1 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
-                            {/* Language */}
-                            <SettingsRow
-                                label="Language"
-                                description="Interface display language"
-                                icon={<Globe size={16} className="text-[var(--muted-foreground)]" />}
-                            >
-                                <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                                    <span>English</span>
+                        <div className="space-y-6">
+                            {/* Theme Picker */}
+                            <div className="space-y-3">
+                                <Label text="Theme" />
+                                <div className="grid grid-cols-3 gap-3">
+                                    <ThemeOption
+                                        value="system"
+                                        label="System"
+                                        icon={<Monitor size={20} />}
+                                        active={theme === 'system'}
+                                        onClick={() => handleThemeChange('system')}
+                                    />
+                                    <ThemeOption
+                                        value="light"
+                                        label="Light"
+                                        icon={<Sun size={20} />}
+                                        active={theme === 'light'}
+                                        onClick={() => handleThemeChange('light')}
+                                    />
+                                    <ThemeOption
+                                        value="dark"
+                                        label="Dark"
+                                        icon={<Moon size={20} />}
+                                        active={theme === 'dark'}
+                                        onClick={() => handleThemeChange('dark')}
+                                    />
                                 </div>
-                            </SettingsRow>
+                            </div>
 
-                            <Divider />
+                            <div className="h-px bg-[var(--border-subtle)] w-full" />
 
-                            {/* Theme */}
-                            <SettingsRow
-                                label="Theme"
-                                description="Choose your preferred appearance"
-                                icon={<Sun size={16} className="text-[var(--muted-foreground)]" />}
-                            >
-                                <ThemePicker
-                                    value={theme as ThemeType}
-                                    onChange={handleThemeChange}
-                                />
-                            </SettingsRow>
+                            {/* Language */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label text="Interface Language" />
+                                        <p className="text-xs text-[var(--muted-foreground)]">Select your preferred language for the UI.</p>
+                                    </div>
+                                    <Select defaultValue="en">
+                                        <SelectTrigger className="w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
+                                            <SelectValue placeholder="Language" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="en">English</SelectItem>
+                                            <SelectItem value="zh" disabled>Chinese (Coming Soon)</SelectItem>
+                                            <SelectItem value="es" disabled>Spanish (Coming Soon)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
                         </div>
                     </section>
 
                     {/* ───────── AI ───────── */}
-                    <section id="AI" className="scroll-mt-6">
+                    <section id="AI" className="scroll-mt-6 space-y-6">
                         <SectionHeader icon={<Bot size={16} />} title="AI" />
 
-                        <div className="mt-4 space-y-1 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
+                        <div className="space-y-6">
                             {/* Chat Model */}
-                            <SettingsRow
-                                label="Chat Model"
-                                description="Select how the AI responds to your queries"
-                                icon={<MessageSquare size={16} className="text-[var(--muted-foreground)]" />}
-                            >
-                                <ModelPicker
-                                    value={chatModel}
-                                    onChange={handleModelChange}
-                                />
-                            </SettingsRow>
+                            <div className="space-y-3">
+                                <div className="space-y-0.5">
+                                    <Label text="Chat Model" />
+                                    <p className="text-xs text-[var(--muted-foreground)]">Choose the AI model behavior that suits your needs.</p>
+                                </div>
 
-                            <Divider />
+                                <div className="flex flex-col gap-3">
+                                    <ModelOption
+                                        value="auto"
+                                        title="Smart"
+                                        description="Automatically selects the best model for your query."
+                                        active={chatModel === 'auto'}
+                                        onClick={() => handleModelChange('auto')}
+                                    />
+                                    <ModelOption
+                                        value="canvas"
+                                        title="Canvas"
+                                        description="Comprehensive report on Canvas, with multi-step reasoning and deep research."
+                                        active={chatModel === 'canvas'}
+                                        onClick={() => handleModelChange('canvas')}
+                                    />
+                                    <ModelOption
+                                        value="light"
+                                        title="Light"
+                                        description="Quick, concise answers for simple questions and casual chat."
+                                        active={chatModel === 'light'}
+                                        onClick={() => handleModelChange('light')}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="h-px bg-[var(--border-subtle)] w-full" />
 
                             {/* Model Language */}
-                            <SettingsRow
-                                label="Model Language"
-                                description="Language the AI uses to respond"
-                                icon={<Languages size={16} className="text-[var(--muted-foreground)]" />}
-                            >
-                                <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                                    <span>Auto</span>
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label text="Response Language" />
+                                        <p className="text-xs text-[var(--muted-foreground)]">The language the AI uses to respond.</p>
+                                    </div>
+                                    <Select defaultValue="auto">
+                                        <SelectTrigger className="w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
+                                            <SelectValue placeholder="Language" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="auto">Auto Detect</SelectItem>
+                                            <SelectItem value="en" disabled>English</SelectItem>
+                                            <SelectItem value="zh" disabled>Chinese</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            </SettingsRow>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* ───────── Data Controls ───────── */}
+                    <section id="Data Controls" className="scroll-mt-6 space-y-6">
+                        <SectionHeader icon={<Database size={16} />} title="Data Controls" />
+
+                        <div className="space-y-6">
+                            <div className="space-y-3">
+                                <Label text="Data Management" />
+                                <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between">
+                                    <div className="space-y-1">
+                                        <span className="block text-sm font-medium text-[var(--foreground)]">Delete all chat history</span>
+                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all chat data.</span>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to delete all chat history? This action cannot be undone.')) {
+                                                localStorage.clear()
+                                                window.location.reload()
+                                            }
+                                        }}
+                                        className="px-4 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                                    >
+                                        Delete All
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </section>
 
                     {/* ───────── About ───────── */}
-                    <section id="About" className="scroll-mt-6">
+                    <section id="About" className="scroll-mt-6 space-y-6">
                         <SectionHeader icon={<Info size={16} />} title="About" />
 
-                        <div className="mt-4 rounded-xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--card)]">
-                            <div className="p-5 space-y-4">
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
+                            <div className="p-6 space-y-5">
                                 {/* App info */}
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-[var(--secondary)] flex items-center justify-center">
-                                        <Bot size={24} className="text-[var(--accent)]" />
+                                    <div className="w-14 h-14 rounded-2xl bg-[var(--secondary)] flex items-center justify-center shadow-inner overflow-hidden">
+                                        <Image
+                                            src="/android-chrome-512x512.png"
+                                            alt="Omni Knows Neo Logo"
+                                            width={56}
+                                            height={56}
+                                            className="w-full h-full object-cover"
+                                            unoptimized
+                                        />
                                     </div>
                                     <div>
-                                        <p className="font-medium text-sm">{APP_NAME}</p>
+                                        <h3 className="font-semibold text-base text-[var(--foreground)]">{APP_NAME}</h3>
                                         <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                                            Version {APP_VERSION}
+                                            v{APP_VERSION} • Alpha Build
                                         </p>
                                     </div>
                                 </div>
 
                                 <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
-                                    An advanced AI-powered research agent that thinks, searches, and provides comprehensive answers. Built with care for a seamless research experience.
+                                    Omni Knows Neo is an advanced AI research assistant designed to help you explore complex topics deeply and efficiently. Built with the next-generation agentic framework.
                                 </p>
 
-                                <div className="flex flex-wrap gap-2 pt-1">
+                                <div className="flex flex-wrap gap-3 pt-2">
                                     <AboutLink
                                         href="https://omniknows.xyz"
                                         label="Website"
@@ -207,17 +308,19 @@ export default function SettingsPage() {
                                         href="https://github.com/Haozhe-Li"
                                         label="GitHub"
                                     />
+                                    <AboutLink
+                                        href="#"
+                                        label="Privacy Policy"
+                                    />
                                 </div>
                             </div>
 
-                            <Divider />
-
-                            <div className="px-5 py-3 flex items-center justify-between">
+                            <div className="bg-[var(--secondary)]/30 px-6 py-4 flex items-center justify-between border-t border-[var(--border-subtle)]">
                                 <span className="text-xs text-[var(--muted-foreground)]">
-                                    © {new Date().getFullYear()} {APP_NAME}
+                                    © {new Date().getFullYear()} Omni Knows
                                 </span>
                                 <span className="text-xs text-[var(--muted-foreground)] opacity-60">
-                                    Made with ♥
+                                    Designed by Haozhe Li
                                 </span>
                             </div>
                         </div>
@@ -242,111 +345,100 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
     )
 }
 
-function SettingsRow({
+function Label({ text }: { text: string }) {
+    return <h4 className="text-sm font-medium text-[var(--foreground)]">{text}</h4>
+}
+
+function ThemeOption({
+    value,
     label,
-    description,
     icon,
-    children,
+    active,
+    onClick
 }: {
+    value: string
     label: string
-    description?: string
-    icon?: React.ReactNode
-    children: React.ReactNode
+    icon: React.ReactNode
+    active: boolean
+    onClick: () => void
 }) {
     return (
-        <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="flex items-center gap-3 min-w-0">
+        <button
+            onClick={onClick}
+            className={cn(
+                "relative flex flex-col items-center justify-center gap-3 p-4 rounded-xl border transition-all duration-300",
+                active
+                    ? "bg-[var(--card)] border-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]"
+                    : "bg-[var(--card)] border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/40 hover:bg-[var(--secondary)]/30 text-[var(--muted-foreground)]"
+            )}
+        >
+            <div className={cn(
+                "transition-colors duration-300",
+                active ? "text-[var(--accent)]" : "text-current"
+            )}>
                 {icon}
-                <div className="min-w-0">
-                    <p className="text-sm font-medium text-[var(--foreground)]">{label}</p>
-                    {description && (
-                        <p className="text-xs text-[var(--muted-foreground)] mt-0.5 leading-relaxed">{description}</p>
-                    )}
-                </div>
             </div>
-            <div className="flex-shrink-0">{children}</div>
-        </div>
+            <span className={cn(
+                "text-xs font-medium transition-colors duration-300",
+                active ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]"
+            )}>
+                {label}
+            </span>
+            {active && (
+                <div className="absolute top-3 right-3 text-[var(--accent)] animate-in fade-in zoom-in duration-300">
+                    <div className="w-2 h-2 rounded-full bg-current" />
+                </div>
+            )}
+        </button>
     )
 }
 
-function Divider() {
-    return <div className="mx-5 border-t border-[var(--border-subtle)]" />
-}
-
-/* Theme picker — segmented control */
-function ThemePicker({
+function ModelOption({
     value,
-    onChange,
+    title,
+    description,
+    active,
+    onClick
 }: {
-    value: ThemeType
-    onChange: (v: ThemeType) => void
+    value: string
+    title: string
+    description: string
+    active: boolean
+    onClick: () => void
 }) {
-    const options: { value: ThemeType; label: string; icon: React.ReactNode }[] = [
-        { value: 'light', label: 'Light', icon: <Sun size={14} /> },
-        { value: 'dark', label: 'Dark', icon: <Moon size={14} /> },
-        { value: 'system', label: 'Auto', icon: <Monitor size={14} /> },
-    ]
-
     return (
-        <div className="flex items-center rounded-lg bg-[var(--secondary)] p-0.5 gap-0.5">
-            {options.map((opt) => (
-                <button
-                    key={opt.value}
-                    onClick={() => onChange(opt.value)}
-                    className={`
-                        flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
-                        transition-all duration-200
-                        ${value === opt.value
-                            ? 'bg-[var(--accent)]/10 text-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]/20'
-                            : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                        }
-                    `}
-                >
-                    {opt.icon}
-                    {opt.label}
-                </button>
-            ))}
-        </div>
+        <button
+            onClick={onClick}
+            className={cn(
+                "group relative w-full flex items-center justify-between p-4 rounded-xl border text-left transition-all duration-300",
+                active
+                    ? "bg-[var(--card)] border-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]"
+                    : "bg-[var(--card)] border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/40 hover:bg-[var(--secondary)]/30"
+            )}
+        >
+            <div className="space-y-1 pr-4">
+                <span className={cn(
+                    "block text-sm font-medium transition-colors duration-300",
+                    active ? "text-[var(--foreground)]" : "text-[var(--foreground)]"
+                )}>
+                    {title}
+                </span>
+                <span className="block text-xs text-[var(--muted-foreground)] leading-relaxed">
+                    {description}
+                </span>
+            </div>
+            <div className={cn(
+                "w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-300 flex-shrink-0",
+                active
+                    ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                    : "border-[var(--muted-foreground)]/40 bg-transparent"
+            )}>
+                {active && <Check size={12} strokeWidth={3} />}
+            </div>
+        </button>
     )
 }
 
-/* Model picker — segmented control */
-function ModelPicker({
-    value,
-    onChange,
-}: {
-    value: ModelType
-    onChange: (v: ModelType) => void
-}) {
-    const options: { value: ModelType; label: string; desc: string }[] = [
-        { value: 'auto', label: 'Auto', desc: 'Recommended' },
-        { value: 'canvas', label: 'Canvas', desc: 'Deep research' },
-        { value: 'light', label: 'Light', desc: 'Fast answers' },
-    ]
-
-    return (
-        <div className="flex items-center rounded-lg bg-[var(--secondary)] p-0.5 gap-0.5">
-            {options.map((opt) => (
-                <button
-                    key={opt.value}
-                    onClick={() => onChange(opt.value)}
-                    className={`
-                        flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium
-                        transition-all duration-200
-                        ${value === opt.value
-                            ? 'bg-[var(--accent)]/10 text-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]/20'
-                            : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                        }
-                    `}
-                >
-                    {opt.label}
-                </button>
-            ))}
-        </div>
-    )
-}
-
-/* About link pill */
 function AboutLink({ href, label }: { href: string; label: string }) {
     return (
         <a
@@ -356,7 +448,7 @@ function AboutLink({ href, label }: { href: string; label: string }) {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
                 bg-[var(--secondary)] text-[var(--muted-foreground)]
                 hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80
-                transition-colors duration-200"
+                transition-colors duration-200 border border-transparent hover:border-[var(--border-subtle)]"
         >
             {label}
             <ExternalLink size={12} />
