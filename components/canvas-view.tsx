@@ -285,7 +285,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   }, [query])
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden relative">
+    <div className="h-full flex flex-col bg-background overflow-hidden relative">
       {/* Edge flashing — only when thinking (not complete) */}
       {!isComplete && (
         <div className="absolute inset-0 z-0 pointer-events-none animate-flash-edges" />

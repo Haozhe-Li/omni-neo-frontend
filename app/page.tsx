@@ -157,7 +157,7 @@ export default function Home() {
   }, [])
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden relative">
+    <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
       <AppSidebar
         currentThreadId={currentThreadId}
         onSelectThread={handleSelectThread}

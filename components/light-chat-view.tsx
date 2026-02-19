@@ -284,7 +284,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     }
 
     return (
-        <div className="flex flex-col h-screen bg-[var(--background)] relative">
+        <div className="flex flex-col h-full bg-[var(--background)] relative">
             {/* Header */}
             <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center px-4 md:px-4 z-30 sticky top-0">
                 {isMobile && (
@@ -377,7 +377,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             </div>
 
             {/* Input Area */}
-            <div className="flex-shrink-0 p-4 bg-[var(--background)] border-t border-[var(--border-subtle)]">
+            <div className="flex-shrink-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-[var(--background)] border-t border-[var(--border-subtle)]">
                 <div className="max-w-2xl mx-auto relative">
                     <input
                         type="text"
