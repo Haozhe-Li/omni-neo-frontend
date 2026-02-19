@@ -386,10 +386,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   <div className="relative h-[25vh] overflow-hidden">
                     <div
                       className="absolute inset-0 overflow-y-auto custom-scrollbar pr-2"
-                      style={{
-                        maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)',
-                        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)'
-                      }}
                     >
                       <ResearchProgress
                         todos={isComplete ? todos.map(t => ({ ...t, status: 'completed' as const })) : todos}
