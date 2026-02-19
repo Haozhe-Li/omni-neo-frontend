@@ -42,6 +42,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Flash Animation - Light Mode (Stronger) */
+  --flash-start: inset 0 0 60px 15px rgba(32, 178, 170, 0.2);
+  --flash-end: inset 0 0 250px 80px rgba(32, 178, 170, 0.6);
+  --flash-opacity-start: 0.5;
+  --flash-opacity-end: 1;
 }
 
 .dark {
@@ -82,6 +88,12 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+
+  /* Flash Animation - Dark Mode (Softer) */
+  --flash-start: inset 0 0 30px 5px rgba(32, 178, 170, 0.05);
+  --flash-end: inset 0 0 100px 30px rgba(32, 178, 170, 0.15);
+  --flash-opacity-start: 0.2;
+  --flash-opacity-end: 0.6;
 }
 
 @theme inline {
@@ -224,6 +236,44 @@
 
 .animate-slide-in-right {
   animation: slide-in-right 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes breathe-slow {
+
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.95);
+    filter: saturate(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+    filter: saturate(1.8);
+  }
+}
+
+.animate-breathe-slow {
+  animation: breathe-slow 2.5s ease-in-out infinite;
+}
+
+@keyframes flash-edges {
+
+  0%,
+  100% {
+    box-shadow: var(--flash-start);
+    opacity: var(--flash-opacity-start);
+  }
+
+  50% {
+    box-shadow: var(--flash-end);
+    opacity: var(--flash-opacity-end);
+  }
+}
+
+.animate-flash-edges {
+  animation: flash-edges 1.5s ease-in-out infinite;
 }
 
 /* Stagger children animation */

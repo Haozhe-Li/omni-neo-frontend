@@ -7,6 +7,7 @@ import {
   BookOpen,
   ShieldCheck,
   Code,
+  MoreHorizontal,
   Play,
   Brain,
   Lightbulb,
@@ -86,7 +87,7 @@ export function ThinkingTimeline({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative"
+        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative px-1"
       >
         {messages.length === 0 && isStreaming && <ThinkingLoader />}
         {messages.length === 0 && isComplete && (
@@ -95,14 +96,16 @@ export function ThinkingTimeline({
           </div>
         )}
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-3">
           {messages.map((msg, idx) => (
-            <TimelineItem key={idx} message={msg} isActive={isStreaming && idx === messages.length - 1} />
+            <TimelineItem
+              key={idx}
+              message={msg}
+              isActive={isStreaming && idx === messages.length - 1}
+              isComplete={isComplete || (idx < messages.length - 1)}
+            />
           ))}
         </div>
-
-        {/* Streaming pulse at the end */}
-        {messages.length > 0 && isStreaming && <StreamingLoader />}
 
         {/* Error state — 60s timeout */}
         {hasError && (
@@ -122,57 +125,21 @@ export function ThinkingTimeline({
 /* ── Loading state: shown before any steps arrive ── */
 function ThinkingLoader() {
   return (
-    <div className="flex flex-col gap-2.5 py-2 animate-fade-up">
-      <div className="flex items-center gap-3 rounded-lg bg-muted/30 px-4 py-3">
-        <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+    <div className="flex flex-col gap-4 py-2 animate-fade-up">
+      <div className="flex items-center gap-3">
+        <div className="relative flex h-4 w-4 shrink-0 overflow-hidden rounded-full">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
+          <span className="relative inline-flex h-4 w-4 rounded-full bg-accent"></span>
         </div>
-        <div className="flex-1 space-y-2">
-          <p className="text-xs text-muted-foreground">Analyzing your question...</p>
-          <div className="flex gap-2">
-            <div className="h-1 rounded-full bg-border animate-shimmer-bar" style={{ width: '55%' }} />
-            <div className="h-1 rounded-full bg-border/60 animate-shimmer-bar" style={{ width: '25%', animationDelay: '300ms' }} />
-          </div>
-        </div>
-      </div>
-      {[0, 1].map((i) => (
-        <div
-          key={i}
-          className="flex items-center gap-3 px-4 py-2 opacity-30"
-        >
-          <div className="h-5 w-5 rounded-md bg-muted animate-pulse" />
-          <div className="h-2 rounded-full bg-muted animate-pulse" style={{ width: `${45 + i * 18}%` }} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/* ── Streaming loader at the bottom when steps are already present ── */
-function StreamingLoader() {
-  return (
-    <div className="flex items-center gap-3 py-2 mt-1 animate-fade-up">
-      <div className="flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground">
-        <Sparkles className="h-3.5 w-3.5 animate-spin-slow" />
-      </div>
-      <span className="text-xs text-muted-foreground/70">Processing...</span>
-      <div className="flex gap-1 ml-0.5">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className="block h-1 w-1 rounded-full bg-muted-foreground/40 animate-dot-bounce"
-            style={{ animationDelay: `${i * 160}ms` }}
-          />
-        ))}
+        <span className="text-sm text-muted-foreground">Analyzing your question...</span>
       </div>
     </div>
   )
 }
 
 /* ── Individual timeline item — icon-based, no dots or lines ── */
-function TimelineItem({ message, isActive }: { message: SSEMessage; isActive?: boolean }) {
+function TimelineItem({ message, isActive, isComplete }: { message: SSEMessage; isActive: boolean; isComplete: boolean }) {
   const [visible, setVisible] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
 
   // Fade-in on mount
   useEffect(() => {
@@ -180,23 +147,16 @@ function TimelineItem({ message, isActive }: { message: SSEMessage; isActive?: b
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  const iconClass = isActive
-    ? 'bg-accent/15 text-accent'
-    : 'bg-muted text-muted-foreground'
-
   if (message.type === 'reasoning') {
     return (
       <div
-        ref={ref}
-        className="flex items-start gap-3 rounded-lg px-3 py-2 transition-all duration-400 ease-out hover:bg-card/40"
+        className="flex items-start gap-3 transition-all duration-400 ease-out"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : 'translateY(8px)',
         }}
       >
-        <div className={`flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-md ${iconClass} mt-0.5 transition-colors duration-300`}>
-          <Lightbulb className="h-3.5 w-3.5" />
-        </div>
+        <StatusIcon isActive={isActive} isComplete={isComplete} />
         <ReasoningContent content={typeof message.content === 'string' ? message.content : ''} />
       </div>
     )
@@ -205,19 +165,47 @@ function TimelineItem({ message, isActive }: { message: SSEMessage; isActive?: b
   if (message.type === 'tool') {
     return (
       <div
-        ref={ref}
-        className="rounded-lg px-3 py-2 transition-all duration-400 ease-out hover:bg-card/40"
+        className="flex items-start gap-3 transition-all duration-400 ease-out"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : 'translateY(8px)',
         }}
       >
-        <ToolContent message={message} isActive={isActive} />
+        <StatusIcon isActive={isActive} isComplete={isComplete} />
+        <ToolContent message={message} />
       </div>
     )
   }
 
   return null
+}
+
+function StatusIcon({ isActive, isComplete }: { isActive: boolean; isComplete: boolean }) {
+  if (isActive) {
+    return (
+      <div className="flex h-4 w-4 shrink-0 items-center justify-center mt-0.5">
+        <MoreHorizontal className="h-4 w-4 animate-pulse text-accent" />
+      </div>
+    )
+  }
+
+  // Completed state (or previous items) always check
+  return (
+    <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary/10 mt-0.5">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-2.5 w-2.5 text-muted-foreground"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    </div>
+  )
 }
 
 function ReasoningContent({ content }: { content: string }) {
@@ -226,7 +214,7 @@ function ReasoningContent({ content }: { content: string }) {
   const hasMore = content.length > 80
 
   return (
-    <div className="flex-1 min-w-0">
+    <div className="flex-1 min-w-0 pt-0.5">
       <p className="text-sm text-muted-foreground leading-relaxed">
         {expanded ? content : preview}
         {hasMore && !expanded && '...'}
@@ -243,130 +231,61 @@ function ReasoningContent({ content }: { content: string }) {
   )
 }
 
-function ToolContent({ message, isActive }: { message: SSEMessage; isActive?: boolean }) {
+function ToolContent({ message }: { message: SSEMessage }) {
   const [codeVisible, setCodeVisible] = useState(false)
   const tool = message.tool || ''
   const raw = message.raw || {}
   const args = raw.args || {}
 
-  const getToolInfo = (): { icon: React.ReactNode; label: string; detail: React.ReactNode } => {
+  const getToolLabel = (): { label: string; detail: React.ReactNode } => {
     switch (tool) {
       case 'tavily_search':
         return {
-          icon: <Search className="h-3.5 w-3.5" />,
           label: 'Searching',
-          detail: (
-            <div className="flex flex-wrap gap-2 w-full min-w-0">
-              <span className="block text-[var(--muted-foreground)] text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate w-full sm:w-auto hover:w-auto transition-all" title={args.query}>
-                {args.query || ''}
-              </span>
-            </div>
-          ),
+          detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
-      case 'skimming_web_pages': {
-        const urls: string[] = args.urls || []
-        // On mobile, stack them. On desktop, keep row.
-        // We use flex-col for mobile (default) and sm:flex-row for desktop?
-        // Actually user asked for "stack five webpages vertically" specifically.
-        // Let's make it responsive: stacked on small screens.
+      case 'skimming_web_pages':
         return {
-          icon: <FileText className="h-3.5 w-3.5" />,
           label: 'Reviewing Sources',
-          detail: (
-            <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full min-w-0 mt-1 sm:mt-0">
-              {urls.map((u, i) => {
-                let hostname = u
-                try {
-                  hostname = new URL(u).hostname
-                  if (hostname.startsWith('www.')) hostname = hostname.slice(4)
-                } catch { /* keep raw */ }
-
-                // Mobile: allow more width but truncate.
-                return (
-                  <a
-                    key={i}
-                    href={u}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block w-full sm:w-auto text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate max-w-full sm:max-w-[200px]"
-                    title={u}
-                  >
-                    {hostname}
-                  </a>
-                )
-              })}
-            </div>
-          ),
+          detail: null
         }
-      }
-      case 'get_full_text': {
-        const url = args.url || ''
-        let hostname = url
-        try {
-          hostname = new URL(url).hostname
-          if (hostname.startsWith('www.')) hostname = hostname.slice(4)
-        } catch { /* keep raw */ }
-
+      case 'get_full_text':
         return {
-          icon: <BookOpen className="h-3.5 w-3.5" />,
-          label: 'Reading',
-          detail: (
-            <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full min-w-0 mt-1 sm:mt-0">
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block w-full sm:w-auto text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:underline transition-colors text-xs bg-[var(--secondary)] px-2 py-0.5 rounded-md border border-[var(--border-subtle)] truncate max-w-full sm:max-w-[250px]"
-                title={url}
-              >
-                {hostname}
-              </a>
-            </div>
-          ),
+          label: 'Reading Content',
+          detail: null
         }
-      }
       case 'verify_claim':
         return {
-          icon: <ShieldCheck className="h-3.5 w-3.5" />,
           label: 'Verifying',
-          detail: <span className="text-foreground/80 truncate block w-full">{args.fact || ''}</span>,
+          detail: <span className="truncate">{args.fact}</span>
         }
       case 'run_python_tool':
         return {
-          icon: <Terminal className="h-3.5 w-3.5" />,
-          label: 'Running python code',
+          label: 'Running Code',
           detail: (
-            <button onClick={() => setCodeVisible(!codeVisible)} className="text-muted-foreground text-xs hover:text-foreground hover:underline cursor-pointer transition-colors whitespace-nowrap">
-              {codeVisible ? 'hide code' : 'show code'}
+            <button onClick={() => setCodeVisible(!codeVisible)} className="text-xs underline hover:text-foreground cursor-pointer transition-colors whitespace-nowrap ml-2">
+              {codeVisible ? 'hide' : 'view'}
             </button>
           ),
         }
       default:
         return {
-          icon: <Sparkles className="h-3.5 w-3.5" />,
           label: tool,
           detail: null,
         }
     }
   }
 
-  const { icon, label, detail } = getToolInfo()
+  const { label, detail } = getToolLabel()
 
   return (
-    <div className="flex-1 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3 text-sm">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-md bg-muted text-muted-foreground mt-0.5">
-            {icon}
-          </div>
-          <span className="font-medium text-muted-foreground">{label}</span>
-        </div>
-        <div className="flex-1 min-w-0 w-full sm:mt-0.5 pl-8 sm:pl-0">
-          {detail}
-        </div>
+    <div className="flex-1 min-w-0 pt-0.5">
+      <div className="flex flex-wrap items-baseline gap-x-2 text-sm text-muted-foreground">
+        <span className="font-medium">{label}</span>
+        {detail}
       </div>
       {codeVisible && args.code && (
-        <pre className="mt-2 ml-0 sm:ml-9 rounded-lg bg-secondary p-3 text-xs font-mono overflow-x-auto text-foreground">
+        <pre className="mt-2 rounded-lg bg-secondary/50 p-3 text-xs font-mono overflow-x-auto text-foreground border border-border/50">
           <code>{args.code}</code>
         </pre>
       )}

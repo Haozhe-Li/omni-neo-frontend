@@ -286,6 +286,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden relative">
+      {/* Edge flashing — only when thinking (not complete) */}
+      {!isComplete && (
+        <div className="absolute inset-0 z-0 pointer-events-none animate-flash-edges" />
+      )}
+
+
       {/* ── Global Header (Unchanged) ── */}
       <header className="flex-shrink-0 border-b border-border bg-background/80 backdrop-blur-xl z-30">
         <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 px-4 md:px-6">
@@ -361,55 +367,68 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           {activeView === 'steps' ? (
             /* ═══ View 1: Steps (Thinking Process) — Strict Two-Container Layout ═══ */
             /* ═══ View 1: Steps (Thinking Process) — Professional Split Layout ═══ */
-            <div className="flex-1 flex flex-col min-h-0 bg-[var(--background)]">
+            /* ═══ View 1: Steps (Thinking Process) — Minimalist Floating Layout ═══ */
+            <div className="flex-1 flex flex-col items-center justify-center min-h-0 relative z-10">
 
-              {/* Top Panel: Research Plan */}
-              <div className="flex-shrink-0 border-b border-[var(--border-subtle)] bg-[var(--secondary)]/10 max-h-[35%] flex flex-col">
-                <div className="px-6 py-3 select-none flex-shrink-0">
-                  <div className="mx-auto max-w-[1200px] w-full flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">Research Plan</span>
-                      {todos.length > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)] text-[10px] font-medium border border-[var(--border-subtle)]">
-                          {todos.filter(t => t.status === 'completed').length} / {todos.length}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {/* Scroll container moved INSIDE to match max-w-1200px */}
-                <div className="flex-1 min-h-0 px-6 pb-4">
-                  <div className="mx-auto max-w-[1200px] w-full h-full overflow-y-auto custom-scrollbar">
-                    <ResearchProgress
-                      todos={isComplete ? todos.map(t => ({ ...t, status: 'completed' as const })) : todos}
-                      isComplete={isComplete}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Panel: Activity Stream */}
-              <div className="flex-1 flex flex-col min-h-0 bg-[var(--background)]">
-                <div className="px-6 py-3 border-b border-[var(--border-subtle)]/50 select-none flex-shrink-0">
-                  <div className="mx-auto max-w-[1200px] w-full flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">THINKING STEPS</span>
-                    {isStreaming && (
-                      <span className="relative flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-75"></span>
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]"></span>
+              <div className="w-full max-w-2xl px-6 flex flex-col gap-16">
+                {/* Research Plan Block */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-sm font-bold text-muted-foreground/70 uppercase tracking-widest">Research Plan</span>
+                    {todos.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-primary/5 text-muted-foreground text-[10px] font-medium">
+                        {todos.filter(t => t.status === 'completed').length} / {todos.length}
                       </span>
                     )}
                   </div>
+
+                  {/* Research Plan with top/bottom fade mask (same as thinking steps) */}
+                  <div className="relative h-[25vh] overflow-hidden">
+                    <div
+                      className="absolute inset-0 overflow-y-auto custom-scrollbar pr-2"
+                      style={{
+                        maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)'
+                      }}
+                    >
+                      <ResearchProgress
+                        todos={isComplete ? todos.map(t => ({ ...t, status: 'completed' as const })) : todos}
+                        isComplete={isComplete}
+                      />
+                    </div>
+                  </div>
                 </div>
-                {/* Scroll container delegated to ThinkingTimeline inside max-w-1200px */}
-                <div className="flex-1 min-h-0 px-6 pb-4">
-                  <div className="mx-auto max-w-[1200px] w-full h-full">
-                    <ThinkingTimeline
-                      messages={messages}
-                      isStreaming={isStreaming}
-                      isComplete={isComplete}
-                      hasError={hasTimedOut}
-                    />
+
+                {/* Thinking Steps Block */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-sm font-bold text-muted-foreground/70 uppercase tracking-widest">Thinking Process</span>
+                    {isStreaming && (
+                      <span className="relative flex h-2 w-2 ml-1">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-accent"></span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Thinking steps with top/bottom fade mask */}
+                  <div
+                    className="relative h-48 overflow-hidden"
+                  >
+                    <div
+                      className="absolute inset-0 overflow-y-auto custom-scrollbar pr-2"
+                      style={{
+                        maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)'
+                      }}
+                    >
+                      <ThinkingTimeline
+                        messages={messages}
+                        isStreaming={isStreaming}
+                        isComplete={isComplete}
+                        hasError={hasTimedOut}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
