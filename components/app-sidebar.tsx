@@ -7,12 +7,14 @@ import Image from 'next/image'
 import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database } from 'lucide-react'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { formatDistanceToNow } from 'date-fns'
 
 interface StoredChat {
     thread_id: string
     query: string
     timestamp: number
     model?: string
+    isExpiring?: boolean
 }
 
 interface AppSidebarProps {
@@ -44,6 +46,10 @@ export function AppSidebar({
     const loadHistory = useCallback(() => {
         if (typeof window === 'undefined') return
         const items: StoredChat[] = []
+        const now = Date.now()
+        const THREE_DAYS = 3 * 24 * 60 * 60 * 1000
+        const TWO_DAYS = 2 * 24 * 60 * 60 * 1000
+
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
             if (!key) continue
@@ -53,11 +59,20 @@ export function AppSidebar({
                 const data = JSON.parse(raw)
                 // Simple validation to ensure it's our chat data
                 if (data.thread_id && (data.query || data.title) && data.timestamp) {
+                    const age = now - data.timestamp
+
+                    // Auto-deletion rule: > 3 days
+                    if (age > THREE_DAYS) {
+                        localStorage.removeItem(key)
+                        continue
+                    }
+
                     items.push({
                         thread_id: data.thread_id,
                         query: data.title || data.query, // Prefer title if available
                         timestamp: data.timestamp,
-                        model: data.model // Add model loading
+                        model: data.model, // Add model loading
+                        isExpiring: age > TWO_DAYS
                     })
                 }
             } catch (e) {
@@ -183,7 +198,7 @@ export function AppSidebar({
                                     if (isMobile && onToggle) onToggle()
                                 }}
                                 className={`
-                      group relative flex items-center gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
+                      group relative flex items-start gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
                       ${currentThreadId === chat.thread_id
                                         ? 'bg-[var(--secondary)] text-[var(--foreground)]'
                                         : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
@@ -191,17 +206,31 @@ export function AppSidebar({
                     `}
                                 title={chat.query}
                             >
-                                {chat.model === 'canvas' ? (
-                                    <Layout size={16} className="min-w-[16px]" />
-                                ) : (
-                                    <MessageSquare size={16} className="min-w-[16px]" />
-                                )}
-                                <span className="text-sm truncate pr-6 flex-1">
-                                    {chat.query}
-                                </span>
+                                <div className="mt-0.5">
+                                    {chat.model === 'canvas' ? (
+                                        <Layout size={16} className="min-w-[16px]" />
+                                    ) : (
+                                        <MessageSquare size={16} className="min-w-[16px]" />
+                                    )}
+                                </div>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                    <span className="text-sm truncate w-full">
+                                        {chat.query}
+                                    </span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        <span className="text-[10px] opacity-60">
+                                            {formatDistanceToNow(chat.timestamp, { addSuffix: true })}
+                                        </span>
+                                        {chat.isExpiring && (
+                                            <span className="text-[10px] text-amber-500 font-medium flex items-center gap-1" title="Will disappear if unused for 3 days">
+                                                Expires soon
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                                 <div
                                     onClick={(e) => handleDelete(e, chat.thread_id)}
-                                    className="absolute right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--secondary)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
+                                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--background)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
                                     role="button"
                                     aria-label="Delete chat"
                                 >
