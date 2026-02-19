@@ -1,8 +1,18 @@
 'use client'
 
 import { useState, memo, useRef } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, BookOpen, Copy, Check } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, BookOpen, Copy, Check, Download, FileText, File } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
+import { SourceItem } from '@/components/source-item'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -12,6 +22,7 @@ import type { Source } from '@/lib/types'
 interface FinalAnswerProps {
   answer: string
   sources: Source[]
+  title?: string
 }
 
 /* ── Stable plugin arrays at module scope — never recreated ── */
@@ -117,13 +128,100 @@ const markdownComponents: Components = {
   ),
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer, sources }: FinalAnswerProps) {
+function normalizeFilename(title: string): string {
+  // 1. Replace spaces with underscores
+  // 2. Remove characters that are unsafe for filenames (keeping alphanumeric, Chinese, dots, dashes, underscores)
+  // 3. Limit length to avoid filesystem issues
+  return title
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w\-\u4e00-\u9fa5]/g, '')
+    .slice(0, 50) || 'answer'
+}
+
+export const FinalAnswer = memo(function FinalAnswer({ answer, sources, title }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(answer)
+      setIsCopied(true)
+      toast.success('Copied to clipboard')
+      setTimeout(() => setIsCopied(false), 2000)
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
+
+  const handleDownload = (format: 'markdown' | 'pdf' | 'word' | 'gdoc') => {
+    if (format === 'markdown') {
+      const blob = new Blob([answer], { type: 'text/markdown' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${normalizeFilename(title || 'answer')}.md`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Downloaded as Markdown')
+    } else {
+      toast.info('Format coming soon')
+    }
+  }
+
   return (
-    <div ref={containerRef} className="rounded-xl border border-border bg-card shadow-sm relative">
-      <TextSelectionMenu containerRef={containerRef} />
+    <div ref={containerRef} className="rounded-xl border border-border bg-card shadow-sm relative group/answer">
+      <TextSelectionMenu containerRef={containerRef} sources={sources} />
+
+      {/* Action Buttons (Top Right) */}
+      <div className="absolute top-3 right-3 flex items-center gap-1 z-10 bg-card/50 backdrop-blur-sm p-1 rounded-lg border border-border/50 shadow-sm">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+          onClick={handleCopy}
+          title="Copy all text"
+        >
+          {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          <span className="sr-only">Copy</span>
+        </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              title="Download"
+            >
+              <Download className="h-4 w-4" />
+              <span className="sr-only">Download</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer">
+              <FileText className="mr-2 h-4 w-4" />
+              <span>Markdown (.md)</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem disabled>
+              <File className="mr-2 h-4 w-4" />
+              <span>PDF Document</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled>
+              <File className="mr-2 h-4 w-4" />
+              <span>Word Document</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled>
+              <File className="mr-2 h-4 w-4" />
+              <span>Google Doc</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       {/* Answer body */}
       <div className="px-8 py-8 sm:px-10 sm:py-10">
         <div className="max-w-none markdown-body">
@@ -158,30 +256,15 @@ export const FinalAnswer = memo(function FinalAnswer({ answer, sources }: FinalA
 
           {/* Source list */}
           <div
-            className="overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"
-            style={{
-              maxHeight: sourcesOpen ? `${sources.length * 48 + 40}px` : '0px',
-              opacity: sourcesOpen ? 1 : 0,
-            }}
+            className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${sourcesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              }`}
           >
-            <div className="px-8 pb-5 sm:px-10 stagger-children">
-              {sources.map((source, idx) => (
-                <a
-                  key={idx}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 py-2.5 group"
-                >
-                  <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10 text-[10px] font-mono font-medium text-accent">
-                    {idx + 1}
-                  </span>
-                  <span className="flex-1 min-w-0 text-sm text-foreground group-hover:text-accent transition-colors line-clamp-1">
-                    {source.title}
-                  </span>
-                  <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </a>
-              ))}
+            <div className="overflow-hidden">
+              <div className="px-8 pb-5 sm:px-10 stagger-children flex flex-col gap-3">
+                {sources.map((source, idx) => (
+                  <SourceItem key={idx} source={source} index={idx} />
+                ))}
+              </div>
             </div>
           </div>
         </div>

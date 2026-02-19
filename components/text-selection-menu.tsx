@@ -1,13 +1,23 @@
 import { useRef, useLayoutEffect, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { BookOpen, Copy, MessageSquarePlus } from 'lucide-react'
+import { BookOpen, Copy, MessageSquarePlus, X, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+import type { Source } from '@/lib/types'
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface TextSelectionMenuProps {
     containerRef: React.RefObject<HTMLElement | null>
+    sources?: Source[]
 }
 
-export function TextSelectionMenu({ containerRef }: TextSelectionMenuProps) {
+export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionMenuProps) {
     // We use ref-based positioning for performance (avoiding re-renders on scroll)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -16,6 +26,8 @@ export function TextSelectionMenu({ containerRef }: TextSelectionMenuProps) {
     const [selectedText, setSelectedText] = useState('')
     // We keep track of the range to query its current position during scroll
     const activeRangeRef = useRef<Range | null>(null)
+    const [verifiedSource, setVerifiedSource] = useState<Source | null>(null)
+    const [isDialogOpen, setIsDialogOpen] = useState(false)
 
     // Use useLayoutEffect to prevent initial flash at 0,0 by updating position before paint
     useLayoutEffect(() => {
@@ -97,8 +109,6 @@ export function TextSelectionMenu({ containerRef }: TextSelectionMenuProps) {
         }
     }, [containerRef])
 
-    if (!isVisible) return null
-
     const handleCopy = () => {
         navigator.clipboard.writeText(selectedText)
         toast.success('Copied to clipboard')
@@ -106,10 +116,48 @@ export function TextSelectionMenu({ containerRef }: TextSelectionMenuProps) {
         window.getSelection()?.removeAllRanges()
     }
 
-    const handleCheckSource = () => {
-        toast.info('Check source feature is coming soon!')
+    const handleCheckSource = async () => {
         setIsVisible(false)
+        const textToVerify = selectedText
         window.getSelection()?.removeAllRanges()
+
+        const toastId = toast.loading('Checking source...')
+
+        try {
+            const apiEndpoint = process.env.NEXT_PUBLIC_BACKEND_URL
+                ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/check_source`
+                : '/api/check_source'
+
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text_selection: textToVerify,
+                    source: {
+                        final_sources: sources
+                    }
+                }),
+            })
+
+            if (!response.ok) throw new Error('Failed to verify source')
+
+            const data = await response.json()
+            toast.dismiss(toastId)
+
+            if (data && data.title) {
+                // Found a matching source
+                setVerifiedSource(data)
+                setIsDialogOpen(true)
+            } else {
+                // No matching source found
+                toast.error('No matching source found for this text')
+            }
+
+        } catch (error) {
+            console.error('Check source error:', error)
+            toast.dismiss(toastId)
+            toast.error('Failed to check source')
+        }
     }
 
     const handleFollowUp = () => {
@@ -118,7 +166,7 @@ export function TextSelectionMenu({ containerRef }: TextSelectionMenuProps) {
         window.getSelection()?.removeAllRanges()
     }
 
-    return createPortal(
+    const menuPortal = isVisible ? createPortal(
         <div
             ref={menuRef}
             onMouseDown={(e) => e.preventDefault()}
@@ -154,6 +202,58 @@ export function TextSelectionMenu({ containerRef }: TextSelectionMenuProps) {
             />
         </div>,
         document.body
+    ) : null
+
+    return (
+        <>
+            {menuPortal}
+
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden outline-none">
+                    <DialogHeader className="px-6 py-4 border-b border-border/50 shrink-0">
+                        <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
+                            <BookOpen className="h-5 w-5 text-accent" />
+                            Source Verified
+                        </DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Details of the verified source
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                        <ScrollArea className="flex-1 h-full">
+                            {verifiedSource && (
+                                <div className="px-6 py-6 flex flex-col gap-6">
+                                    {/* Title & Link */}
+                                    <div className="flex flex-col gap-2">
+                                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Source Title</span>
+                                        <a
+                                            href={verifiedSource.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-start gap-2 text-lg font-medium text-foreground hover:text-accent transition-colors leading-tight group"
+                                        >
+                                            {verifiedSource.title}
+                                            <ExternalLink className="h-4 w-4 mt-1 opacity-50 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                        </a>
+                                    </div>
+
+                                    {/* Content */}
+                                    {verifiedSource.content && (
+                                        <div className="flex flex-col gap-2">
+                                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Passage Context</span>
+                                            <div className="bg-muted/30 rounded-lg p-5 border border-border/40 font-serif text-[15px] leading-relaxed whitespace-pre-wrap text-foreground/90 select-text">
+                                                {verifiedSource.content}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </ScrollArea>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
     )
 }
 

@@ -456,6 +456,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     <FinalAnswer
                       answer={finalAnswer.answer}
                       sources={finalAnswer.sources}
+                      title={title}
                     />
                   </div>
                 )}

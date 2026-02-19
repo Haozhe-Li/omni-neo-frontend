@@ -14,4 +14,5 @@ export interface TodoItem {
 export interface Source {
   title: string
   url: string
+  content?: string
 }

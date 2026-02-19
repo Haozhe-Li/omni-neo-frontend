@@ -273,6 +273,21 @@ function ToolContent({ message }: { message: SSEMessage }) {
           label: 'Verifying',
           detail: <span className="truncate">{args.fact}</span>
         }
+      case 'write_file':
+        return {
+          label: 'Taking some notes',
+          detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
+        }
+      case 'read_file':
+        return {
+          label: 'Read notes',
+          detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
+        }
+      case 'edit_file':
+        return {
+          label: 'Update some notes',
+          detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
+        }
       case 'run_python_tool':
         return {
           label: 'Running Code',
