@@ -22,6 +22,7 @@ interface ThinkingTimelineProps {
   isStreaming: boolean
   isComplete?: boolean
   hasError?: boolean
+  errorMessage?: string | null
 }
 
 export function ThinkingTimeline({
@@ -29,6 +30,7 @@ export function ThinkingTimeline({
   isStreaming,
   isComplete,
   hasError,
+  errorMessage,
 }: ThinkingTimelineProps) {
   /* ── Better Auto-Scrolling Logic ── */
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -110,13 +112,17 @@ export function ThinkingTimeline({
         {/* Loading Block Animation - pushes latest step up into view */}
         {isStreaming && <ThinkingBlockLoader />}
 
-        {/* Error state — 60s timeout */}
-        {hasError && (
-          <div className="flex items-center gap-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 mt-2 animate-fade-up">
-            <AlertTriangle className="h-4 w-4 text-red-400 flex-shrink-0" />
+        {/* Error state */}
+        {(hasError || errorMessage) && (
+          <div className="flex items-start gap-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 mt-4 animate-fade-up">
+            <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm text-red-400">No response received for 100 seconds</p>
-              <p className="text-xs text-red-400/60 mt-0.5">The backend may have encountered an issue. Please try a new search.</p>
+              <h3 className="text-sm font-semibold text-red-500 mb-1">
+                {errorMessage ? 'System Error' : 'Request Timeout'}
+              </h3>
+              <div className="text-xs text-red-400/90 leading-relaxed font-mono whitespace-pre-wrap break-words">
+                {errorMessage || 'The backend failed to respond within 100 seconds. Please try again.'}
+              </div>
             </div>
           </div>
         )}

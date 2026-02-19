@@ -147,11 +147,11 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
             if (data && data.title) {
                 // Found a matching source
                 setVerifiedSource(data)
-                setIsDialogOpen(true)
             } else {
                 // No matching source found
-                toast.error('No matching source found for this text')
+                setVerifiedSource(null)
             }
+            setIsDialogOpen(true)
 
         } catch (error) {
             console.error('Check source error:', error)
@@ -172,7 +172,7 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
             onMouseDown={(e) => e.preventDefault()}
             role="dialog"
             aria-label="Text selection menu"
-            className="fixed top-0 left-0 z-40 flex items-center gap-1 p-1 rounded-lg bg-zinc-700 text-zinc-50 dark:bg-foreground/90 dark:text-background shadow-xl backdrop-blur-sm transition-opacity duration-200"
+            className="fixed top-0 left-0 z-40 flex items-center gap-1 p-1.5 rounded-xl bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-zinc-200/50 dark:shadow-black/50 backdrop-blur-sm transition-opacity duration-200"
             style={{
                 willChange: 'transform, opacity',
                 opacity: 0 // Start invisible to prevent flash
@@ -183,13 +183,13 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
                 icon={<BookOpen className="w-3.5 h-3.5" />}
                 label="Check source"
             />
-            <div className="w-px h-3.5 bg-zinc-600 dark:bg-background/20 mx-0.5" />
+            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
             <MenuButton
                 onClick={handleFollowUp}
                 icon={<MessageSquarePlus className="w-3.5 h-3.5" />}
                 label="Follow up"
             />
-            <div className="w-px h-3.5 bg-zinc-600 dark:bg-background/20 mx-0.5" />
+            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
             <MenuButton
                 onClick={handleCopy}
                 icon={<Copy className="w-3.5 h-3.5" />}
@@ -198,7 +198,7 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
 
             {/* Arrow pointing down */}
             <div
-                className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-zinc-700 dark:border-t-foreground/90"
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white dark:border-t-zinc-900 drop-shadow-sm"
             />
         </div>,
         document.body
@@ -212,17 +212,17 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
                 <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden outline-none">
                     <DialogHeader className="px-6 py-4 border-b border-border/50 shrink-0">
                         <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-                            <BookOpen className="h-5 w-5 text-accent" />
-                            Source Verified
+                            <BookOpen className={`h-5 w-5 ${verifiedSource ? 'text-accent' : 'text-muted-foreground'}`} />
+                            {verifiedSource ? 'Source Verified' : 'No Match Found'}
                         </DialogTitle>
                         <DialogDescription className="sr-only">
-                            Details of the verified source
+                            {verifiedSource ? 'Details of the verified source' : 'No matching source found in the provided references'}
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                         <ScrollArea className="flex-1 h-full">
-                            {verifiedSource && (
+                            {verifiedSource ? (
                                 <div className="px-6 py-6 flex flex-col gap-6">
                                     {/* Title & Link */}
                                     <div className="flex flex-col gap-2">
@@ -248,6 +248,18 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
                                         </div>
                                     )}
                                 </div>
+                            ) : (
+                                <div className="px-6 py-12 flex flex-col items-center justify-center text-center gap-4 h-full">
+                                    <div className="p-4 rounded-full bg-muted/50">
+                                        <BookOpen className="h-8 w-8 text-muted-foreground/50" />
+                                    </div>
+                                    <div className="max-w-md space-y-2">
+                                        <h3 className="text-lg font-medium text-foreground">No Matching Source</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">
+                                            The selected text could not be directly matched to any of the provided sources. This might be a synthesis / translation of multiple sources or general knowledge.
+                                        </p>
+                                    </div>
+                                </div>
                             )}
                         </ScrollArea>
                     </div>
@@ -264,7 +276,7 @@ function MenuButton({ onClick, icon, label }: { onClick: () => void; icon: React
                 e.stopPropagation()
                 onClick()
             }}
-            className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-zinc-700 dark:hover:bg-background/20 rounded-md transition-colors text-xs font-medium whitespace-nowrap"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50 rounded-lg transition-colors text-xs font-semibold whitespace-nowrap"
         >
             {icon}
             <span>{label}</span>

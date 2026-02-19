@@ -92,11 +92,17 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     'run_python_tool',
   ])
 
+  const [error, setError] = useState<string | null>(null)
+
   const handleSSELine = useCallback((data: Record<string, unknown>) => {
     lastMessageTime.current = Date.now()
     const parsed = parseSSEMessage(data)
 
-    if (parsed.type === 'answer') {
+    if (parsed.type === 'error') {
+      setError(parsed.content || 'An unexpected error occurred.')
+      setIsComplete(true)
+      isCompleteRef.current = true
+    } else if (parsed.type === 'answer') {
       if (answerReceivedRef.current) return
       answerReceivedRef.current = true
 
@@ -434,9 +440,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     >
                       <ThinkingTimeline
                         messages={messages}
-                        isStreaming={isStreaming}
+                        isStreaming={isStreaming && !error}
                         isComplete={isComplete}
                         hasError={hasTimedOut}
+                        errorMessage={error}
                       />
                     </div>
                   </div>
