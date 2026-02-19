@@ -33,6 +33,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const lastMessageTime = useRef<number>(Date.now())
   const answerReceivedRef = useRef(false)
   const isCompleteRef = useRef(false)
+  const [executionTime, setExecutionTime] = useState<number>(0)
 
   // When answer arrives: mark completed, wait 1s, trigger fade to answer
   useEffect(() => {
@@ -43,6 +44,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
       // Save to local storage
       if (typeof window !== 'undefined' && threadId) {
+        const duration = lastMessageTime.current - startTime
+        setExecutionTime(duration)
+
         const chatData = {
           thread_id: threadId,
           query,
@@ -52,6 +56,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           timestamp: Date.now(),
           model: 'canvas',
           title: title || query,
+          duration
         }
         localStorage.setItem(threadId, JSON.stringify(chatData))
       }
@@ -139,6 +144,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
               setMessages(data.messages || [])
               setFinalAnswer(data.final_answer || null)
               setTodos(data.todos || [])
+              if (data.duration) setExecutionTime(data.duration)
               setIsComplete(true)
               isCompleteRef.current = true
               answerReceivedRef.current = true
@@ -218,6 +224,14 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   }, [isComplete, hasTimedOut])
 
   const getDuration = () => {
+    if (executionTime > 0) {
+      const seconds = Math.floor(executionTime / 1000)
+      if (seconds < 60) return `${seconds}s`
+      const m = Math.floor(seconds / 60)
+      const s = seconds % 60
+      return `${m}m ${s}s`
+    }
+
     const end = isComplete ? lastMessageTime.current : currentTime
     const durationMs = Math.max(0, end - startTime)
     const seconds = Math.floor(durationMs / 1000)
