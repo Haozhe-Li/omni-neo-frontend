@@ -7,8 +7,38 @@ const _inter = Inter({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Omni Knows Neo',
-  description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers',
+  title: {
+    default: 'Omni Knows Neo - Advanced AI Research Agent',
+    template: '%s | Omni Knows Neo',
+  },
+  description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
+  keywords: ['AI', 'Research Agent', 'Artificial Intelligence', 'Search Engine', 'Machine Learning', 'Deep Learning', 'Omni Knows Neo'],
+  authors: [{ name: 'Haozhe Li' }],
+  creator: 'Haozhe Li',
+  metadataBase: new URL('https://omniknows.xyz'),
+  openGraph: {
+    title: 'Omni Knows Neo - Advanced AI Research Agent',
+    description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
+    url: 'https://omniknows.xyz',
+    siteName: 'Omni Knows Neo',
+    images: [
+      {
+        url: '/android-chrome-512x512.png',
+        width: 512,
+        height: 512,
+        alt: 'Omni Knows Neo Logo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Omni Knows Neo - Advanced AI Research Agent',
+    description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
+    images: ['/android-chrome-512x512.png'],
+    creator: '@omniknows',
+  },
   icons: {
     icon: [
       { url: '/favicon.ico' },
@@ -20,6 +50,17 @@ export const metadata: Metadata = {
     apple: [
       { url: '/apple-touch-icon.png' },
     ],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
 }
 
