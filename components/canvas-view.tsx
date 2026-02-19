@@ -428,8 +428,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     <div
                       className="absolute inset-0 overflow-y-auto custom-scrollbar pr-2"
                       style={{
-                        maskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)',
-                        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%)'
+                        maskImage: isComplete ? 'none' : 'linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)',
+                        WebkitMaskImage: isComplete ? 'none' : 'linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)'
                       }}
                     >
                       <ThinkingTimeline

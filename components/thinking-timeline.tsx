@@ -107,6 +107,9 @@ export function ThinkingTimeline({
           ))}
         </div>
 
+        {/* Loading Block Animation - pushes latest step up into view */}
+        {isStreaming && <ThinkingBlockLoader />}
+
         {/* Error state — 60s timeout */}
         {hasError && (
           <div className="flex items-center gap-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 mt-2 animate-fade-up">
@@ -289,6 +292,15 @@ function ToolContent({ message }: { message: SSEMessage }) {
           <code>{args.code}</code>
         </pre>
       )}
+    </div>
+  )
+}
+
+function ThinkingBlockLoader() {
+  return (
+    <div className="flex flex-col gap-2 mt-4 px-1 opacity-50">
+      <div className="h-4 w-3/4 bg-muted/60 rounded animate-pulse" />
+      <div className="h-4 w-1/2 bg-muted/60 rounded animate-pulse delay-150" />
     </div>
   )
 }
