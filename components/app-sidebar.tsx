@@ -230,7 +230,7 @@ export function AppSidebar({
                                 </div>
                                 <div
                                     onClick={(e) => handleDelete(e, chat.thread_id)}
-                                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--background)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all"
+                                    className={`absolute right-2 top-2 p-1 hover:bg-[var(--background)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                     role="button"
                                     aria-label="Delete chat"
                                 >
