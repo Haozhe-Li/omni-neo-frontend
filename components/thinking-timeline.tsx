@@ -236,6 +236,7 @@ function ReasoningContent({ content }: { content: string }) {
 
 function ToolContent({ message }: { message: SSEMessage }) {
   const [codeVisible, setCodeVisible] = useState(false)
+  const [urlVisible, setUrlVisible] = useState(false)
   const tool = message.tool || ''
   const raw = message.raw || {}
   const args = raw.args || {}
@@ -248,14 +249,24 @@ function ToolContent({ message }: { message: SSEMessage }) {
           detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
       case 'skimming_web_pages':
-        return {
-          label: 'Reviewing Sources',
-          detail: null
-        }
       case 'get_full_text':
+        const urls = args.urls || args.url
+        const count = Array.isArray(urls) ? urls.length : 1
         return {
-          label: 'Reading Content',
-          detail: null
+          label: tool === 'skimming_web_pages' ? 'Reviewing Sources' : 'Reading Content',
+          detail: (
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground/80">
+                {Array.isArray(urls) ? `${count} page${count > 1 ? 's' : ''}` : (new URL(urls).hostname)}
+              </span>
+              <button
+                onClick={() => setUrlVisible(!urlVisible)}
+                className="text-xs underline hover:text-foreground cursor-pointer transition-colors whitespace-nowrap"
+              >
+                {urlVisible ? 'hide' : 'view'}
+              </button>
+            </div>
+          )
         }
       case 'verify_claim':
         return {
@@ -291,6 +302,21 @@ function ToolContent({ message }: { message: SSEMessage }) {
         <pre className="mt-2 rounded-lg bg-secondary/50 p-3 text-xs font-mono overflow-x-auto text-foreground border border-border/50">
           <code>{args.code}</code>
         </pre>
+      )}
+      {urlVisible && (args.urls || args.url) && (
+        <div className="mt-2 flex flex-col gap-1 rounded-lg bg-secondary/50 p-3 text-xs border border-border/50">
+          {[].concat(args.urls || args.url).map((url: string, i: number) => (
+            <a
+              key={i}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground hover:underline truncate block"
+            >
+              {url}
+            </a>
+          ))}
+        </div>
       )}
     </div>
   )
