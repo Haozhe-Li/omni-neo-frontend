@@ -141,6 +141,37 @@ function normalizeFilename(title: string): string {
     .slice(0, 50) || 'answer'
 }
 
+function stripMarkdown(md: string): string {
+  if (!md) return ''
+  return md
+    // Remove horizontal rules
+    .replace(/^(-\s*?|\*\s*?|_\s*?){3,}\s*$/gm, '')
+    // Remove HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Remove bold/italic (e.g. **bold**, *italic*, __bold__, _italic_)
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    // Remove heading hashes (e.g. ### Heading -> Heading)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove strikethrough
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove inline code
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove code blocks
+    .replace(/```[\s\S]*?```/g, (match) => match.replace(/```[^\n]*\n?|```/g, ''))
+    // Remove links [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove images ![alt](url) -> alt
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    // Remove blockquotes (> quote)
+    .replace(/^\s*>\s+/gm, '')
+    // Clean up lists (remove unordered list markers, keep item text)
+    .replace(/^\s*[-+*]\s+/gm, '')
+    // Remove extra newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, title, isEdited = false, onAnswerEdit }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
@@ -168,7 +199,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
     }
   }
 
-  const handleDownload = (format: 'markdown' | 'pdf' | 'word' | 'gdoc') => {
+  const handleDownload = (format: 'markdown' | 'txt' | 'pdf' | 'word' | 'gdoc') => {
     if (format === 'markdown') {
       const blob = new Blob([editedAnswer], { type: 'text/markdown' })
       const url = URL.createObjectURL(blob)
@@ -180,6 +211,18 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       toast.success('Downloaded as Markdown')
+    } else if (format === 'txt') {
+      const plainText = stripMarkdown(editedAnswer)
+      const blob = new Blob([plainText], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${normalizeFilename(title || 'answer')}.txt`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Downloaded as Text')
     } else {
       toast.info('Format coming soon')
     }
@@ -258,6 +301,10 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Markdown (.md)</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownload('txt')} className="cursor-pointer">
+                <File className="mr-2 h-4 w-4" />
+                <span>Text (.txt)</span>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled>
                 <File className="mr-2 h-4 w-4" />
@@ -318,6 +365,10 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer">
                   <Download className="mr-2 h-4 w-4" />
                   <span>Download (.md)</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleDownload('txt')} className="cursor-pointer">
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Download (.txt)</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

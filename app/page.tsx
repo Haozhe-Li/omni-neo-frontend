@@ -108,10 +108,8 @@ export default function Home() {
         setIsAutoDetecting(false)
 
         if (recommendedModel === 'light') {
-          toast.info('Auto selected: Light Mode', { duration: 2000 })
           setView('light')
         } else {
-          toast.info('Auto selected: Canvas Mode', { duration: 2000 })
           setView('canvas')
         }
       } catch (e) {
@@ -151,6 +149,23 @@ export default function Home() {
     // Default to canvas if not explicitly light
     setView('canvas')
   }, [])
+
+  // Check for pending thread from settings page navigation
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pendingThreadId = localStorage.getItem('pending_thread_id')
+      if (pendingThreadId) {
+        const pendingQuery = localStorage.getItem('pending_thread_query') || ''
+        localStorage.removeItem('pending_thread_id')
+        localStorage.removeItem('pending_thread_query')
+
+        // Timeout prevents possible race conditions with initial render
+        setTimeout(() => {
+          handleSelectThread(pendingThreadId, pendingQuery)
+        }, 0)
+      }
+    }
+  }, [handleSelectThread])
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen(prev => !prev)

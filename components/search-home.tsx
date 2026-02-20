@@ -248,13 +248,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
       {/* Auto-detecting overlay */}
       {isAutoDetecting && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4 animate-fade-up">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm animate-in fade-in duration-500 fade-out duration-500">
+          <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out">
             <div className="relative">
-              <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center">
-                <Sparkles className="h-6 w-6 text-accent animate-pulse" />
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center">
+                <div className="h-6 w-6 rounded-full border-[2px] border-[var(--accent)] border-t-transparent animate-spin opacity-80" />
               </div>
-              <div className="absolute inset-0 rounded-2xl bg-accent/5 animate-ping" />
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-foreground">Selecting best model...</p>

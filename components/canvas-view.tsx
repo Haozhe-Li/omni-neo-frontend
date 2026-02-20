@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { ArrowLeft, CheckCircle2, ChevronDown, Sparkles, ChevronUp, Clock, FileText, Menu } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronDown, Sparkles, ChevronUp, Clock, FileText, Menu, AlertCircle, XCircle } from 'lucide-react'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
 import { FinalAnswer } from '@/components/final-answer'
@@ -35,16 +35,19 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const answerReceivedRef = useRef(false)
   const isCompleteRef = useRef(false)
   const [executionTime, setExecutionTime] = useState<number>(0)
+  const [error, setError] = useState<string | null>(null)
 
-  // When answer arrives: mark completed, wait 1s, trigger fade to answer
+  // When answer arrives or error occurs: mark completed, wait 1s, trigger fade to answer
   useEffect(() => {
-    if (isComplete && finalAnswer && activeView === 'steps') {
-      setTodos((prev) =>
-        prev.map((t) => ({ ...t, status: 'completed' as const }))
-      )
+    if (((isComplete && finalAnswer) || error || hasTimedOut) && activeView === 'steps') {
+      if (!error && !hasTimedOut) {
+        setTodos((prev) =>
+          prev.map((t) => ({ ...t, status: 'completed' as const }))
+        )
+      }
 
       // Save to local storage
-      if (typeof window !== 'undefined' && threadId) {
+      if (typeof window !== 'undefined' && threadId && finalAnswer) {
         const duration = lastMessageTime.current - startTime
         setExecutionTime(duration)
 
@@ -63,14 +66,16 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       }
 
       const timer = setTimeout(() => {
-        setTodos((prev) =>
-          prev.map((t) => ({ ...t, status: 'completed' as const }))
-        )
+        if (!error && !hasTimedOut) {
+          setTodos((prev) =>
+            prev.map((t) => ({ ...t, status: 'completed' as const }))
+          )
+        }
         switchView('answer')
       }, 1000)
       return () => clearTimeout(timer)
     }
-  }, [isComplete, finalAnswer, title])
+  }, [isComplete, finalAnswer, error, hasTimedOut, title])
 
   const switchView = (to: ActiveView) => {
     if (to === activeView) return
@@ -92,8 +97,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     'check_python_compile',
     'run_python_tool',
   ])
-
-  const [error, setError] = useState<string | null>(null)
 
   const handleSSELine = useCallback((data: Record<string, unknown>) => {
     lastMessageTime.current = Date.now()
@@ -334,31 +337,23 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             </span>
           </div>
 
-          <div className="w-24 flex-shrink-0 flex justify-end">
-            {!isComplete && (
-              <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{getDuration()}</span>
-              </div>
-            )}
-          </div>
+          <div className="w-24 flex-shrink-0 flex justify-end" />
         </div>
       </header>
 
       {/* ── Persistent Sub-Header (Only visible on completion) ── */}
-      {isComplete && finalAnswer && (
+      {isComplete && (finalAnswer || error || hasTimedOut) && (
         <div className="flex-shrink-0 border-b border-border bg-card/30 backdrop-blur-md z-20 animate-fade-in">
           <div className="mx-auto max-w-[1200px] px-6 h-12 flex items-center justify-between">
             {/* Left: Summary */}
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-4 w-4 text-accent flex-shrink-0" />
+              {(error || hasTimedOut) ? (
+                <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-accent flex-shrink-0" />
+              )}
               <span className="text-xs text-foreground font-medium">
-                Research completed with {messages.length} steps
-              </span>
-              <span className="text-xs text-muted-foreground/50">·</span>
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {getDuration()}
+                {(error || hasTimedOut) ? `Process failed after ${messages.length} steps` : `Research completed with ${messages.length} steps`}
               </span>
             </div>
 
@@ -423,13 +418,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                 {/* Thinking Steps Block */}
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-2 px-1">
-                    <span className="text-sm font-bold text-muted-foreground/70 uppercase tracking-widest">Thinking Process</span>
-                    {isStreaming && (
-                      <span className="relative flex h-2 w-2 ml-1">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-accent"></span>
-                      </span>
-                    )}
+                    <span className="text-sm font-bold text-muted-foreground/70 uppercase tracking-widest">Thinking</span>
+                    <span className="px-2 py-0.5 rounded-full bg-primary/5 text-muted-foreground text-[10px] font-medium font-mono">
+                      {getDuration()}
+                    </span>
                   </div>
 
                   {/* Thinking steps with top/bottom fade mask */}
@@ -447,8 +439,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                         messages={messages}
                         isStreaming={isStreaming && !error}
                         isComplete={isComplete}
-                        hasError={hasTimedOut}
-                        errorMessage={error}
                       />
                     </div>
                   </div>
@@ -463,7 +453,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             <div className="flex-1 flex flex-col min-h-0 bg-background relative">
               {/* Scrollable Answer Content */}
               <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-                {finalAnswer && (
+                {finalAnswer ? (
                   <div className="mx-auto max-w-[1200px] px-6 py-8 animate-fade-up pb-24">
                     <FinalAnswer
                       answer={finalAnswer.answer}
@@ -490,7 +480,27 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       }}
                     />
                   </div>
-                )}
+                ) : (error || hasTimedOut) ? (
+                  <div className="mx-auto max-w-[1200px] px-6 py-16 animate-fade-up">
+                    <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 sm:p-12 flex flex-col items-center text-center max-w-xl mx-auto shadow-sm">
+                      <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-6">
+                        <AlertCircle className="h-8 w-8 text-destructive" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-foreground tracking-tight mb-2">
+                        {hasTimedOut ? "Generation Timed Out" : "An Error Occurred"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+                        {error || "The research process took too long and was aborted. Please try phrasing your query differently or try again later."}
+                      </p>
+                      <button
+                        onClick={onNewSearch}
+                        className="mt-8 px-6 py-2.5 bg-background border border-border shadow-sm rounded-full text-sm font-medium hover:bg-secondary hover:text-foreground transition-colors duration-200 text-muted-foreground"
+                      >
+                        Start Next Search
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

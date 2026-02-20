@@ -20,7 +20,9 @@ import {
     Check,
     ChevronDown,
     Database,
-    Menu
+    Menu,
+    Sparkles,
+    Layout
 } from 'lucide-react'
 import {
     Select,
@@ -112,16 +114,13 @@ export default function SettingsPage() {
         router.push('/')
     }, [router])
 
-    const handleSelectThread = useCallback((threadId: string) => {
-        // Navigate to home with thread selected.
-        // Since we store state in localStorage and URL isn't fully query-param based for thread yet?
-        // Wait, Home page uses `currentThreadId` state.
-        // Ideally we should support `/?threadId=xyz`.
-        // But for now, just going to home might be enough if we can't deep direct.
-        // Actually, let's just push to home. The user can select from sidebar there too.
-        // NOTE: If we want to open a specific thread, we need URL support in Home.
-        // Assuming we don't have that easily right now (Home uses internal state + history).
-        // Let's just go home for now.
+    const handleSelectThread = useCallback((threadId: string, query?: string) => {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('pending_thread_id', threadId)
+            if (query) {
+                localStorage.setItem('pending_thread_query', query)
+            }
+        }
         router.push('/')
     }, [router])
 
@@ -239,8 +238,9 @@ export default function SettingsPage() {
                                 <div className="flex flex-col gap-3">
                                     <ModelOption
                                         value="auto"
-                                        title="Smart"
+                                        title="Smart (Best)"
                                         description="Automatically selects the best model for your query."
+                                        icon={<Sparkles size={16} />}
                                         active={chatModel === 'auto'}
                                         onClick={() => handleModelChange('auto')}
                                     />
@@ -248,6 +248,7 @@ export default function SettingsPage() {
                                         value="canvas"
                                         title="Canvas"
                                         description="Comprehensive report on Canvas, with multi-step reasoning and deep research."
+                                        icon={<Layout size={16} />}
                                         active={chatModel === 'canvas'}
                                         onClick={() => handleModelChange('canvas')}
                                     />
@@ -255,6 +256,7 @@ export default function SettingsPage() {
                                         value="light"
                                         title="Light"
                                         description="Quick, concise answers for simple questions and casual chat."
+                                        icon={<MessageSquare size={16} />}
                                         active={chatModel === 'light'}
                                         onClick={() => handleModelChange('light')}
                                     />
@@ -441,12 +443,14 @@ function ModelOption({
     value,
     title,
     description,
+    icon,
     active,
     onClick
 }: {
     value: string
     title: string
     description: string
+    icon: React.ReactNode
     active: boolean
     onClick: () => void
 }) {
@@ -460,16 +464,24 @@ function ModelOption({
                     : "bg-[var(--card)] border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/40 hover:bg-[var(--secondary)]/30"
             )}
         >
-            <div className="space-y-1 pr-4">
-                <span className={cn(
-                    "block text-sm font-medium transition-colors duration-300",
-                    active ? "text-[var(--foreground)]" : "text-[var(--foreground)]"
+            <div className="flex items-start gap-3 pr-4">
+                <div className={cn(
+                    "mt-0.5 transition-colors duration-300",
+                    active ? "text-[var(--accent)]" : "text-[var(--muted-foreground)]"
                 )}>
-                    {title}
-                </span>
-                <span className="block text-xs text-[var(--muted-foreground)] leading-relaxed">
-                    {description}
-                </span>
+                    {icon}
+                </div>
+                <div className="space-y-1">
+                    <span className={cn(
+                        "block text-sm font-medium transition-colors duration-300",
+                        active ? "text-[var(--foreground)]" : "text-[var(--foreground)]"
+                    )}>
+                        {title}
+                    </span>
+                    <span className="block text-xs text-[var(--muted-foreground)] leading-relaxed">
+                        {description}
+                    </span>
+                </div>
             </div>
             <div className={cn(
                 "w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-300 flex-shrink-0",

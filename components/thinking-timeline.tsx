@@ -21,16 +21,12 @@ interface ThinkingTimelineProps {
   messages: SSEMessage[]
   isStreaming: boolean
   isComplete?: boolean
-  hasError?: boolean
-  errorMessage?: string | null
 }
 
 export function ThinkingTimeline({
   messages,
   isStreaming,
   isComplete,
-  hasError,
-  errorMessage,
 }: ThinkingTimelineProps) {
   /* ── Better Auto-Scrolling Logic ── */
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -111,21 +107,6 @@ export function ThinkingTimeline({
 
         {/* Loading Block Animation - pushes latest step up into view */}
         {isStreaming && <ThinkingBlockLoader />}
-
-        {/* Error state */}
-        {(hasError || errorMessage) && (
-          <div className="flex items-start gap-3 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 mt-4 animate-fade-up">
-            <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-red-500 mb-1">
-                {errorMessage ? 'System Error' : 'Request Timeout'}
-              </h3>
-              <div className="text-xs text-red-400/90 leading-relaxed font-mono whitespace-pre-wrap break-words">
-                {errorMessage || 'The backend failed to respond within 100 seconds. Please try again.'}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

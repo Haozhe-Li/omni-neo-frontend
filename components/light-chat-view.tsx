@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, ArrowUp, Copy, ThumbsUp, ThumbsDown, Share, Menu } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -18,6 +18,7 @@ interface LightChatViewProps {
 interface Message {
     role: 'user' | 'assistant'
     content: string
+    use_search?: boolean
 }
 
 export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: LightChatViewProps) {
@@ -156,10 +157,11 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 }
 
                 const answer = data.answer || (typeof data === 'string' ? data : "No answer returned.")
+                const use_search = !!data.use_search
 
                 const newMessages: Message[] = [
                     { role: 'user', content: query },
-                    { role: 'assistant', content: answer }
+                    { role: 'assistant', content: answer, use_search }
                 ]
 
                 setMessages(newMessages)
@@ -239,11 +241,12 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             }
 
             const answer = data.answer || (typeof data === 'string' ? data : "No answer returned.")
+            const use_search = !!data.use_search
 
             setMessages(prev => {
                 const copy = [...prev]
                 // Replace loading
-                copy[copy.length - 1] = { role: 'assistant', content: answer }
+                copy[copy.length - 1] = { role: 'assistant', content: answer, use_search }
 
                 // Save
                 if (threadId) {
@@ -325,14 +328,26 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                         `}
                             >
                                 {msg.role === 'assistant' && msg.content === '...' ? (
-                                    <div className="flex gap-1 h-6 items-center">
-                                        <div className="w-1.5 h-1.5 bg-[var(--muted-foreground)] rounded-full animate-bounce [animation-delay:-0.3s]" />
-                                        <div className="w-1.5 h-1.5 bg-[var(--muted-foreground)] rounded-full animate-bounce [animation-delay:-0.15s]" />
-                                        <div className="w-1.5 h-1.5 bg-[var(--muted-foreground)] rounded-full animate-bounce" />
+                                    <div className="flex flex-col gap-3 w-full py-1 min-w-[240px] sm:min-w-[320px]">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)] mb-1">
+                                            <div className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--muted-foreground)] border-t-transparent animate-spin opacity-70" />
+                                            <span className="opacity-80">Thinking Hard...</span>
+                                        </div>
+                                        <div className="space-y-3 w-full">
+                                            <div className="h-3 w-full bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" />
+                                            <div className="h-3 w-[85%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                                            <div className="h-3 w-[60%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                                        </div>
                                     </div>
                                 ) : (
-                                    <>
-                                        <div className={`prose prose-sm dark:prose-invert max-w-none ${msg.role === 'user' ? '' : 'leading-7'}`}>
+                                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
+                                        {msg.role === 'assistant' && msg.use_search && (
+                                            <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)] bg-[var(--secondary)]/50 w-fit px-2.5 py-1 rounded-md mb-2 border border-[var(--border-subtle)]/50">
+                                                <Globe size={12} className="opacity-70" />
+                                                <span>Searched the web</span>
+                                            </div>
+                                        )}
+                                        <div className={`dark:prose-invert max-w-none ${msg.role === 'user' ? 'prose prose-sm' : 'prose prose-p:text-[16px] prose-li:text-[16px] md:prose-p:text-[15px] md:prose-li:text-[15px] prose-p:leading-[1.75] prose-li:leading-[1.75]'}`}>
                                             <ReactMarkdown
                                                 remarkPlugins={[remarkGfm]}
                                                 rehypePlugins={[rehypeHighlight]}
@@ -372,7 +387,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                                                 </button>
                                             </div>
                                         )}
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         </div>

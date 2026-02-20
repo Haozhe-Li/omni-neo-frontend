@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X } from 'lucide-react'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
@@ -41,6 +41,7 @@ export function AppSidebar({
     const router = useRouter()
     const pathname = usePathname()
     const [history, setHistory] = useState<StoredChat[]>([])
+    const [searchQuery, setSearchQuery] = useState('')
     // Removed internal state for isOpen/isMobile as they are now controlled
 
     const loadHistory = useCallback(() => {
@@ -110,6 +111,10 @@ export function AppSidebar({
     // On desktop, it follows the collapsed/expanded state.
     const isExpanded = isMobile ? true : isOpen
 
+    const filteredHistory = history.filter(chat =>
+        chat.query.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+
     const SidebarContent = (
         <>
             {/* Header / Toggle */}
@@ -164,7 +169,7 @@ export function AppSidebar({
             </div>
 
             {/* Main Action Button (New Chat) */}
-            <div className="px-3 pb-2">
+            <div className="px-3 pb-2 space-y-2">
                 <button
                     onClick={() => {
                         if (onNewChat) onNewChat()
@@ -184,13 +189,35 @@ export function AppSidebar({
                     </div>
                     {isExpanded && <span className="text-sm font-medium">New Thread</span>}
                 </button>
+
+                {/* Search Input */}
+                {isExpanded && (
+                    <div className="relative group mt-2">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] group-focus-within:text-[var(--foreground)] transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Search history..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-[var(--background)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-8 py-2 md:py-1.5 text-[16px] md:text-sm outline-none focus:border-[var(--muted-foreground)] transition-colors text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-md transition-colors"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* List Content (History) */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
                 {isExpanded ? (
                     <>
-                        {history.map((chat) => (
+                        {filteredHistory.map((chat) => (
                             <button
                                 key={chat.thread_id}
                                 onClick={() => {
@@ -238,9 +265,9 @@ export function AppSidebar({
                                 </div>
                             </button>
                         ))}
-                        {history.length === 0 && (
+                        {filteredHistory.length === 0 && (
                             <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
-                                No history yet
+                                {searchQuery ? 'No results found' : 'No history yet'}
                             </div>
                         )}
                     </>
