@@ -11,13 +11,14 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-
 interface TextSelectionMenuProps {
     containerRef: React.RefObject<HTMLElement | null>
     sources?: Source[]
+    showCheckSource?: boolean
+    onFollowUp?: (text: string) => void
 }
 
-export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionMenuProps) {
+export function TextSelectionMenu({ containerRef, sources = [], showCheckSource = true, onFollowUp }: TextSelectionMenuProps) {
     // We use ref-based positioning for performance (avoiding re-renders on scroll)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -161,7 +162,11 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
     }
 
     const handleFollowUp = () => {
-        toast.info('Follow up feature is coming soon!')
+        if (onFollowUp) {
+            onFollowUp(selectedText)
+        } else {
+            toast.info('Ask Omni in Canvas Mode is coming soon!')
+        }
         setIsVisible(false)
         window.getSelection()?.removeAllRanges()
     }
@@ -178,16 +183,20 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
                 opacity: 0 // Start invisible to prevent flash
             }}
         >
-            <MenuButton
-                onClick={handleCheckSource}
-                icon={<BookOpen className="w-3.5 h-3.5" />}
-                label="Check source"
-            />
-            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
+            {showCheckSource && (
+                <>
+                    <MenuButton
+                        onClick={handleCheckSource}
+                        icon={<BookOpen className="w-3.5 h-3.5" />}
+                        label="Check source"
+                    />
+                    <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
+                </>
+            )}
             <MenuButton
                 onClick={handleFollowUp}
                 icon={<MessageSquarePlus className="w-3.5 h-3.5" />}
-                label="Follow up"
+                label="Ask Omni"
             />
             <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
             <MenuButton
@@ -196,10 +205,6 @@ export function TextSelectionMenu({ containerRef, sources = [] }: TextSelectionM
                 label="Copy"
             />
 
-            {/* Arrow pointing down */}
-            <div
-                className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-t-[8px] border-t-white dark:border-t-zinc-900 drop-shadow-sm"
-            />
         </div>,
         document.body
     ) : null
