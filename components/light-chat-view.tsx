@@ -286,20 +286,25 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     return (
         <div className="flex flex-col h-full bg-[var(--background)] relative">
             {/* Header */}
-            <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center px-4 md:px-4 z-30 sticky top-0">
-                {isMobile && (
-                    <button
-                        onClick={onToggleSidebar}
-                        className="p-2 -ml-2 mr-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
-                    >
-                        <Menu size={20} />
-                    </button>
-                )}
-
-                <div className="flex-1 text-center font-medium text-[var(--foreground)] truncate">
-                    {title || query}
+            <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-between px-4 z-30 sticky top-0 relative">
+                <div className="flex items-center w-10 flex-shrink-0">
+                    {isMobile && (
+                        <button
+                            onClick={onToggleSidebar}
+                            className="p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                        >
+                            <Menu size={20} />
+                        </button>
+                    )}
                 </div>
-                <div className="w-10" /> {/* Spacer */}
+
+                <div className="absolute left-1/2 -translate-x-1/2 max-w-[50%] sm:max-w-[60%] text-center pointer-events-none">
+                    <span className="block text-sm font-medium tracking-tight text-foreground/90 truncate pointer-events-auto">
+                        {title || query}
+                    </span>
+                </div>
+
+                <div className="w-10 flex-shrink-0" /> {/* Spacer */}
             </header>
 
             {/* Messages */}

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, memo, useRef } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, BookOpen, Copy, Check, Download, FileText, File } from 'lucide-react'
+import { useState, memo, useRef, useEffect } from 'react'
+import { ChevronDown, ChevronRight, ExternalLink, BookOpen, Copy, Check, Download, FileText, File, Edit2, CheckCircle2, MoreHorizontal, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -23,6 +23,8 @@ interface FinalAnswerProps {
   answer: string
   sources: Source[]
   title?: string
+  isEdited?: boolean
+  onAnswerEdit?: (newAnswer: string) => void
 }
 
 /* ── Stable plugin arrays at module scope — never recreated ── */
@@ -139,14 +141,25 @@ function normalizeFilename(title: string): string {
     .slice(0, 50) || 'answer'
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer, sources, title }: FinalAnswerProps) {
+export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, title, isEdited = false, onAnswerEdit }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedAnswer, setEditedAnswer] = useState(initialAnswer)
+  const [hasBeenEdited, setHasBeenEdited] = useState(isEdited)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setEditedAnswer(initialAnswer)
+  }, [initialAnswer])
+
+  useEffect(() => {
+    setHasBeenEdited(isEdited)
+  }, [isEdited])
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(answer)
+      await navigator.clipboard.writeText(editedAnswer)
       setIsCopied(true)
       toast.success('Copied to clipboard')
       setTimeout(() => setIsCopied(false), 2000)
@@ -157,7 +170,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer, sources, title }:
 
   const handleDownload = (format: 'markdown' | 'pdf' | 'word' | 'gdoc') => {
     if (format === 'markdown') {
-      const blob = new Blob([answer], { type: 'text/markdown' })
+      const blob = new Blob([editedAnswer], { type: 'text/markdown' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -177,62 +190,161 @@ export const FinalAnswer = memo(function FinalAnswer({ answer, sources, title }:
       <TextSelectionMenu containerRef={containerRef} sources={sources} />
 
       {/* Action Buttons (Top Right) */}
-      <div className="absolute top-3 right-3 flex items-center gap-1 z-10 bg-card/50 backdrop-blur-sm p-1 rounded-lg border border-border/50 shadow-sm">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-          onClick={handleCopy}
-          title="Copy all text"
-        >
-          {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-          <span className="sr-only">Copy</span>
-        </Button>
+      <div className="absolute top-3 right-3 flex items-center gap-0.5 sm:gap-1 z-10 bg-card/80 sm:bg-card/50 backdrop-blur-md p-1 rounded-lg border border-border/50 shadow-sm">
+        {hasBeenEdited && !isEditing && (
+          <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 text-xs text-muted-foreground bg-muted/30 rounded-md py-1 mr-0.5 sm:mr-1" title="This document has been edited by you">
+            <History className="h-3 w-3" />
+            <span className="hidden sm:inline">Edited</span>
+          </div>
+        )}
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        {/* DESKTOP/TABLET BUTTONS - Hidden on Mobile */}
+        <div className="hidden sm:flex items-center gap-1">
+          {isEditing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-3 text-accent hover:text-accent hover:bg-accent/10"
+              onClick={() => {
+                setIsEditing(false)
+                if (editedAnswer !== initialAnswer) {
+                  setHasBeenEdited(true)
+                  if (onAnswerEdit) onAnswerEdit(editedAnswer)
+                }
+                toast.success('Changes saved')
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              <span>Done</span>
+            </Button>
+          ) : (
             <Button
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              title="Download"
+              onClick={() => setIsEditing(true)}
+              title="Edit document"
             >
-              <Download className="h-4 w-4" />
-              <span className="sr-only">Download</span>
+              <Edit2 className="h-4 w-4" />
+              <span className="sr-only">Edit</span>
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer">
-              <FileText className="mr-2 h-4 w-4" />
-              <span>Markdown (.md)</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              <File className="mr-2 h-4 w-4" />
-              <span>PDF Document</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              <File className="mr-2 h-4 w-4" />
-              <span>Word Document</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              <File className="mr-2 h-4 w-4" />
-              <span>Google Doc</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          )}
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            onClick={handleCopy}
+            title="Copy all text"
+          >
+            {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            <span className="sr-only">Copy</span>
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                title="Download"
+              >
+                <Download className="h-4 w-4" />
+                <span className="sr-only">Download</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer">
+                <FileText className="mr-2 h-4 w-4" />
+                <span>Markdown (.md)</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled>
+                <File className="mr-2 h-4 w-4" />
+                <span>PDF Document</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <File className="mr-2 h-4 w-4" />
+                <span>Word Document</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <File className="mr-2 h-4 w-4" />
+                <span>Google Doc</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* MOBILE BUTTONS - Hidden on Desktop */}
+        <div className="flex sm:hidden items-center gap-0.5">
+          {isEditing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-accent hover:text-accent hover:bg-accent/10"
+              onClick={() => {
+                setIsEditing(false)
+                if (editedAnswer !== initialAnswer) {
+                  setHasBeenEdited(true)
+                  if (onAnswerEdit) onAnswerEdit(editedAnswer)
+                }
+                toast.success('Changes saved')
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              <span>Done</span>
+            </Button>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setIsEditing(true)} className="cursor-pointer">
+                  <Edit2 className="mr-2 h-4 w-4" />
+                  <span>Edit</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCopy} className="cursor-pointer">
+                  {isCopied ? <Check className="mr-2 h-4 w-4 text-green-500" /> : <Copy className="mr-2 h-4 w-4" />}
+                  <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer">
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Download (.md)</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
       {/* Answer body */}
-      <div className="px-8 py-8 sm:px-10 sm:py-10">
-        <div className="max-w-none markdown-body">
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={rehypePlugins}
-            components={markdownComponents}
-          >
-            {answer}
-          </ReactMarkdown>
-        </div>
+      <div className="px-5 pt-16 pb-8 sm:px-10 sm:py-10">
+        {isEditing ? (
+          <textarea
+            value={editedAnswer}
+            onChange={(e) => setEditedAnswer(e.target.value)}
+            className="w-full min-h-[500px] p-4 bg-background border border-border rounded-lg outline-none focus:ring-1 focus:ring-accent font-mono text-[13px] leading-relaxed resize-y custom-scrollbar"
+            placeholder="Write your markdown here..."
+            autoFocus
+          />
+        ) : (
+          <div className="max-w-none markdown-body">
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
+              components={markdownComponents}
+            >
+              {editedAnswer}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
 
       {/* Sources */}

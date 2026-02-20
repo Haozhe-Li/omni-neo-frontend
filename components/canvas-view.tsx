@@ -23,6 +23,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const [finalAnswer, setFinalAnswer] = useState<{
     answer: string
     sources: Array<{ title: string; url: string }>
+    isEdited?: boolean
   } | null>(null)
   const [todos, setTodos] = useState<TodoItem[]>([])
   const [isComplete, setIsComplete] = useState(false)
@@ -121,11 +122,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       }
     } else if (parsed.type === 'tool' && parsed.tool === 'write_todos') {
       const raw = data.raw as { args?: { todos?: TodoItem[] } } | undefined
-      const todosData = raw?.args?.todos || []
-      setTodos(isCompleteRef.current
-        ? todosData.map((t) => ({ ...t, status: 'completed' as const }))
-        : todosData
-      )
+      if (raw?.args && Array.isArray(raw.args.todos)) {
+        setTodos(isCompleteRef.current
+          ? raw.args.todos.map((t) => ({ ...t, status: 'completed' as const }))
+          : raw.args.todos
+        )
+      }
     } else if (parsed.type === 'reasoning') {
       setMessages((prev) => [...prev, parsed])
     } else if (parsed.type === 'tool' && KNOWN_TOOLS.has(parsed.tool || '')) {
@@ -314,22 +316,25 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
       {/* ── Global Header (Unchanged) ── */}
       <header className="flex-shrink-0 border-b border-border bg-background/80 backdrop-blur-xl z-30">
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-4 px-4 md:px-6">
-          {isMobile && (
-            <button
-              onClick={onToggleSidebar}
-              className="p-2 -ml-2 mr-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
-            >
-              <Menu size={20} />
-            </button>
-          )}
+        <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-4 md:px-6 relative">
+          <div className="flex items-center w-24 flex-shrink-0">
+            {isMobile && (
+              <button
+                onClick={onToggleSidebar}
+                className="p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+              >
+                <Menu size={20} />
+              </button>
+            )}
+          </div>
 
-          <div className="flex-1 text-center">
-            <span className="text-sm font-medium tracking-tight text-foreground/90 line-clamp-1 text-pretty">
+          <div className="absolute left-1/2 -translate-x-1/2 max-w-[50%] sm:max-w-[60%] text-center pointer-events-none">
+            <span className="block text-sm font-medium tracking-tight text-foreground/90 truncate pointer-events-auto">
               {title}
             </span>
           </div>
-          <div className="w-20 sm:w-24 flex-shrink-0 flex justify-end">
+
+          <div className="w-24 flex-shrink-0 flex justify-end">
             {!isComplete && (
               <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
                 <Clock className="h-3.5 w-3.5" />
@@ -464,6 +469,25 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       answer={finalAnswer.answer}
                       sources={finalAnswer.sources}
                       title={title}
+                      isEdited={finalAnswer.isEdited}
+                      onAnswerEdit={(newAnswer) => {
+                        setFinalAnswer(prev => prev ? { ...prev, answer: newAnswer, isEdited: true } : prev)
+                        if (typeof window !== 'undefined' && threadId) {
+                          try {
+                            const stored = localStorage.getItem(threadId)
+                            if (stored) {
+                              const chatData = JSON.parse(stored)
+                              if (chatData.final_answer) {
+                                chatData.final_answer.answer = newAnswer
+                                chatData.final_answer.isEdited = true
+                                localStorage.setItem(threadId, JSON.stringify(chatData))
+                              }
+                            }
+                          } catch (e) {
+                            console.error('Failed to update storage with edited answer', e)
+                          }
+                        }
+                      }}
                     />
                   </div>
                 )}
