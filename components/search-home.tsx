@@ -353,7 +353,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
           {/* Suggested queries */}
           <div
-            className={`mt-8 flex flex-wrap justify-center gap-2 max-w-[680px] animate-fade-up ${backendStatus !== 'ready' ? 'opacity-50 pointer-events-none' : ''}`}
+            className={`mt-8 hidden md:flex flex-wrap justify-center gap-2 max-w-[680px] animate-fade-up ${backendStatus !== 'ready' ? 'opacity-50 pointer-events-none' : ''}`}
             style={{ animationDelay: '300ms' }}
           >
             {[
