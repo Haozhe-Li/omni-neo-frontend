@@ -44,11 +44,11 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* Flash Animation - Light Mode (Stronger) */
-  --flash-start: inset 0 0 60px 15px rgba(32, 178, 170, 0.2);
-  --flash-end: inset 0 0 250px 80px rgba(32, 178, 170, 0.6);
-  --flash-opacity-start: 0.5;
-  --flash-opacity-end: 1;
+  /* Flash Animation - Light Mode */
+  --flash-start: inset 0 0 30px 5px rgba(32, 178, 170, 0.05);
+  --flash-end: inset 0 0 100px 30px rgba(32, 178, 170, 0.15);
+  --flash-opacity-start: 0.2;
+  --flash-opacity-end: 0.6;
 }
 
 .dark {
