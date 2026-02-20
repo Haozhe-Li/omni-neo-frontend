@@ -24,7 +24,9 @@ import {
     BrainCircuit,
     Layout,
     User,
-    Waypoints
+    Waypoints,
+    Trash2,
+    Plus
 } from 'lucide-react'
 import {
     Select,
@@ -46,6 +48,10 @@ export default function SettingsPage() {
     const { theme, setTheme } = useTheme()
 
     const [chatModel, setChatModel] = useState<ModelType>('auto')
+    const [responseLanguage, setResponseLanguage] = useState<string>('auto')
+    const [enableMemories, setEnableMemories] = useState<boolean>(false)
+    const [memories, setMemories] = useState<string[]>([])
+    const [newMemory, setNewMemory] = useState<string>('')
     const [mounted, setMounted] = useState(false)
     const [activeSection, setActiveSection] = useState('Appearance')
 
@@ -74,6 +80,21 @@ export default function SettingsPage() {
             const savedModel = localStorage.getItem('omni_model_preference')
             if (savedModel === 'canvas' || savedModel === 'light' || savedModel === 'auto') {
                 setChatModel(savedModel)
+            }
+            const savedLang = localStorage.getItem('omni_response_language')
+            if (savedLang) setResponseLanguage(savedLang)
+
+            const savedEnableMemories = localStorage.getItem('omni_enable_memories')
+            if (savedEnableMemories === 'true') setEnableMemories(true)
+            else if (savedEnableMemories === 'false') setEnableMemories(false)
+
+            const savedMemories = localStorage.getItem('omni_memories')
+            if (savedMemories) {
+                try {
+                    setMemories(JSON.parse(savedMemories))
+                } catch (e) {
+                    setMemories([])
+                }
             }
         }
     }, [])
@@ -106,6 +127,31 @@ export default function SettingsPage() {
     const handleModelChange = (newModel: ModelType) => {
         setChatModel(newModel)
         localStorage.setItem('omni_model_preference', newModel)
+    }
+
+    const handleResponseLanguageChange = (val: string) => {
+        setResponseLanguage(val)
+        localStorage.setItem('omni_response_language', val)
+    }
+
+    const toggleMemories = () => {
+        const newValue = !enableMemories
+        setEnableMemories(newValue)
+        localStorage.setItem('omni_enable_memories', newValue.toString())
+    }
+
+    const addMemory = () => {
+        if (!newMemory.trim() || memories.length >= 5) return
+        const updated = [...memories, newMemory.trim()]
+        setMemories(updated)
+        setNewMemory('')
+        localStorage.setItem('omni_memories', JSON.stringify(updated))
+    }
+
+    const removeMemory = (index: number) => {
+        const updated = memories.filter((_, i) => i !== index)
+        setMemories(updated)
+        localStorage.setItem('omni_memories', JSON.stringify(updated))
     }
 
     const handleThemeChange = (newTheme: ThemeType) => {
@@ -310,20 +356,20 @@ export default function SettingsPage() {
                                     <div className="space-y-0.5">
                                         <div className="flex items-center gap-2">
                                             <Label text="Response Language" />
-                                            <span className="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] font-medium tracking-wide uppercase">
-                                                Coming Soon
-                                            </span>
                                         </div>
                                         <p className="text-xs text-[var(--muted-foreground)]">The language the AI uses to respond.</p>
                                     </div>
-                                    <Select defaultValue="auto">
+                                    <Select value={responseLanguage} onValueChange={handleResponseLanguageChange}>
                                         <SelectTrigger className="w-full sm:w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
                                             <SelectValue placeholder="Language" />
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="auto">Auto Detect</SelectItem>
-                                            <SelectItem value="en" disabled>English (Coming Soon)</SelectItem>
-                                            <SelectItem value="zh" disabled>Chinese (Coming Soon)</SelectItem>
+                                            <SelectItem value="en">English</SelectItem>
+                                            <SelectItem value="zh-CN">中文（简体）</SelectItem>
+                                            <SelectItem value="zh-TW">中文（繁體）</SelectItem>
+                                            <SelectItem value="ja">日本語</SelectItem>
+                                            <SelectItem value="ko">한국어</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -336,29 +382,75 @@ export default function SettingsPage() {
                                 <div className="space-y-0.5">
                                     <div className="flex items-center gap-2">
                                         <Label text="Memory" />
-                                        <span className="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] font-medium tracking-wide uppercase">
-                                            Coming Soon
-                                        </span>
                                     </div>
                                     <p className="text-xs text-[var(--muted-foreground)]">Omni will remember details from your conversations to provide more personalized answers.</p>
                                 </div>
 
-                                <div className="flex items-center justify-between p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] opacity-50 cursor-not-allowed">
-                                    <div className="space-y-0.5">
+                                <div
+                                    className="flex items-center justify-between p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] cursor-pointer hover:bg-[var(--secondary)]/30 transition-colors"
+                                    onClick={toggleMemories}
+                                >
+                                    <div className="space-y-0.5 pointer-events-none">
                                         <span className="block text-sm font-medium text-[var(--foreground)]">Enable Memories</span>
                                         <span className="block text-xs text-[var(--muted-foreground)]">Allow Omni to learn from your conversations.</span>
                                     </div>
-                                    <div className="w-10 h-6 rounded-full bg-[var(--secondary)]/50 relative border border-[var(--border-subtle)]">
-                                        <div className="absolute left-1 top-1 w-3.5 h-3.5 rounded-full bg-[var(--muted-foreground)]/30" />
+                                    <div className={cn(
+                                        "w-10 h-6 rounded-full relative border border-[var(--border-subtle)] transition-colors duration-300",
+                                        enableMemories ? "bg-[var(--accent)]" : "bg-[var(--secondary)]/50"
+                                    )}>
+                                        <div className={cn(
+                                            "absolute top-1 w-3.5 h-3.5 rounded-full bg-white transition-all duration-300 shadow-sm",
+                                            enableMemories ? "left-[20px]" : "left-1 bg-[var(--muted-foreground)]/30"
+                                        )} />
                                     </div>
                                 </div>
 
-                                <div className="p-4 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--secondary)]/10 flex flex-col items-center justify-center space-y-2 h-28 opacity-60 pointer-events-none">
-                                    <User size={20} className="text-[var(--muted-foreground)]" />
-                                    <span className="text-xs text-[var(--muted-foreground)] text-center">
-                                        Memory features are currently in development.<br />Soon you'll be able to manage what Omni knows about you.
-                                    </span>
-                                </div>
+                                {enableMemories && (
+                                    <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/10 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={newMemory}
+                                                onChange={(e) => setNewMemory(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') addMemory()
+                                                }}
+                                                placeholder="Add a new memory about you (max 5)"
+                                                disabled={memories.length >= 5}
+                                                className="flex-1 bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-50"
+                                            />
+                                            <button
+                                                onClick={addMemory}
+                                                disabled={!newMemory.trim() || memories.length >= 5}
+                                                className="px-3 py-2 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                                            >
+                                                <Plus size={16} />
+                                            </button>
+                                        </div>
+                                        {memories.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {memories.map((mem, i) => (
+                                                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-[var(--card)] border border-[var(--border-subtle)] shadow-sm">
+                                                        <span className="text-sm text-[var(--foreground)] break-words line-clamp-2 pr-2">{mem}</span>
+                                                        <button
+                                                            onClick={() => removeMemory(i)}
+                                                            className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors p-1 flex-shrink-0"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-4 text-xs text-[var(--muted-foreground)] opacity-60">
+                                                No memories added yet.
+                                            </div>
+                                        )}
+                                        <div className="text-right text-[10px] text-[var(--muted-foreground)] opacity-60">
+                                            {memories.length} / 5 memories
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </section>

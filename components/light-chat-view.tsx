@@ -140,10 +140,35 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
                 const endpoint = baseUrl.endsWith('/') ? `${baseUrl}light_chat` : `${baseUrl}/light_chat`
 
+                const personalization: any = {}
+                if (typeof window !== 'undefined') {
+                    const savedLang = localStorage.getItem('omni_response_language')
+                    if (savedLang && savedLang !== 'auto') {
+                        personalization.response_language = savedLang
+                    }
+                    const savedEnableMemories = localStorage.getItem('omni_enable_memories')
+                    if (savedEnableMemories === 'true') {
+                        const savedMemories = localStorage.getItem('omni_memories')
+                        if (savedMemories) {
+                            try {
+                                const parsed = JSON.parse(savedMemories)
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    personalization.memories = parsed
+                                }
+                            } catch (e) { }
+                        }
+                    }
+                }
+
+                const payload: any = { query, thread_id: threadId }
+                if (Object.keys(personalization).length > 0) {
+                    payload.personalization = personalization
+                }
+
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query, thread_id: threadId })
+                    body: JSON.stringify(payload)
                 })
 
                 if (!res.ok) throw new Error("Failed to fetch")
@@ -231,14 +256,39 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
             const endpoint = baseUrl.endsWith('/') ? `${baseUrl}light_chat` : `${baseUrl}/light_chat`
 
+            const personalization: any = {}
+            if (typeof window !== 'undefined') {
+                const savedLang = localStorage.getItem('omni_response_language')
+                if (savedLang && savedLang !== 'auto') {
+                    personalization.response_language = savedLang
+                }
+                const savedEnableMemories = localStorage.getItem('omni_enable_memories')
+                if (savedEnableMemories === 'true') {
+                    const savedMemories = localStorage.getItem('omni_memories')
+                    if (savedMemories) {
+                        try {
+                            const parsed = JSON.parse(savedMemories)
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                personalization.memories = parsed
+                            }
+                        } catch (e) { }
+                    }
+                }
+            }
+
+            const payload: any = {
+                query: input,
+                thread_id: threadId,
+                ...(currentFollowUpText ? { follow_up_content: currentFollowUpText } : {})
+            }
+            if (Object.keys(personalization).length > 0) {
+                payload.personalization = personalization
+            }
+
             const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    query: input,
-                    thread_id: threadId,
-                    ...(currentFollowUpText ? { follow_up_content: currentFollowUpText } : {})
-                })
+                body: JSON.stringify(payload)
             })
 
             if (!res.ok) throw new Error("Failed to fetch")

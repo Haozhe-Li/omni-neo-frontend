@@ -177,10 +177,35 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             ? '/api/mock-chat'
             : process.env.NEXT_PUBLIC_BACKEND_URL ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat` : '/api/chat'
 
+        const personalization: any = {}
+        if (typeof window !== 'undefined') {
+          const savedLang = localStorage.getItem('omni_response_language')
+          if (savedLang && savedLang !== 'auto') {
+            personalization.response_language = savedLang
+          }
+          const savedEnableMemories = localStorage.getItem('omni_enable_memories')
+          if (savedEnableMemories === 'true') {
+            const savedMemories = localStorage.getItem('omni_memories')
+            if (savedMemories) {
+              try {
+                const parsed = JSON.parse(savedMemories)
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  personalization.memories = parsed
+                }
+              } catch (e) { }
+            }
+          }
+        }
+
+        const payload: any = { query, thread_id: threadId }
+        if (Object.keys(personalization).length > 0) {
+          payload.personalization = personalization
+        }
+
         const response = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, thread_id: threadId }),
+          body: JSON.stringify(payload),
         })
 
         if (!response.ok) throw new Error('Failed to fetch')
