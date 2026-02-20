@@ -9,7 +9,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import {
     Globe,
     Palette,
-    Bot,
+    SlidersHorizontal,
     MessageSquare,
     Languages,
     Info,
@@ -21,8 +21,10 @@ import {
     ChevronDown,
     Database,
     Menu,
-    Sparkles,
-    Layout
+    BrainCircuit,
+    Layout,
+    User,
+    Waypoints
 } from 'lucide-react'
 import {
     Select,
@@ -37,7 +39,7 @@ type ModelType = 'auto' | 'canvas' | 'light'
 type ThemeType = 'system' | 'dark' | 'light'
 
 const APP_VERSION = '0.2.0'
-const APP_NAME = 'Omni Knows Neo'
+const APP_NAME = 'Omni Knows'
 
 export default function SettingsPage() {
     const router = useRouter()
@@ -79,7 +81,7 @@ export default function SettingsPage() {
     // Scroll spy effect to update activeSection based on scroll position
     useEffect(() => {
         const handleScroll = () => {
-            const sections = ['Appearance', 'AI', 'Data Controls', 'About']
+            const sections = ['Appearance', 'Preference', 'Personalization', 'Data Controls', 'About']
             for (const section of sections) {
                 const el = document.getElementById(section)
                 if (el) {
@@ -159,7 +161,7 @@ export default function SettingsPage() {
                     <span className="font-medium text-sm text-[var(--foreground)] tracking-tight">Settings</span>
                 </header>
 
-                <div className="max-w-3xl mx-auto px-6 py-12 space-y-16 pb-32">
+                <div className="max-w-3xl mx-auto px-6 py-12 space-y-16 pb-32 animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out">
 
                     <div className="hidden md:flex flex-col gap-2">
                         <h1 className="text-2xl font-semibold text-[var(--foreground)]">Settings</h1>
@@ -203,13 +205,18 @@ export default function SettingsPage() {
 
                             {/* Language */}
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div className="space-y-0.5">
-                                        <Label text="Interface Language" />
+                                        <div className="flex items-center gap-2">
+                                            <Label text="Interface Language" />
+                                            <span className="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] font-medium tracking-wide uppercase">
+                                                Coming Soon
+                                            </span>
+                                        </div>
                                         <p className="text-xs text-[var(--muted-foreground)]">Select your preferred language for the UI.</p>
                                     </div>
                                     <Select defaultValue="en">
-                                        <SelectTrigger className="w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
+                                        <SelectTrigger className="w-full sm:w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
                                             <SelectValue placeholder="Language" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -223,24 +230,24 @@ export default function SettingsPage() {
                         </div>
                     </section>
 
-                    {/* ───────── AI ───────── */}
-                    <section id="AI" className="scroll-mt-6 space-y-6">
-                        <SectionHeader icon={<Bot size={16} />} title="AI" />
+                    {/* ───────── Preference ───────── */}
+                    <section id="Preference" className="scroll-mt-6 space-y-6">
+                        <SectionHeader icon={<SlidersHorizontal size={16} />} title="Preference" />
 
                         <div className="space-y-6">
                             {/* Chat Model */}
                             <div className="space-y-3">
                                 <div className="space-y-0.5">
-                                    <Label text="Chat Model" />
-                                    <p className="text-xs text-[var(--muted-foreground)]">Choose the AI model behavior that suits your needs.</p>
+                                    <Label text="Artificial Intelligence" />
+                                    <p className="text-xs text-[var(--muted-foreground)]">Choose the way AI thinks for your conversation.</p>
                                 </div>
 
                                 <div className="flex flex-col gap-3">
                                     <ModelOption
                                         value="auto"
-                                        title="Smart (Best)"
+                                        title="Smart"
                                         description="Automatically selects the best model for your query."
-                                        icon={<Sparkles size={16} />}
+                                        icon={<Waypoints size={16} />}
                                         active={chatModel === 'auto'}
                                         onClick={() => handleModelChange('auto')}
                                     />
@@ -263,17 +270,54 @@ export default function SettingsPage() {
                                 </div>
                             </div>
 
-                            <div className="h-px bg-[var(--border-subtle)] w-full" />
-
-                            {/* Model Language */}
+                            {/* reasoning effort */}
                             <div className="space-y-3">
-                                <div className="flex items-center justify-between">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div className="space-y-0.5">
-                                        <Label text="Response Language" />
+                                        <div className="flex items-center gap-2">
+                                            <Label text="Reasoning Effort" />
+                                            <span className="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] font-medium tracking-wide uppercase">
+                                                Coming Soon
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-[var(--muted-foreground)]">Control the depth of AI's thinking process.</p>
+                                    </div>
+                                    <Select defaultValue="auto">
+                                        <SelectTrigger className="w-full sm:w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
+                                            <SelectValue placeholder="Reasoning Effort" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="auto">Auto</SelectItem>
+                                            <SelectItem value="low" disabled>Low (Coming Soon)</SelectItem>
+                                            <SelectItem value="medium" disabled>Medium (Coming Soon)</SelectItem>
+                                            <SelectItem value="high" disabled>High (Coming Soon)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                        </div>
+                    </section>
+
+                    {/* ───────── Personalization ───────── */}
+                    <section id="Personalization" className="scroll-mt-6 space-y-6">
+                        <SectionHeader icon={<User size={16} />} title="Personalization" />
+
+                        <div className="space-y-6">
+                            {/* Response Language */}
+                            <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div className="space-y-0.5">
+                                        <div className="flex items-center gap-2">
+                                            <Label text="Response Language" />
+                                            <span className="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] font-medium tracking-wide uppercase">
+                                                Coming Soon
+                                            </span>
+                                        </div>
                                         <p className="text-xs text-[var(--muted-foreground)]">The language the AI uses to respond.</p>
                                     </div>
                                     <Select defaultValue="auto">
-                                        <SelectTrigger className="w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
+                                        <SelectTrigger className="w-full sm:w-[180px] bg-[var(--card)] border-[var(--border-subtle)]">
                                             <SelectValue placeholder="Language" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -282,6 +326,38 @@ export default function SettingsPage() {
                                             <SelectItem value="zh" disabled>Chinese (Coming Soon)</SelectItem>
                                         </SelectContent>
                                     </Select>
+                                </div>
+                            </div>
+
+                            <div className="h-px bg-[var(--border-subtle)] w-full" />
+
+                            {/* Memory */}
+                            <div className="space-y-3">
+                                <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <Label text="Memory" />
+                                        <span className="px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] text-[10px] font-medium tracking-wide uppercase">
+                                            Coming Soon
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Omni will remember details from your conversations to provide more personalized answers.</p>
+                                </div>
+
+                                <div className="flex items-center justify-between p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] opacity-50 cursor-not-allowed">
+                                    <div className="space-y-0.5">
+                                        <span className="block text-sm font-medium text-[var(--foreground)]">Enable Memories</span>
+                                        <span className="block text-xs text-[var(--muted-foreground)]">Allow Omni to learn from your conversations.</span>
+                                    </div>
+                                    <div className="w-10 h-6 rounded-full bg-[var(--secondary)]/50 relative border border-[var(--border-subtle)]">
+                                        <div className="absolute left-1 top-1 w-3.5 h-3.5 rounded-full bg-[var(--muted-foreground)]/30" />
+                                    </div>
+                                </div>
+
+                                <div className="p-4 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--secondary)]/10 flex flex-col items-center justify-center space-y-2 h-28 opacity-60 pointer-events-none">
+                                    <User size={20} className="text-[var(--muted-foreground)]" />
+                                    <span className="text-xs text-[var(--muted-foreground)] text-center">
+                                        Memory features are currently in development.<br />Soon you'll be able to manage what Omni knows about you.
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -294,19 +370,46 @@ export default function SettingsPage() {
                         <div className="space-y-6">
                             <div className="space-y-3">
                                 <Label text="Data Management" />
-                                <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between">
+
+                                <div className="p-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] text-xs text-[var(--muted-foreground)] leading-relaxed space-y-4">
                                     <div className="space-y-1">
-                                        <span className="block text-sm font-medium text-[var(--foreground)]">Delete all chat history</span>
-                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all chat data.</span>
+                                        <p className="text-sm text-[var(--foreground)] font-medium">Your Data Matters</p>
+                                        <p>Omni respects your privacy. We process your data thoughtfully and securely to provide you with the best possible chat experience.</p>
+                                    </div>
+
+                                    <ul className="space-y-2.5 pl-1.5">
+                                        <li className="flex gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
+                                            <p><strong className="text-[var(--foreground)] font-medium">Local & Cloud Storage:</strong> Chat history is stored locally on your device and securely on our cloud servers to ensure seamless continuity across sessions.</p>
+                                        </li>
+                                        <li className="flex gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
+                                            <p><strong className="text-[var(--foreground)] font-medium">Secure & Private:</strong> Data on our servers is heavily encrypted. We do not sell your personal information to any third parties.</p>
+                                        </li>
+                                        <li className="flex gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
+                                            <p><strong className="text-[var(--foreground)] font-medium">Memory & Personalization:</strong> Omni will learn from you and remember details from your conversations to provide more personalized answers. You can manage your memory in the settings. All memory and personalization data will be only stored locally</p>
+                                        </li>
+                                        <li className="flex gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
+                                            <p><strong className="text-[var(--foreground)] font-medium">Auto-Deletion:</strong> To minimize data footprint, any chat history that remains inactive for 3 days will be automatically and permanently deleted from both our servers and your local storage.</p>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between mt-2">
+                                    <div className="space-y-1">
+                                        <span className="block text-sm font-medium text-[var(--foreground)]">Delete all data</span>
+                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all chat history, memory and personalization data.</span>
                                     </div>
                                     <button
                                         onClick={() => {
-                                            if (confirm('Are you sure you want to delete all chat history? This action cannot be undone.')) {
+                                            if (confirm('Are you sure you want to delete all chat history, memory and personalization data? This action cannot be undone.')) {
                                                 localStorage.clear()
                                                 window.location.reload()
                                             }
                                         }}
-                                        className="px-4 py-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                                        className="px-4 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 text-xs font-medium transition-colors"
                                     >
                                         Delete All
                                     </button>
@@ -326,7 +429,7 @@ export default function SettingsPage() {
                                     <div className="w-14 h-14 rounded-2xl bg-[var(--secondary)] flex items-center justify-center shadow-inner overflow-hidden">
                                         <Image
                                             src="/android-chrome-512x512.png"
-                                            alt="Omni Knows Neo Logo"
+                                            alt="Omni Knows Logo"
                                             width={56}
                                             height={56}
                                             className="w-full h-full object-cover"
@@ -342,7 +445,7 @@ export default function SettingsPage() {
                                 </div>
 
                                 <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
-                                    Omni Knows Neo is an advanced AI research assistant designed to help you explore complex topics deeply and efficiently. Built with the next-generation agentic framework.
+                                    Omni Knows is an advanced AI research assistant designed to help you explore complex topics deeply and efficiently. Built with the next-generation agentic framework.
                                 </p>
 
                                 <div className="flex flex-wrap gap-3 pt-2">
@@ -351,12 +454,12 @@ export default function SettingsPage() {
                                         label="Website"
                                     />
                                     <AboutLink
-                                        href="https://github.com/Haozhe-Li"
-                                        label="GitHub"
+                                        href="https://haozhe.li/blog/omniknows-neo"
+                                        label="About Omni"
                                     />
                                     <AboutLink
-                                        href="#"
-                                        label="Privacy Policy"
+                                        href="https://haozhe.li/blog/omniknows-neo-tech"
+                                        label="Tech Behind"
                                     />
                                 </div>
                             </div>

@@ -283,12 +283,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           {/* Brand */}
           <div className="animate-fade-up mb-12 text-center">
             <h1 className="text-[2.5rem] sm:text-5xl font-light tracking-tight text-foreground lowercase">
-              omni knows{' '}
+              omni{' '}
               <span
                 className="font-normal"
                 style={{ color: '#20B2AA' }}
               >
-                neo
+                knows
               </span>
             </h1>
             <p className="mt-3 text-muted-foreground text-sm tracking-wide">

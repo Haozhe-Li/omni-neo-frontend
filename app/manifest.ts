@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
-        name: 'Omni Knows Neo',
+        name: 'Omni Knows',
         short_name: 'Omni',
         description: 'Advanced AI-powered research agent',
         start_url: '/',

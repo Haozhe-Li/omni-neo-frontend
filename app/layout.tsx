@@ -8,25 +8,25 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
-    default: 'Omni Knows Neo - Advanced AI Research Agent',
-    template: '%s | Omni Knows Neo',
+    default: 'Omni Knows - Advanced AI Research Agent',
+    template: '%s | Omni Knows',
   },
   description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
-  keywords: ['AI', 'Research Agent', 'Artificial Intelligence', 'Search Engine', 'Machine Learning', 'Deep Learning', 'Omni Knows Neo'],
+  keywords: ['AI', 'Research Agent', 'Artificial Intelligence', 'Search Engine', 'Machine Learning', 'Deep Learning', 'Omni Knows'],
   authors: [{ name: 'Haozhe Li' }],
   creator: 'Haozhe Li',
   metadataBase: new URL('https://omniknows.xyz'),
   openGraph: {
-    title: 'Omni Knows Neo - Advanced AI Research Agent',
+    title: 'Omni Knows - Advanced AI Research Agent',
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
     url: 'https://omniknows.xyz',
-    siteName: 'Omni Knows Neo',
+    siteName: 'Omni Knows',
     images: [
       {
         url: '/android-chrome-512x512.png',
         width: 512,
         height: 512,
-        alt: 'Omni Knows Neo Logo',
+        alt: 'Omni Knows Logo',
       },
     ],
     locale: 'en_US',
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Omni Knows Neo - Advanced AI Research Agent',
+    title: 'Omni Knows - Advanced AI Research Agent',
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
     images: ['/android-chrome-512x512.png'],
     creator: '@omniknows',
