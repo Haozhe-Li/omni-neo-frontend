@@ -9,7 +9,7 @@ import { parseSSEMessage } from '@/lib/sse-parser'
 import type { SSEMessage, TodoItem } from '@/lib/types'
 import { getUserLocation } from '@/lib/location'
 import { getLocalISOString } from '@/lib/utils'
-
+import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 interface CanvasViewProps {
   query: string
   threadId: string
@@ -186,15 +186,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             personalization.response_language = savedLang
           }
           const savedEnableMemories = localStorage.getItem('omni_enable_memories')
-          if (savedEnableMemories === 'true') {
-            const savedMemories = localStorage.getItem('omni_memories')
-            if (savedMemories) {
-              try {
-                const parsed = JSON.parse(savedMemories)
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  personalization.memories = parsed
-                }
-              } catch (e) { }
+          if (savedEnableMemories !== 'false') {
+            const m = getMemories()
+            if (m) {
+              personalization.memories = m
             }
           }
         }
@@ -214,6 +209,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         if (Object.keys(personalization).length > 0) {
           payload.personalization = personalization
         }
+
+        appendQueryToMemoryQueue(query)
 
         const response = await fetch(apiEndpoint, {
           method: 'POST',

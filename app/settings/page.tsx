@@ -32,6 +32,7 @@ import {
     Navigation
 } from 'lucide-react'
 import { getUserLocation, LocationData } from '@/lib/location'
+import { getMemories, type Memories } from '@/lib/memories'
 import {
     Select,
     SelectContent,
@@ -53,9 +54,8 @@ export default function SettingsPage() {
 
     const [chatModel, setChatModel] = useState<ModelType>('auto')
     const [responseLanguage, setResponseLanguage] = useState<string>('auto')
-    const [enableMemories, setEnableMemories] = useState<boolean>(false)
-    const [memories, setMemories] = useState<string[]>([])
-    const [newMemory, setNewMemory] = useState<string>('')
+    const [enableMemories, setEnableMemories] = useState<boolean>(true)
+    const [memories, setMemories] = useState<Memories | null>(null)
     const [locationData, setLocationData] = useState<LocationData | null>(null)
     const [isLocating, setIsLocating] = useState(false)
     const [mounted, setMounted] = useState(false)
@@ -93,17 +93,19 @@ export default function SettingsPage() {
             const savedEnableMemories = localStorage.getItem('omni_enable_memories')
             if (savedEnableMemories === 'true') setEnableMemories(true)
             else if (savedEnableMemories === 'false') setEnableMemories(false)
+            else setEnableMemories(true) // Default to true if not set
 
-            const savedMemories = localStorage.getItem('omni_memories')
-            if (savedMemories) {
-                try {
-                    setMemories(JSON.parse(savedMemories))
-                } catch (e) {
-                    setMemories([])
-                }
-            }
+            setMemories(getMemories())
 
             getUserLocation(false).then(setLocationData).catch(console.error)
+
+            const handleMemoriesUpdated = () => {
+                setMemories(getMemories());
+            };
+            window.addEventListener('memories_updated', handleMemoriesUpdated);
+            return () => {
+                window.removeEventListener('memories_updated', handleMemoriesUpdated);
+            };
         }
     }, [])
 
@@ -158,18 +160,11 @@ export default function SettingsPage() {
         localStorage.setItem('omni_enable_memories', newValue.toString())
     }
 
-    const addMemory = () => {
-        if (!newMemory.trim() || memories.length >= 5) return
-        const updated = [...memories, newMemory.trim()]
-        setMemories(updated)
-        setNewMemory('')
-        localStorage.setItem('omni_memories', JSON.stringify(updated))
-    }
-
-    const removeMemory = (index: number) => {
-        const updated = memories.filter((_, i) => i !== index)
-        setMemories(updated)
-        localStorage.setItem('omni_memories', JSON.stringify(updated))
+    const removeMemoryField = (field: keyof Memories) => {
+        if (!memories) return;
+        const updated = { ...memories, [field]: null };
+        setMemories(updated);
+        localStorage.setItem('omni_memories', JSON.stringify(updated));
     }
 
     const handleThemeChange = (newTheme: ThemeType) => {
@@ -425,48 +420,37 @@ export default function SettingsPage() {
 
                                 {enableMemories && (
                                     <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/10 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={newMemory}
-                                                onChange={(e) => setNewMemory(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') addMemory()
-                                                }}
-                                                placeholder="Add a new memory about you (max 5)"
-                                                disabled={memories.length >= 5}
-                                                className="flex-1 bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-50"
-                                            />
-                                            <button
-                                                onClick={addMemory}
-                                                disabled={!newMemory.trim() || memories.length >= 5}
-                                                className="px-3 py-2 rounded-lg bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-                                            >
-                                                <Plus size={16} />
-                                            </button>
-                                        </div>
-                                        {memories.length > 0 ? (
+                                        {memories && Object.values(memories).some(val => !!val) ? (
                                             <div className="space-y-2">
-                                                {memories.map((mem, i) => (
-                                                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-[var(--card)] border border-[var(--border-subtle)] shadow-sm">
-                                                        <span className="text-sm text-[var(--foreground)] break-words line-clamp-2 pr-2">{mem}</span>
-                                                        <button
-                                                            onClick={() => removeMemory(i)}
-                                                            className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors p-1 flex-shrink-0"
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
+                                                {(
+                                                    [
+                                                        { key: 'user_profile', label: 'User Profile' },
+                                                        { key: 'current_focus', label: 'Current Focus' },
+                                                        { key: 'interaction_style', label: 'Interaction Style' },
+                                                        { key: 'avoid_topics', label: 'Avoid Topics' }
+                                                    ] as const
+                                                ).map((field) => (
+                                                    memories[field.key] ? (
+                                                        <div key={field.key} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg bg-[var(--card)] border border-[var(--border-subtle)] shadow-sm gap-2">
+                                                            <div className="flex flex-col gap-0.5 pr-2">
+                                                                <span className="text-[10px] font-semibold text-[var(--accent)] uppercase tracking-wider">{field.label}</span>
+                                                                <span className="text-sm text-[var(--foreground)] break-words">{memories[field.key]}</span>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => removeMemoryField(field.key)}
+                                                                className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors p-1 flex-shrink-0 self-end sm:self-center"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    ) : null
                                                 ))}
                                             </div>
                                         ) : (
                                             <div className="text-center py-4 text-xs text-[var(--muted-foreground)] opacity-60">
-                                                No memories added yet.
+                                                No memories generated yet. Omni will automatically learn as you chat.
                                             </div>
                                         )}
-                                        <div className="text-right text-[10px] text-[var(--muted-foreground)] opacity-60">
-                                            {memories.length} / 5 memories
-                                        </div>
                                     </div>
                                 )}
                             </div>
