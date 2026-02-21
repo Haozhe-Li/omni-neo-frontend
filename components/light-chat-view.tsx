@@ -7,6 +7,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
+import { getUserLocation } from '@/lib/location'
+import { getLocalISOString } from '@/lib/utils'
 
 interface LightChatViewProps {
     query: string
@@ -160,7 +162,17 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                     }
                 }
 
-                const payload: any = { query, thread_id: threadId }
+                const locData = await getUserLocation(false)
+
+                personalization.user_local_datetime = getLocalISOString()
+                if (locData?.value) {
+                    personalization.user_location = locData.value
+                }
+
+                const payload: any = {
+                    query,
+                    thread_id: threadId
+                }
                 if (Object.keys(personalization).length > 0) {
                     payload.personalization = personalization
                 }
@@ -276,11 +288,19 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 }
             }
 
+            const locData = await getUserLocation(false)
+
+            personalization.user_local_datetime = getLocalISOString()
+            if (locData?.value) {
+                personalization.user_location = locData.value
+            }
+
             const payload: any = {
                 query: input,
                 thread_id: threadId,
                 ...(currentFollowUpText ? { follow_up_content: currentFollowUpText } : {})
             }
+
             if (Object.keys(personalization).length > 0) {
                 payload.personalization = personalization
             }

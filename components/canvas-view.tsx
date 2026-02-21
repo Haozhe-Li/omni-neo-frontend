@@ -7,6 +7,8 @@ import { ResearchProgress } from '@/components/research-progress'
 import { FinalAnswer } from '@/components/final-answer'
 import { parseSSEMessage } from '@/lib/sse-parser'
 import type { SSEMessage, TodoItem } from '@/lib/types'
+import { getUserLocation } from '@/lib/location'
+import { getLocalISOString } from '@/lib/utils'
 
 interface CanvasViewProps {
   query: string
@@ -197,7 +199,18 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           }
         }
 
-        const payload: any = { query, thread_id: threadId }
+        const locData = await getUserLocation(false)
+
+        personalization.user_local_datetime = getLocalISOString()
+        if (locData?.value) {
+          personalization.user_location = locData.value
+        }
+
+        const payload: any = {
+          query,
+          thread_id: threadId
+        }
+
         if (Object.keys(personalization).length > 0) {
           payload.personalization = personalization
         }

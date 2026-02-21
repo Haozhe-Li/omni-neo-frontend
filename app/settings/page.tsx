@@ -26,8 +26,12 @@ import {
     User,
     Waypoints,
     Trash2,
-    Plus
+    Plus,
+    MapPin,
+    RefreshCw,
+    Navigation
 } from 'lucide-react'
+import { getUserLocation, LocationData } from '@/lib/location'
 import {
     Select,
     SelectContent,
@@ -52,6 +56,8 @@ export default function SettingsPage() {
     const [enableMemories, setEnableMemories] = useState<boolean>(false)
     const [memories, setMemories] = useState<string[]>([])
     const [newMemory, setNewMemory] = useState<string>('')
+    const [locationData, setLocationData] = useState<LocationData | null>(null)
+    const [isLocating, setIsLocating] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [activeSection, setActiveSection] = useState('Appearance')
 
@@ -96,6 +102,8 @@ export default function SettingsPage() {
                     setMemories([])
                 }
             }
+
+            getUserLocation(false).then(setLocationData).catch(console.error)
         }
     }, [])
 
@@ -132,6 +140,16 @@ export default function SettingsPage() {
     const handleResponseLanguageChange = (val: string) => {
         setResponseLanguage(val)
         localStorage.setItem('omni_response_language', val)
+    }
+
+    const handleRefreshLocation = async (type?: 'ip' | 'gps') => {
+        setIsLocating(true)
+        try {
+            const newData = await getUserLocation(true, type)
+            setLocationData(newData)
+        } finally {
+            setIsLocating(false)
+        }
     }
 
     const toggleMemories = () => {
@@ -451,6 +469,48 @@ export default function SettingsPage() {
                                         </div>
                                     </div>
                                 )}
+                            </div>
+
+                            <div className="h-px bg-[var(--border-subtle)] w-full" />
+
+                            {/* User Location */}
+                            <div className="space-y-3">
+                                <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                        <Label text="User Location" />
+                                    </div>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Omni uses your location to provide more relevant answers.</p>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <div className="flex-1 p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex flex-col justify-center">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <MapPin size={16} className="text-[var(--foreground)]" />
+                                            <span className="text-sm font-medium text-[var(--foreground)]">Current Location</span>
+                                        </div>
+                                        <span className="text-xs text-[var(--muted-foreground)]">
+                                            {isLocating ? 'Locating...' : (locationData?.value || 'Unknown')}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <button
+                                            onClick={() => handleRefreshLocation('gps')}
+                                            disabled={isLocating}
+                                            className="px-4 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] hover:bg-[var(--secondary)]/50 transition-colors text-xs font-medium text-[var(--foreground)] flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            <Navigation size={14} />
+                                            Use Precise Location
+                                        </button>
+                                        <button
+                                            onClick={() => handleRefreshLocation()}
+                                            disabled={isLocating}
+                                            className="px-4 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/30 hover:bg-[var(--secondary)]/50 transition-colors text-xs font-medium text-[var(--foreground)] flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            <RefreshCw size={14} className={isLocating ? 'animate-spin' : ''} />
+                                            Refresh Location
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
