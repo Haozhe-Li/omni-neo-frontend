@@ -102,7 +102,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     'write_file',
     'read_file',
     'edit_file',
-    'run_python_tool'
+    'run_python_tool',
+    'get_history_trend',
+    'get_stock_data'
   ])
 
   const handleSSELine = useCallback((data: Record<string, unknown>) => {

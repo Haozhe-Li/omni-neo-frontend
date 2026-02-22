@@ -297,17 +297,17 @@ function ToolContent({ message }: { message: SSEMessage }) {
         }
       case 'write_file':
         return {
-          label: 'Taking some notes',
+          label: 'Writing Notes',
           detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
         }
       case 'read_file':
         return {
-          label: 'Read notes',
+          label: 'Reading Notes',
           detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
         }
       case 'edit_file':
         return {
-          label: 'Update some notes',
+          label: 'Updating Notes',
           detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
         }
       case 'run_python_tool':
@@ -328,12 +328,7 @@ function ToolContent({ message }: { message: SSEMessage }) {
         }
       case 'draw_graph':
         return {
-          label: (
-            <span className="flex items-center gap-1.5">
-              <LineChart className="w-4 h-4" />
-              Drawing Graph
-            </span>
-          ),
+          label: 'Drawing Graph',
           detail: (
             <div className="flex items-center gap-2">
               <button onClick={() => setCodeVisible(!codeVisible)} className="text-xs underline hover:text-foreground cursor-pointer transition-colors whitespace-nowrap ml-2">
@@ -346,6 +341,16 @@ function ToolContent({ message }: { message: SSEMessage }) {
               )}
             </div>
           ),
+        }
+      case 'get_history_trend':
+        return {
+          label: 'Analyzing History',
+          detail: (args.symbol || args.query) ? <span className="text-muted-foreground/80">"{args.symbol || args.query}"</span> : null
+        }
+      case 'get_stock_data':
+        return {
+          label: 'Fetching Real-time Stock Data',
+          detail: (args.symbol || args.query) ? <span className="text-muted-foreground/80">"{args.symbol || args.query}"</span> : null
         }
       default:
         return {
