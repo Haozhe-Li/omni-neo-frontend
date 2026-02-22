@@ -33,7 +33,7 @@ export const appendQueryToMemoryQueue = async (query: string) => {
   if (typeof window === 'undefined') return;
 
   const savedEnableMemories = localStorage.getItem('omni_enable_memories');
-  if (savedEnableMemories === 'false') return;
+  if (savedEnableMemories !== 'true') return;
 
   const queueKey = 'omni_memory_query_queue';
   let queue: string[] = [];

@@ -54,7 +54,7 @@ export default function SettingsPage() {
 
     const [chatModel, setChatModel] = useState<ModelType>('auto')
     const [responseLanguage, setResponseLanguage] = useState<string>('auto')
-    const [enableMemories, setEnableMemories] = useState<boolean>(true)
+    const [enableMemories, setEnableMemories] = useState<boolean>(false)
     const [memories, setMemories] = useState<Memories | null>(null)
     const [locationData, setLocationData] = useState<LocationData | null>(null)
     const [isLocating, setIsLocating] = useState(false)
@@ -93,7 +93,7 @@ export default function SettingsPage() {
             const savedEnableMemories = localStorage.getItem('omni_enable_memories')
             if (savedEnableMemories === 'true') setEnableMemories(true)
             else if (savedEnableMemories === 'false') setEnableMemories(false)
-            else setEnableMemories(true) // Default to true if not set
+            else setEnableMemories(false) // Default to false if not set
 
             setMemories(getMemories())
 

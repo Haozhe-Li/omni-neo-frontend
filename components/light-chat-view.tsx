@@ -150,7 +150,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                         personalization.response_language = savedLang
                     }
                     const savedEnableMemories = localStorage.getItem('omni_enable_memories')
-                    if (savedEnableMemories !== 'false') {
+                    if (savedEnableMemories === 'true') {
                         const m = getMemories()
                         if (m) {
                             personalization.memories = m
@@ -273,7 +273,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                     personalization.response_language = savedLang
                 }
                 const savedEnableMemories = localStorage.getItem('omni_enable_memories')
-                if (savedEnableMemories !== 'false') {
+                if (savedEnableMemories === 'true') {
                     const m = getMemories()
                     if (m) {
                         personalization.memories = m
