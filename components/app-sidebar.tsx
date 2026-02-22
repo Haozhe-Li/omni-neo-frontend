@@ -240,7 +240,7 @@ export function AppSidebar({
                                         <MessageSquare size={16} className="min-w-[16px]" />
                                     )}
                                 </div>
-                                <div className="flex flex-col min-w-0 flex-1">
+                                <div className="flex flex-col min-w-0 flex-1 pr-5">
                                     <span className="text-sm truncate w-full">
                                         {chat.query}
                                     </span>
