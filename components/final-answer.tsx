@@ -210,6 +210,7 @@ function stripMarkdown(md: string): string {
 export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [isPdfLoading, setIsPdfLoading] = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -225,7 +226,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
     }
   }
 
-  const handleDownload = (format: 'markdown' | 'txt' | 'pdf' | 'word' | 'gdoc') => {
+  const handleDownload = async (format: 'markdown' | 'txt' | 'pdf') => {
     if (format === 'markdown') {
       const blob = new Blob([initialAnswer], { type: 'text/markdown' })
       const url = URL.createObjectURL(blob)
@@ -249,8 +250,31 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
       toast.success('Downloaded as Text')
-    } else {
-      toast.info('Format coming soon')
+    } else if (format === 'pdf') {
+      setIsPdfLoading(true)
+      const toastId = toast.loading('Generating PDF...')
+      try {
+        const res = await fetch('/api/export-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markdown: initialAnswer, title: title || 'report', sources }),
+        })
+        if (!res.ok) throw new Error('PDF generation failed')
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${normalizeFilename(title || 'answer')}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success('PDF downloaded!', { id: toastId })
+      } catch (e) {
+        toast.error('Failed to generate PDF', { id: toastId })
+      } finally {
+        setIsPdfLoading(false)
+      }
     }
   }
 
@@ -270,7 +294,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
             <DropdownMenuTrigger asChild>
               <Button
                 variant="secondary"
-                className="rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-[13px] font-medium border border-cyan-500/20 shadow-sm transition-colors"
+                className="rounded-full h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-[13px] font-medium shadow-sm transition-colors"
               >
                 <Share className="h-3.5 w-3.5 mr-1.5 sm:hidden" />
                 <span className="hidden sm:inline">Share & Export</span>
@@ -284,13 +308,34 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 <span>{isCopied ? 'Copied' : 'Copy Text'}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer">
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Download (.md)</span>
+              {/* PDF */}
+              <DropdownMenuItem onClick={() => handleDownload('pdf')} disabled={isPdfLoading} className="cursor-pointer flex items-center gap-2.5">
+                {/* PDF file icon */}
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-[var(--muted-foreground)]">
+                  <rect x="2" y="1" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                  <path d="M10 1v4h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <text x="3.5" y="12.5" fontSize="4.5" fontWeight="700" fill="currentColor" fontFamily="sans-serif">PDF</text>
+                </svg>
+                <span className="text-sm">{isPdfLoading ? 'Generating…' : 'PDF'}</span>
+                <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#20B2AA]/15 text-[#20B2AA] tracking-wide">New</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDownload('txt')} className="cursor-pointer">
-                <File className="mr-2 h-4 w-4" />
-                <span>Download (.txt)</span>
+              {/* Markdown */}
+              <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer flex items-center gap-2.5">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-[var(--muted-foreground)]">
+                  <rect x="2" y="1" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                  <path d="M10 1v4h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <text x="3" y="12.5" fontSize="4" fontWeight="700" fill="currentColor" fontFamily="sans-serif">.MD</text>
+                </svg>
+                <span className="text-sm">Markdown</span>
+              </DropdownMenuItem>
+              {/* TXT */}
+              <DropdownMenuItem onClick={() => handleDownload('txt')} className="cursor-pointer flex items-center gap-2.5">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-[var(--muted-foreground)]">
+                  <rect x="2" y="1" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+                  <path d="M10 1v4h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <text x="3" y="12.5" fontSize="4" fontWeight="700" fill="currentColor" fontFamily="sans-serif">TXT</text>
+                </svg>
+                <span className="text-sm">Plain Text</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
