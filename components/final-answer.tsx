@@ -22,6 +22,7 @@ import type { Source } from '@/lib/types'
 interface FinalAnswerProps {
   answer: string
   sources: Source[]
+  assets?: string[]
   title?: string
   isEdited?: boolean
   onAnswerEdit?: (newAnswer: string) => void
@@ -206,7 +207,7 @@ function stripMarkdown(md: string): string {
     .trim()
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, title, isEdited = false, onAnswerEdit }: FinalAnswerProps) {
+export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, isEdited = false, onAnswerEdit }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -432,16 +433,16 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
         )}
       </div>
 
-      {/* Sources */}
-      {sources.length > 0 && (
+      {/* Sources & Assets */}
+      {(sources.length > 0 || (assets && assets.length > 0)) && (
         <div className="border-t border-border">
           <button
             onClick={() => setSourcesOpen(!sourcesOpen)}
             className="flex w-full items-center gap-2.5 px-8 py-4 sm:px-10 text-sm text-muted-foreground hover:text-foreground transition-colors duration-200 cursor-pointer"
           >
             <BookOpen className="h-4 w-4" />
-            <span className="font-medium">Sources</span>
-            <span className="text-xs text-muted-foreground/70">({sources.length})</span>
+            <span className="font-medium">Sources & Assets</span>
+            <span className="text-xs text-muted-foreground/70">({sources.length + (assets?.length || 0)})</span>
             <span className="ml-auto">
               {sourcesOpen ? (
                 <ChevronDown className="h-4 w-4" />
@@ -451,16 +452,57 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
             </span>
           </button>
 
-          {/* Source list */}
+          {/* Source list & Assets */}
           <div
             className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${sourcesOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
               }`}
           >
             <div className="overflow-hidden">
-              <div className="px-8 pb-5 sm:px-10 stagger-children flex flex-col gap-3">
-                {sources.map((source, idx) => (
-                  <SourceItem key={idx} source={source} index={idx} />
-                ))}
+              <div className="px-8 pb-5 sm:px-10 flex flex-col gap-6">
+                {assets && assets.length > 0 && (
+                  <div className="flex flex-col gap-3 mt-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">Generated Assets</h4>
+                    <div className="flex flex-wrap gap-4">
+                      {assets.map((asset, idx) => (
+                        <figure key={idx} className="relative group w-full sm:w-fit sm:max-w-[80%] flex flex-col items-center gap-2">
+                          <div className="relative rounded-lg overflow-hidden w-full bg-muted/10 border border-border">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={asset}
+                              alt={`Asset ${idx + 1}`}
+                              className="w-full h-auto object-contain max-h-[400px]"
+                              loading="lazy"
+                            />
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <a
+                                href={asset}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center p-2 bg-black/50 hover:bg-black/70 text-white rounded-md backdrop-blur-sm transition-colors"
+                                title="View/Download Image"
+                              >
+                                <Download className="w-4 h-4" />
+                              </a>
+                            </div>
+                          </div>
+                        </figure>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {sources.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    {assets && assets.length > 0 && (
+                      <h4 className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider mt-2">References</h4>
+                    )}
+                    <div className="stagger-children flex flex-col gap-3">
+                      {sources.map((source, idx) => (
+                        <SourceItem key={idx} source={source} index={idx} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

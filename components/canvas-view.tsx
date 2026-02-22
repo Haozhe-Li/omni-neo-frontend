@@ -25,6 +25,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const [finalAnswer, setFinalAnswer] = useState<{
     answer: string
     sources: Array<{ title: string; url: string }>
+    assets?: string[]
     isEdited?: boolean
   } | null>(null)
   const [todos, setTodos] = useState<TodoItem[]>([])
@@ -101,6 +102,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     'write_file',
     'read_file',
     'edit_file',
+    'run_python_tool'
   ])
 
   const handleSSELine = useCallback((data: Record<string, unknown>) => {
@@ -128,8 +130,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         try {
           const answerData = JSON.parse(strToParse)
           setFinalAnswer({
-            answer: answerData.final_answer,
-            sources: answerData.final_sources || [],
+            answer: answerData.answer || answerData.final_answer,
+            sources: answerData.sources || answerData.final_sources || [],
+            assets: answerData.assets || [],
           })
           setIsComplete(true)
           isCompleteRef.current = true
@@ -505,6 +508,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     <FinalAnswer
                       answer={finalAnswer.answer}
                       sources={finalAnswer.sources}
+                      assets={finalAnswer.assets}
                       title={title}
                       isEdited={finalAnswer.isEdited}
                       onAnswerEdit={(newAnswer) => {
