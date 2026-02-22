@@ -429,6 +429,16 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     }
   }
 
+  const handleAskOmni = (text: string) => {
+    setFollowUpText(text)
+    setTimeout(() => {
+      const inputNode = document.getElementById('chat-input')
+      if (inputNode) {
+        inputNode.focus()
+      }
+    }, 100)
+  }
+
   const handleChatSend = () => {
     if (!chatInput.trim() || isChatLoading) return
     const currentInput = chatInput
@@ -527,7 +537,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       <TextSelectionMenu
         containerRef={containerRef}
         showCheckSource={false}
-        onFollowUp={(text) => setFollowUpText(text)}
+        onFollowUp={handleAskOmni}
       />
       {!isComplete && phase === 'researching' && (
         <div className="absolute inset-0 z-0 pointer-events-none animate-flash-edges" />
@@ -819,6 +829,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       assets={finalAnswer.assets}
                       title={title}
                       onBack={() => switchPhase('researching')}
+                      onFollowUp={handleAskOmni}
                     />
                   </div>
                 ) : (error || hasTimedOut) ? (

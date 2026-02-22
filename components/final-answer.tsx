@@ -25,6 +25,7 @@ interface FinalAnswerProps {
   assets?: string[]
   title?: string
   onBack?: () => void
+  onFollowUp?: (text: string) => void
 }
 
 /* ── Stable plugin arrays at module scope — never recreated ── */
@@ -206,7 +207,7 @@ function stripMarkdown(md: string): string {
     .trim()
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack }: FinalAnswerProps) {
+export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
 
@@ -255,7 +256,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
   return (
     <div ref={containerRef} className="rounded-xl border border-border bg-card shadow-sm relative group/answer flex flex-col">
-      <TextSelectionMenu containerRef={containerRef} sources={sources} />
+      <TextSelectionMenu containerRef={containerRef} sources={sources} onFollowUp={onFollowUp} />
 
       {/* Action Buttons (Sticky Header) */}
       <div className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 bg-card/95 backdrop-blur-md border-b border-border/50 rounded-t-xl">
