@@ -14,6 +14,7 @@ import {
   Sparkles,
   AlertTriangle,
   Terminal,
+  LineChart,
 } from 'lucide-react'
 import type { SSEMessage } from '@/lib/types'
 
@@ -224,11 +225,45 @@ function ReasoningContent({ content }: { content: string }) {
 function ToolContent({ message }: { message: SSEMessage }) {
   const [codeVisible, setCodeVisible] = useState(false)
   const [urlVisible, setUrlVisible] = useState(false)
+  const [imageVisible, setImageVisible] = useState(false)
   const tool = message.tool || ''
   const raw = message.raw || {}
   const args = raw.args || {}
 
-  const getToolLabel = (): { label: string; detail: React.ReactNode } => {
+  // Recursive search for a data URL, valid image URL, or base64 image
+  const findImageUrl = (obj: any, depth = 0): string | null => {
+    if (!obj || depth > 5) return null;
+    if (typeof obj === 'string') {
+      if (obj.startsWith('data:image/')) return obj;
+      if (obj.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|svg|webp)$/i)) return obj;
+      // Some LLMs return pure base64 for images in output/result fields
+      if (obj.length > 500 && /^[A-Za-z0-9+/=\s]+$/.test(obj)) {
+        // Simple heuristic to check if it's base64 and not just random text/code
+        const cleanStr = obj.replace(/\s/g, '');
+        if (cleanStr.length > 500 && cleanStr.length % 4 === 0 && !cleanStr.includes('def ') && !cleanStr.includes('import ')) {
+          return `data:image/png;base64,${cleanStr}`;
+        }
+      }
+    } else if (typeof obj === 'object') {
+      for (const key of Object.keys(obj)) {
+        if (['code', 'query', 'fact'].includes(key)) continue;
+        const res = findImageUrl(obj[key], depth + 1);
+        if (res) return res;
+      }
+    }
+    return null;
+  }
+
+  let imageUrl = findImageUrl(raw);
+  if (!imageUrl && typeof raw.result === 'string') {
+    const mdMatch = raw.result.match(/!\[.*?\]\((.*?)\)/);
+    if (mdMatch && mdMatch[1]) imageUrl = mdMatch[1];
+  } else if (!imageUrl && typeof raw.output === 'string') {
+    const mdMatch = raw.output.match(/!\[.*?\]\((.*?)\)/);
+    if (mdMatch && mdMatch[1]) imageUrl = mdMatch[1];
+  }
+
+  const getToolLabel = (): { label: React.ReactNode; detail: React.ReactNode } => {
     switch (tool) {
       case 'tavily_search':
         return {
@@ -279,9 +314,37 @@ function ToolContent({ message }: { message: SSEMessage }) {
         return {
           label: 'Running Code',
           detail: (
-            <button onClick={() => setCodeVisible(!codeVisible)} className="text-xs underline hover:text-foreground cursor-pointer transition-colors whitespace-nowrap ml-2">
-              {codeVisible ? 'hide' : 'view'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCodeVisible(!codeVisible)} className="text-xs underline hover:text-foreground cursor-pointer transition-colors whitespace-nowrap ml-2">
+                {codeVisible ? 'hide code' : 'view code'}
+              </button>
+              {imageUrl && (
+                <button onClick={() => setImageVisible(!imageVisible)} className="text-xs underline text-accent hover:text-accent/80 cursor-pointer transition-colors whitespace-nowrap">
+                  {imageVisible ? 'hide image' : 'view image'}
+                </button>
+              )}
+            </div>
+          ),
+        }
+      case 'draw_graph':
+        return {
+          label: (
+            <span className="flex items-center gap-1.5">
+              <LineChart className="w-4 h-4" />
+              Drawing Graph
+            </span>
+          ),
+          detail: (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCodeVisible(!codeVisible)} className="text-xs underline hover:text-foreground cursor-pointer transition-colors whitespace-nowrap ml-2">
+                {codeVisible ? 'hide code' : 'view code'}
+              </button>
+              {imageUrl && (
+                <button onClick={() => setImageVisible(!imageVisible)} className="text-xs underline text-accent hover:text-accent/80 cursor-pointer transition-colors whitespace-nowrap">
+                  {imageVisible ? 'hide image' : 'view image'}
+                </button>
+              )}
+            </div>
           ),
         }
       default:
@@ -304,6 +367,18 @@ function ToolContent({ message }: { message: SSEMessage }) {
         <pre className="mt-2 rounded-lg bg-secondary/50 p-3 text-xs font-mono overflow-x-auto text-foreground border border-border/50">
           <code>{args.code}</code>
         </pre>
+      )}
+      {imageUrl && (imageVisible || !codeVisible) && ( // show image dynamically or if code is hidden and image exists, wait let's use imageVisible default false? Actually users probably WANT to see it.
+        // Let's default imageVisible to false but we added a button.
+        // Let's actually always show the image if imageVisible is toggled
+        // Wait, if it just generated, maybe auto-show it!
+        null
+      )}
+      {imageUrl && (imageVisible || tool === 'draw_graph') && (
+        <div className="mt-3 relative rounded-lg border border-border/50 overflow-hidden bg-white/5 p-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="Generated from tool" className="max-w-full h-auto rounded object-contain mx-auto max-h-[300px]" />
+        </div>
       )}
       {urlVisible && (args.urls || args.url) && (
         <div className="mt-2 flex flex-col gap-1 rounded-lg bg-secondary/50 p-3 text-xs border border-border/50">

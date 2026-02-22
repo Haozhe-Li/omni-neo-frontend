@@ -119,14 +119,48 @@ const markdownComponents: Components = {
       {children}
     </li>
   ),
-  p: ({ children }) => (
-    <p className="text-foreground leading-[1.8] mb-4 text-pretty">{children}</p>
-  ),
+  p: ({ children, node }) => {
+    const hasImage = node?.children?.some((child: any) => child.tagName === 'img')
+    if (hasImage) {
+      return <div className="text-foreground leading-[1.8] mb-4 text-pretty">{children}</div>
+    }
+    return <p className="text-foreground leading-[1.8] mb-4 text-pretty">{children}</p>
+  },
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
   em: ({ children }) => (
     <em className="italic text-muted-foreground">{children}</em>
+  ),
+  img: ({ src, alt, ...props }) => (
+    <figure className="my-6 w-full sm:w-fit sm:max-w-[80%] mx-auto flex flex-col items-center gap-2">
+      <div className="group relative rounded-lg overflow-hidden w-full bg-muted/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src as string}
+          alt={alt || 'Image'}
+          className="w-full h-auto object-contain max-h-[500px]"
+          loading="lazy"
+          {...props}
+        />
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <a
+            href={src as string}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center p-2 bg-black/50 hover:bg-black/70 text-white rounded-md backdrop-blur-sm transition-colors"
+            title="View/Download Image"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+      {alt && (
+        <figcaption className="text-[13px] text-muted-foreground/80 text-center px-4">
+          {alt}
+        </figcaption>
+      )}
+    </figure>
   ),
 }
 

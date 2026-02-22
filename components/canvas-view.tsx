@@ -97,7 +97,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     'get_full_text',
     'verify_claim',
     'check_python_compile',
-    'run_python_tool',
+    'draw_graph',
+    'write_file',
+    'read_file',
+    'edit_file',
   ])
 
   const handleSSELine = useCallback((data: Record<string, unknown>) => {
@@ -138,7 +141,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     } else if (parsed.type === 'tool' && KNOWN_TOOLS.has(parsed.tool || '')) {
       const toolArgs = (data.raw as any)?.args || {}
       if (parsed.tool === 'verify_claim' && !toolArgs.fact) return
-      if ((parsed.tool === 'run_python_tool' || parsed.tool === 'check_python_compile') && !toolArgs.code) return
+      if ((parsed.tool === 'run_python_tool' || parsed.tool === 'check_python_compile' || parsed.tool === 'draw_graph') && !toolArgs.code) return
       setMessages((prev) => [...prev, parsed])
     }
   }, [])
@@ -248,7 +251,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   useEffect(() => {
     if (isComplete || hasTimedOut) return
     const interval = setInterval(() => {
-      if (Date.now() - lastMessageTime.current > 100_000) {
+      if (Date.now() - lastMessageTime.current > 300_000) {
         setHasTimedOut(true)
       }
     }, 5000)
