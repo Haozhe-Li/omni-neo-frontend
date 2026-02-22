@@ -192,6 +192,8 @@ export default function Home() {
             onNewSearch={handleNewSearch}
             onToggleSidebar={toggleSidebar}
             isMobile={isMobile}
+            sidebarOpen={sidebarOpen}
+            setSidebarOpen={setSidebarOpen}
           />
         ) : view === 'light' ? (
           <LightChatView
