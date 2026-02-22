@@ -115,18 +115,27 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       if (answerReceivedRef.current) return
       answerReceivedRef.current = true
 
-      const content = data.content as Array<{ type: string; text?: string }> | undefined
-      const textContent = content?.find((c) => c.type === 'text')
-      if (textContent?.text) {
+      const rawContent = data.content
+      let strToParse = ''
+
+      if (typeof rawContent === 'string') {
+        strToParse = rawContent
+      } else if (Array.isArray(rawContent)) {
+        strToParse = rawContent.find((c: any) => c.type === 'text')?.text || ''
+      }
+
+      if (strToParse) {
         try {
-          const answerData = JSON.parse(textContent.text as string)
+          const answerData = JSON.parse(strToParse)
           setFinalAnswer({
             answer: answerData.final_answer,
             sources: answerData.final_sources || [],
           })
           setIsComplete(true)
           isCompleteRef.current = true
-        } catch { /* parse error */ }
+        } catch (e) {
+          console.error("Failed to parse answer JSON", e)
+        }
       }
     } else if (parsed.type === 'tool' && parsed.tool === 'write_todos') {
       const raw = data.raw as { args?: { todos?: TodoItem[] } } | undefined
