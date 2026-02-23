@@ -700,28 +700,30 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                       </div>
                                     </div>
                                   )}
-                                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
-                                    <button
-                                      onClick={() => startDeepResearch(i)}
-                                      className="px-6 py-2.5 bg-[var(--accent)] text-white rounded-full text-sm font-medium hover:opacity-90 flex items-center justify-center gap-2 shadow-sm transition-all hover:scale-[1.02] shrink-0"
-                                    >
-                                      <Layout size={16} />
-                                      Start Research
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setFollowUpText(rewrittenQuery)
-                                        setTimeout(() => {
-                                          document.getElementById('chat-input')?.focus()
-                                        }, 100)
-                                      }}
-                                      className="px-6 py-2.5 bg-[var(--secondary)] text-[var(--foreground)] rounded-full text-sm font-medium hover:bg-[var(--secondary)]/80 transition-colors shrink-0 flex items-center justify-center gap-2"
-                                    >
-                                      <FileText size={16} />
-                                      Edit Topic
-                                    </button>
-                                    <div className="text-xs text-[var(--muted-foreground)] opacity-70 flex items-center gap-1.5 sm:ml-auto justify-center sm:justify-start">
-                                      <Clock size={14} />
+                                  <div className="flex flex-col gap-2.5 w-full">
+                                    <div className="flex items-center gap-2.5">
+                                      <button
+                                        onClick={() => startDeepResearch(i)}
+                                        className="px-6 py-2.5 bg-[var(--accent)] text-white rounded-full text-sm font-medium hover:opacity-90 flex items-center justify-center gap-2 shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                                      >
+                                        <Layout size={16} />
+                                        Start Research
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setFollowUpText(rewrittenQuery)
+                                          setTimeout(() => {
+                                            document.getElementById('chat-input')?.focus()
+                                          }, 100)
+                                        }}
+                                        className="px-6 py-2.5 bg-[var(--secondary)] text-[var(--foreground)] rounded-full text-sm font-medium hover:bg-[var(--secondary)]/80 transition-colors shrink-0 flex items-center justify-center gap-2"
+                                      >
+                                        <FileText size={16} />
+                                        Edit Topic
+                                      </button>
+                                    </div>
+                                    <div className="text-xs text-[var(--muted-foreground)] opacity-70 flex items-center gap-1.5 pl-1">
+                                      <Clock size={12} />
                                       Takes just a few minutes
                                     </div>
                                   </div>
