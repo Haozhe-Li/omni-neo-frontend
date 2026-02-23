@@ -1,7 +1,24 @@
 'use client'
 
 import { useState, memo, useRef, useEffect } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink, BookOpen, Copy, Check, Download, FileText, File, MoreHorizontal, ArrowLeft, MessageSquare, X, Share, Layout } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  BookOpen,
+  Copy,
+  Check,
+  Download,
+  FileText,
+  X,
+  Share,
+  Layout,
+  Clock,
+  Calendar,
+  Lock,
+  Globe,
+  Loader2
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -17,7 +34,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import type { Components } from 'react-markdown'
-import type { Source } from '@/lib/types'
+import type { Source, PublishDuration } from '@/lib/types'
 
 interface FinalAnswerProps {
   answer: string
@@ -26,6 +43,8 @@ interface FinalAnswerProps {
   title?: string
   onBack?: () => void
   onFollowUp?: (text: string) => void
+  onPublish?: (duration: PublishDuration) => Promise<string | null>
+  isReadOnly?: boolean
 }
 
 /* ── Stable plugin arrays at module scope — never recreated ── */
@@ -207,13 +226,15 @@ function stripMarkdown(md: string): string {
     .trim()
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp }: FinalAnswerProps) {
+export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp, onPublish, isReadOnly = false }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
+  const [isPublishExpanded, setIsPublishExpanded] = useState(false)
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [isPublishing, setIsPublishing] = useState(false)
 
   const containerRef = useRef<HTMLDivElement>(null)
-
 
   const handleCopy = async () => {
     try {
@@ -223,6 +244,15 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       setTimeout(() => setIsCopied(false), 2000)
     } catch {
       toast.error('Failed to copy')
+    }
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      toast.success('Sharing link copied')
+    } catch {
+      toast.error('Failed to copy link')
     }
   }
 
@@ -321,7 +351,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
   return (
     <div ref={containerRef} className="rounded-xl border border-border bg-card shadow-sm relative group/answer flex flex-col">
-      <TextSelectionMenu containerRef={containerRef} sources={sources} onFollowUp={onFollowUp} />
+      {!isReadOnly && <TextSelectionMenu containerRef={containerRef} sources={sources} onFollowUp={onFollowUp} />}
 
       {/* Action Buttons (Sticky Header) */}
       <div className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 bg-card/95 backdrop-blur-md border-b border-border/50 rounded-t-xl">
@@ -343,40 +373,171 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 <ChevronDown className="ml-1 sm:ml-1.5 h-3.5 w-3.5 opacity-70" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 sm:w-56 rounded-xl">
-              <DropdownMenuItem onClick={handleCopy} className="cursor-pointer">
-                {isCopied ? <Check className="mr-2 h-4 w-4 text-green-500" /> : <Copy className="mr-2 h-4 w-4" />}
-                <span>{isCopied ? 'Copied' : 'Copy Text'}</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+            <DropdownMenuContent align="end" className="w-52 sm:w-64 rounded-xl p-1.5 shadow-xl border-border">
+              {isReadOnly ? (
+                <div className="flex flex-col mb-1.5">
+                  <DropdownMenuItem
+                    onClick={handleCopyLink}
+                    className="cursor-pointer"
+                  >
+                    <Globe className="mr-2 h-4 w-4 text-foreground/70" />
+                    <span className="font-medium">Copy sharing links</span>
+                  </DropdownMenuItem>
+                </div>
+              ) : onPublish && (
+                <div className="flex flex-col mb-1.5">
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault()
+                      setIsPublishExpanded(!isPublishExpanded)
+                    }}
+                    className={`cursor-pointer transition-colors duration-200 ${isPublishExpanded ? 'bg-secondary' : ''}`}
+                  >
+                    <Globe className="mr-2 h-4 w-4 text-foreground/70" />
+                    <span className="font-medium">Publish to Web</span>
+                    <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-foreground text-background tracking-wide uppercase">New</span>
+                    <ChevronDown className={`ml-auto h-3.5 w-3.5 opacity-50 transition-transform duration-300 ${isPublishExpanded ? 'rotate-180' : ''}`} />
+                  </DropdownMenuItem>
+
+                  {isPublishExpanded && (
+                    <div className="flex flex-col bg-secondary/30 rounded-lg mx-1 mt-1.5 mb-1 overflow-hidden animate-in slide-in-from-top-1 duration-200 border border-border/40 min-h-[100px] justify-center">
+                      {isPublishing ? (
+                        <div className="flex flex-col items-center justify-center p-6 space-y-3 animate-in fade-in duration-300">
+                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/60" />
+                          <span className="text-[11px] font-medium text-muted-foreground/80 tracking-wide">Generating secure link...</span>
+                        </div>
+                      ) : !shareUrl ? (
+                        <>
+                          <div className="px-3.5 py-2 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest bg-secondary/20">
+                            Expiration
+                          </div>
+                          <DropdownMenuItem
+                            onSelect={async (e) => {
+                              e.preventDefault()
+                              setIsPublishing(true)
+                              try {
+                                const url = await onPublish('7d')
+                                if (url) setShareUrl(url)
+                              } finally {
+                                setIsPublishing(false)
+                              }
+                            }}
+                            className="cursor-pointer pl-4 py-2.5 text-xs hover:bg-secondary/50"
+                          >
+                            <Clock className="mr-2.5 h-3.5 w-3.5 opacity-60" />
+                            <span>7 Days</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={async (e) => {
+                              e.preventDefault()
+                              setIsPublishing(true)
+                              try {
+                                const url = await onPublish('30d')
+                                if (url) setShareUrl(url)
+                              } finally {
+                                setIsPublishing(false)
+                              }
+                            }}
+                            className="cursor-pointer pl-4 py-2.5 text-xs border-t border-border/10 hover:bg-secondary/50"
+                          >
+                            <Calendar className="mr-2.5 h-3.5 w-3.5 opacity-60" />
+                            <span>1 Month</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={async (e) => {
+                              e.preventDefault()
+                              setIsPublishing(true)
+                              try {
+                                const url = await onPublish('permanent')
+                                if (url) setShareUrl(url)
+                              } finally {
+                                setIsPublishing(false)
+                              }
+                            }}
+                            className="cursor-pointer pl-4 py-2.5 text-xs border-t border-border/10 hover:bg-secondary/50"
+                          >
+                            <Lock className="mr-2.5 h-3.5 w-3.5 opacity-60" />
+                            <span>Permanent</span>
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
+                        <div className="p-3.5 space-y-3.5 bg-secondary/10 animate-in zoom-in-95 duration-300">
+                          <div className="text-[10px] font-bold text-foreground/80 uppercase tracking-widest flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Published Successfully
+                          </div>
+                          <div className="bg-background/80 border border-border/60 rounded-md px-2.5 py-2 text-[11px] font-mono break-all leading-tight shadow-inner">
+                            {shareUrl}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-8 text-[11px] flex-1 rounded-lg border-border hover:bg-background transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                navigator.clipboard.writeText(shareUrl)
+                                toast.success('Link copied')
+                              }}
+                            >
+                              <Copy size={13} className="mr-2 opacity-70" /> Copy
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-8 text-[11px] flex-1 rounded-lg border-border hover:bg-background transition-all"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(shareUrl, '_blank')
+                              }}
+                            >
+                              <ExternalLink size={13} className="mr-2 opacity-70" /> Open
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <DropdownMenuSeparator className="opacity-50" />
+              <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">
+                Export Options
+              </div>
+
               {/* PDF */}
-              <DropdownMenuItem onClick={() => handleDownload('pdf')} disabled={isPdfLoading} className="cursor-pointer flex items-center gap-2.5">
-                {/* PDF file icon */}
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-[var(--muted-foreground)]">
+              <DropdownMenuItem onClick={() => handleDownload('pdf')} disabled={isPdfLoading} className="cursor-pointer flex items-center gap-2.5 py-2 hover:bg-secondary">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-foreground/70">
                   <rect x="2" y="1" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
                   <path d="M10 1v4h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   <text x="3.5" y="12.5" fontSize="4.5" fontWeight="700" fill="currentColor" fontFamily="sans-serif">PDF</text>
                 </svg>
-                <span className="text-sm">{isPdfLoading ? 'Generating…' : 'PDF'}</span>
-                <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#20B2AA]/15 text-[#20B2AA] tracking-wide">New</span>
+                <span className="text-sm">PDF Document</span>
               </DropdownMenuItem>
               {/* Markdown */}
-              <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer flex items-center gap-2.5">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-[var(--muted-foreground)]">
+              <DropdownMenuItem onClick={() => handleDownload('markdown')} className="cursor-pointer flex items-center gap-2.5 py-2 hover:bg-secondary">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-foreground/70">
                   <rect x="2" y="1" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
                   <path d="M10 1v4h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   <text x="3" y="12.5" fontSize="4" fontWeight="700" fill="currentColor" fontFamily="sans-serif">.MD</text>
                 </svg>
-                <span className="text-sm">Markdown</span>
+                <span className="text-sm">Markdown File</span>
               </DropdownMenuItem>
               {/* TXT */}
-              <DropdownMenuItem onClick={() => handleDownload('txt')} className="cursor-pointer flex items-center gap-2.5">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-[var(--muted-foreground)]">
+              <DropdownMenuItem onClick={() => handleDownload('txt')} className="cursor-pointer flex items-center gap-2.5 py-2 hover:bg-secondary">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="shrink-0 text-foreground/70">
                   <rect x="2" y="1" width="11" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
                   <path d="M10 1v4h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   <text x="3" y="12.5" fontSize="4" fontWeight="700" fill="currentColor" fontFamily="sans-serif">TXT</text>
                 </svg>
                 <span className="text-sm">Plain Text</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator className="opacity-50" />
+
+              <DropdownMenuItem onClick={handleCopy} className="cursor-pointer flex items-center gap-2.5 py-2 hover:bg-secondary text-foreground/90">
+                {isCopied ? <Check className="mr-0 h-4 w-4 text-green-500" /> : <Copy className="mr-0 h-4 w-4 text-foreground/70" />}
+                <span className="font-medium">{isCopied ? 'Copied' : 'Copy Text'}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

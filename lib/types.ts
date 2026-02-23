@@ -16,3 +16,5 @@ export interface Source {
   url: string
   content?: string
 }
+
+export type PublishDuration = '7d' | '30d' | 'permanent'

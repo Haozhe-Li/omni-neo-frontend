@@ -109,6 +109,39 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     }, 100)
   }
 
+  const handleShare = async (blockIdx: number, duration: string) => {
+    const block = researchBlocks[blockIdx]
+    if (!block || !block.finalAnswer) return null
+
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          answer: block.finalAnswer.answer,
+          sources: block.finalAnswer.sources,
+          assets: block.finalAnswer.assets,
+          title: block.title,
+          duration,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Failed to publish')
+      const { id } = await res.json()
+      const url = `${window.location.origin}/publish/${id}`
+
+      if (typeof navigator !== 'undefined') {
+        await navigator.clipboard.writeText(url)
+        toast.success('Share link copied!')
+      }
+      return url
+    } catch (error) {
+      console.error('Share failed:', error)
+      toast.error('Failed to create share link')
+      return null
+    }
+  }
+
   // ── Open/close report split-screen ────────────────────────────────
   const openReport = (blockIdx: number) => {
     setIsFading(true)
@@ -650,9 +683,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                   <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
                                     <ThumbsDown size={14} />
                                   </button>
-                                  <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Share">
-                                    <Share size={14} />
-                                  </button>
                                 </div>
                               )}
 
@@ -739,9 +769,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                               <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
                                 <ThumbsDown size={14} />
                               </button>
-                              <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Share">
-                                <Share size={14} />
-                              </button>
                             </div>
                           )}
                         </>
@@ -815,6 +842,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       title={reportBlock.title}
                       onBack={closeReport}
                       onFollowUp={handleAskOmni}
+                      onPublish={(duration) => handleShare(reportBlockIdx, duration)}
                     />
                   </div>
                 ) : (reportBlock?.error || reportBlock?.hasTimedOut) ? (
