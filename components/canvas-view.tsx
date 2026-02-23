@@ -890,10 +890,10 @@ interface InlineResearchBlockProps {
 function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress, onViewReport }: InlineResearchBlockProps) {
   return (
     <div className="border border-[var(--border-subtle)] bg-card/50 rounded-xl p-4 sm:p-5 shadow-sm animate-fade-in">
-      {/* Header: stacks on mobile, row on sm+ */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+      {/* Header: always stacked column layout */}
+      <div className="flex flex-col gap-3">
         {/* Icon + title */}
-        <div className="flex items-start gap-3 overflow-hidden flex-1 min-w-0">
+        <div className="flex items-start gap-3 overflow-hidden min-w-0">
           <div className="relative flex h-8 w-8 items-center justify-center shrink-0 overflow-hidden rounded-full bg-[var(--accent)]/20 mt-0.5">
             {!block.isComplete ? (
               <Loader className="h-4 w-4 text-[var(--accent)] animate-spin" />
@@ -916,8 +916,8 @@ function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+        {/* Buttons: always below title, indented to align with text */}
+        <div className="flex items-center gap-2 pl-11">
           <button
             onClick={onToggleProgress}
             className="px-3 py-1.5 bg-[var(--secondary)] text-[var(--foreground)] rounded-md text-xs font-medium hover:bg-[var(--secondary)]/80 transition-colors"

@@ -573,7 +573,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div>
-                                        <h3 className="font-semibold text-base text-[var(--foreground)]">{APP_NAME}</h3>
+                                        <h3 className="font-semibold text-base text-[var(--foreground)] font-[family-name:var(--font-plex)]">{APP_NAME}</h3>
                                         <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                                             v{APP_VERSION} • Alpha Build
                                         </p>
@@ -601,7 +601,7 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="bg-[var(--secondary)]/30 px-6 py-4 flex items-center justify-between border-t border-[var(--border-subtle)]">
-                                <span className="text-xs text-[var(--muted-foreground)]">
+                                <span className="text-xs text-[var(--muted-foreground)] font-[family-name:var(--font-plex)]">
                                     © {new Date().getFullYear()} Omni Knows
                                 </span>
                                 <span className="text-xs text-[var(--muted-foreground)] opacity-60">

@@ -298,7 +298,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         <div className="relative z-10 flex flex-col items-center w-full">
           {/* Brand */}
           <div className="animate-fade-up mb-12 text-center">
-            <h1 className="text-[2.5rem] sm:text-5xl font-light tracking-tight text-foreground lowercase">
+            <h1 className="text-[2.5rem] sm:text-5xl font-light tracking-tight text-foreground lowercase font-[family-name:var(--font-plex)]">
               omni{' '}
               <span
                 className="font-normal"
@@ -425,7 +425,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
           <p>
             &copy; {new Date().getFullYear()}{' '}
-            <a href="https://omniknows.xyz" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors">Omni Knows</a>
+            <a href="https://omniknows.xyz" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors font-[family-name:var(--font-plex)]">Omni Knows</a>
             {'. All rights reserved.'}
           </p>
           <p>

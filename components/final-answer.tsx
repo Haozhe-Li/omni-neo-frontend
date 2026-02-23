@@ -357,42 +357,38 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       {isReadOnly ? (
         /* ── Read-only / shared page header ── */
         <div className="sticky top-0 z-40 px-4 py-3 sm:px-6 sm:py-3.5 bg-card/95 backdrop-blur-md border-b border-border/50 rounded-t-xl">
-          <div className="flex items-center justify-between">
-            {/* Brand */}
+          <div className="flex items-center justify-between gap-3">
+            {/* Brand — matches homepage style */}
             <a
               href="https://omniknows.xyz"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 group"
+              className="flex items-center gap-2 group shrink-0"
             >
               <Image
                 src="/android-chrome-512x512.png"
                 alt="Omni Knows"
-                width={22}
-                height={22}
-                className="rounded-md"
+                width={20}
+                height={20}
+                className="rounded-md opacity-90"
               />
-              <span className="text-[14px] font-semibold text-foreground group-hover:opacity-80 transition-opacity">
-                Omni<span className="text-accent">Knows</span>
+              <span className="font-[family-name:var(--font-plex)] text-[18px] font-light tracking-tight text-foreground/90 lowercase group-hover:opacity-60 transition-opacity">
+                omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
               </span>
             </a>
 
-            {/* CTA */}
+            {/* CTA — flat, neutral, low saturation */}
             <a
               href="https://omniknows.xyz"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent text-white text-[12px] font-semibold hover:bg-accent/90 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-muted-foreground bg-secondary/40 text-[11px] font-medium hover:text-foreground hover:bg-secondary hover:border-border/80 transition-colors shrink-0"
             >
-              Try Omni Knows
-              <ExternalLink className="w-3 h-3" />
+              <span className="hidden min-[360px]:inline">Try Omni Knows</span>
+              <span className="min-[360px]:hidden">Try</span>
+              <ExternalLink className="w-3 h-3 opacity-50" />
             </a>
           </div>
-
-          {/* AI disclaimer subtitle */}
-          <p className="mt-1.5 text-[11px] text-muted-foreground/70">
-            AI generated · not reviewed by humans
-          </p>
         </div>
       ) : (
         /* ── Normal editable header ── */
