@@ -57,7 +57,7 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                             <Globe className="w-4 h-4 text-accent" />
                         </div>
                         <div>
-                            <h3 className="text-[15px] font-semibold text-foreground leading-tight">Publish to Web</h3>
+                            <h3 className="text-[15px] font-semibold text-foreground leading-tight">Publish to Pages</h3>
                             <p className="text-[12px] text-muted-foreground">Share your research publicly</p>
                         </div>
                     </div>

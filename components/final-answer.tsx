@@ -422,7 +422,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                       className={`cursor-pointer transition-colors duration-200 ${isPublishExpanded ? 'bg-secondary' : ''}`}
                     >
                       <Globe className="mr-2 h-4 w-4 text-foreground/70" />
-                      <span className="font-medium">Publish to Web</span>
+                      <span className="font-medium">Publish to Pages</span>
                       <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-foreground text-background tracking-wide uppercase">New</span>
                       <ChevronDown className={`ml-auto h-3.5 w-3.5 opacity-50 transition-transform duration-300 ${isPublishExpanded ? 'rotate-180' : ''}`} />
                     </DropdownMenuItem>

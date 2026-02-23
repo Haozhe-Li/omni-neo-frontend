@@ -88,7 +88,16 @@ export function ThinkingTimeline({
         onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative px-1"
       >
-        {messages.length === 0 && isStreaming && <ThinkingLoader />}
+        {messages.length === 0 && isStreaming && (
+          <div className="animate-fade-up py-2 space-y-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-[var(--border-subtle)] animate-pulse" />
+                <div className="h-2 rounded-full bg-[var(--border-subtle)]/50 animate-pulse" style={{ width: `${60 - i * 15}%` }} />
+              </div>
+            ))}
+          </div>
+        )}
         {messages.length === 0 && isComplete && (
           <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
             <span>No thinking steps used</span>
@@ -113,20 +122,7 @@ export function ThinkingTimeline({
   )
 }
 
-/* ── Loading state: shown before any steps arrive ── */
-function ThinkingLoader() {
-  return (
-    <div className="flex flex-col gap-4 py-2 animate-fade-up">
-      <div className="flex items-center gap-3">
-        <div className="relative flex h-4 w-4 shrink-0 overflow-hidden rounded-full">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75"></span>
-          <span className="relative inline-flex h-4 w-4 rounded-full bg-accent"></span>
-        </div>
-        <span className="text-sm text-muted-foreground">Analyzing your question...</span>
-      </div>
-    </div>
-  )
-}
+
 
 /* ── Individual timeline item — icon-based, no dots or lines ── */
 function TimelineItem({ message, isActive, isComplete }: { message: SSEMessage; isActive: boolean; isComplete: boolean }) {
@@ -344,7 +340,7 @@ function ToolContent({ message }: { message: SSEMessage }) {
         }
       case 'get_history_trend':
         return {
-          label: 'Analyzing History',
+          label: 'Analyzing Stock Trend',
           detail: (args.symbol || args.query) ? <span className="text-muted-foreground/80">"{args.symbol || args.query}"</span> : null
         }
       case 'get_stock_data':
