@@ -410,6 +410,7 @@ export async function POST(req: NextRequest) {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--font-render-hinting=none',
+        '--disable-web-security',
       ],
     })
 
