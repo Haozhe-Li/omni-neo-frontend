@@ -210,6 +210,8 @@ export default function Home() {
             isAutoDetecting={isAutoDetecting}
             onToggleSidebar={toggleSidebar}
             isMobile={isMobile}
+            model={model}
+            onModelChange={handleModelChange}
           />
         )}
       </main>

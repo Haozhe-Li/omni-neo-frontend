@@ -1,20 +1,24 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Sparkles, Menu } from 'lucide-react'
+import { ArrowRight, Sparkles, Menu, ChevronDown, Check } from 'lucide-react'
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string) => void
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   isMobile?: boolean
+  model?: 'auto' | 'canvas' | 'light'
+  onModelChange?: (model: 'auto' | 'canvas' | 'light') => void
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Mouse glow state — we track both "target" (instant mouse) and "rendered" (smoothed)
   const glowRef = useRef<HTMLDivElement>(null)
@@ -60,6 +64,18 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     return () => clearTimeout(timer)
   }, [])
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false)
+      }
+    }
+    if (modelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [modelDropdownOpen])
 
   const [backendStatus, setBackendStatus] = useState<'unknown' | 'ready' | 'not-ready'>('unknown')
   const [isCheckPending, setIsCheckPending] = useState(true)
@@ -304,7 +320,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           >
             <div
               className={`
-                relative rounded-2xl bg-card transition-all duration-300
+                rounded-2xl bg-card transition-all duration-300 flex flex-col
                 ${isFocused
                   ? 'shadow-[0_0_0_1px_var(--accent),0_4px_24px_rgba(32,178,170,0.08)]'
                   : 'shadow-[0_0_0_1px_var(--border),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_var(--border),0_4px_16px_rgba(0,0,0,0.06)]'
@@ -327,12 +343,51 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       ? "Connecting to brain..."
                       : "Backend is not ready, please wait..."
                 }
-                className={`w-full resize-none bg-transparent px-6 pt-5 pb-14 text-base text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
-                style={{ minHeight: '84px' }}
+                className={`w-full resize-none bg-transparent px-6 pt-5 pb-2 text-base text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
+                style={{ minHeight: '52px' }}
               />
 
-              {/* Bottom bar */}
-              <div className="absolute bottom-3 right-3 flex items-center gap-2">
+              {/* Bottom bar — separate row, never overlaps text */}
+              <div className="flex items-center justify-end gap-1.5 px-3 pb-3 pt-1">
+                {/* Mode dropdown */}
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setModelDropdownOpen(prev => !prev)}
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
+                  >
+                    <span>{model === 'auto' ? 'Auto' : model === 'canvas' ? 'Canvas' : 'Light'}</span>
+                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {modelDropdownOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                      {[
+                        { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                        { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
+                        { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            onModelChange?.(opt.value)
+                            setModelDropdownOpen(false)
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
+                            }`}
+                        >
+                          <div className="flex flex-col">
+                            <span className="text-[13px] font-medium">{opt.label}</span>
+                            <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">{opt.desc}</span>
+                          </div>
+                          {model === opt.value && <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="submit"
                   disabled={!query.trim() || backendStatus !== 'ready' || !threadId}
@@ -350,27 +405,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
               </div>
             </div>
           </form>
-
-          {/* Suggested queries */}
-          <div
-            className={`mt-8 hidden md:flex flex-wrap justify-center gap-2 max-w-[680px] animate-fade-up ${backendStatus !== 'ready' ? 'opacity-50 pointer-events-none' : ''}`}
-            style={{ animationDelay: '300ms' }}
-          >
-            {[
-              'What is quantum computing?',
-              'Latest AI breakthroughs in 2026',
-              'How does mRNA vaccine work?',
-            ].map((suggestion) => (
-              <button
-                key={suggestion}
-                type="button"
-                onClick={() => threadId && onSearch(suggestion, threadId)}
-                className="px-4 py-2 text-xs text-muted-foreground rounded-full border border-border bg-card hover:bg-secondary hover:text-foreground transition-all duration-200 cursor-pointer"
-              >
-                {suggestion}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
