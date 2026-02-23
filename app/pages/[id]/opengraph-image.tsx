@@ -2,7 +2,9 @@ import { ImageResponse } from 'next/og'
 import { redis } from '@/lib/redis'
 
 // Route segment config
-export const runtime = 'edge'
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // Image metadata
 export const alt = 'Omni Knows Pages'
@@ -14,35 +16,41 @@ export const size = {
 export const contentType = 'image/png'
 
 // Image generation
-export default async function Image({ params }: { params: Promise<{ id: string }> }) {
-    const { id } = await params
+export default async function Image({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+    // Handle params whether it's a Promise or not
+    const resolvedParams = await params
+    const id = resolvedParams?.id
 
     let title = 'AI Research Report'
-    try {
-        const rawData = await redis.get(`publish:${id}`)
-        if (rawData) {
-            const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
-            title = data.title || 'AI Research Report'
+
+    if (id) {
+        try {
+            const rawData = await redis.get(`publish:${id}`)
+            if (rawData) {
+                const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
+                title = data.title || 'AI Research Report'
+            }
+        } catch (error) {
+            console.error('Failed to fetch title for OG image:', error)
         }
-    } catch (error) {
-        console.error('Failed to fetch title for OG image:', error)
     }
 
-    // Get first 20 characters, only truncate if exceeds 20
-    const displayTitle = title.length > 20 ? title.slice(0, 20).trim() + '...' : title
+    // Get characters for display, only truncate if exceeds 30
+    const displayTitle = title.length > 30 ? title.slice(0, 30).trim() + '...' : title
     const len = displayTitle.length
 
     // Dynamically adjust font size based on length
     let fontSize = 110
-    if (len <= 4) fontSize = 240
-    else if (len <= 7) fontSize = 200
-    else if (len <= 10) fontSize = 160
-    else if (len <= 14) fontSize = 130
-    else if (len <= 17) fontSize = 110
-    else fontSize = 100
+    if (len <= 4) fontSize = 200
+    else if (len <= 7) fontSize = 180
+    else if (len <= 10) fontSize = 140
+    else if (len <= 14) fontSize = 110
+    else if (len <= 20) fontSize = 90
+    else fontSize = 80
 
     const siteUrl = 'https://omniknows.xyz'
-    const backgroundImage = `${siteUrl}/omniknows_canvas.png?v=${Date.now()}`
+    // Use a static background image URL to avoid caching issues and unnecessary fetches
+    const backgroundImage = `${siteUrl}/omniknows_canvas.png`
 
     return new ImageResponse(
         (
