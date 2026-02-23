@@ -41,8 +41,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     else if (len <= 17) fontSize = 110
     else fontSize = 100
 
-    // Use local URL in development, production URL in build
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+    const siteUrl = 'https://omniknows.xyz'
     const backgroundImage = `${siteUrl}/omniknows_canvas.png?v=${Date.now()}`
 
     return new ImageResponse(
