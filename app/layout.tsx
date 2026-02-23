@@ -23,10 +23,10 @@ export const metadata: Metadata = {
     siteName: 'Omni Knows',
     images: [
       {
-        url: '/android-chrome-512x512.png',
-        width: 512,
-        height: 512,
-        alt: 'Omni Knows Logo',
+        url: '/open_graph_cover.png',
+        width: 1200,
+        height: 630,
+        alt: 'Omni Knows - Advanced AI Research Agent',
       },
     ],
     locale: 'en_US',
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Omni Knows - Advanced AI Research Agent',
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
-    images: ['/android-chrome-512x512.png'],
+    images: ['/open_graph_cover.png'],
     creator: '@omniknows',
   },
   icons: {
