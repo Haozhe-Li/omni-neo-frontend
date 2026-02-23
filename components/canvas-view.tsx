@@ -128,7 +128,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
       if (!res.ok) throw new Error('Failed to publish')
       const { id } = await res.json()
-      const url = `${window.location.origin}/publish/${id}`
+      const url = `${window.location.origin}/pages/${id}`
 
       if (typeof navigator !== 'undefined') {
         await navigator.clipboard.writeText(url)
