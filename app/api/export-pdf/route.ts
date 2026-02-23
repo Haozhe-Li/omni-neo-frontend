@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import puppeteer from 'puppeteer'
+import puppeteer from 'puppeteer-core'
+import chromium from '@sparticuz/chromium'
 import { marked } from 'marked'
 import fs from 'fs'
 import path from 'path'
@@ -403,25 +404,78 @@ export async function POST(req: NextRequest) {
     const iconBase64 = getIconBase64()
     const html = buildHtml(markdown, title, iconBase64, sources)
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--font-render-hinting=none',
-        '--disable-web-security',
-      ],
-    })
+    let browser;
+    const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+
+    if (isVercel) {
+      browser = await puppeteer.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      })
+    } else {
+      // Local development
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--font-render-hinting=none',
+          '--disable-web-security',
+        ],
+        // You might need to specify the path to your local Chrome/Chromium here if puppeteer-core can't find it
+        // executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', 
+      })
+    }
 
     const page = await browser.newPage()
 
     // Accept Chinese content and allow Google Fonts to load
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' })
-    await page.setContent(html, { waitUntil: 'networkidle0' })
+    // Use domcontentloaded instead of networkidle0 to avoid hanging on slow resources
+    await page.setContent(html, { waitUntil: 'domcontentloaded' })
 
     // Wait for web fonts (Noto Sans SC etc.) to finish loading
     await page.evaluateHandle('document.fonts.ready')
+
+    // Give images up to 5 seconds to load, then proceed anyway to prevent hanging
+    await page.evaluate(() => {
+      return new Promise<void>((resolve) => {
+        const images = Array.from(document.querySelectorAll('img'))
+        if (images.length === 0) { resolve(); return }
+
+        let remaining = images.length
+        const IMAGE_TIMEOUT_MS = 5000
+
+        const done = () => { if (--remaining <= 0) resolve() }
+
+        images.forEach((img) => {
+          if (img.complete && img.naturalWidth > 0) {
+            done()
+            return
+          }
+
+          const timer = setTimeout(() => {
+            replaceBroken(img)
+            done()
+          }, IMAGE_TIMEOUT_MS)
+
+          img.addEventListener('load', () => { clearTimeout(timer); done() }, { once: true })
+          img.addEventListener('error', () => { clearTimeout(timer); replaceBroken(img); done() }, { once: true })
+        })
+
+        function replaceBroken(img: HTMLImageElement) {
+          const alt = img.alt || 'Image unavailable'
+          const placeholder = document.createElement('div')
+          placeholder.style.cssText =
+            'padding:12px 16px;background:#e8e7e2;border:1px dashed #c0bfba;border-radius:6px;' +
+            'color:#6b6b60;font-size:9pt;text-align:center;margin:3mm auto;max-width:60%;'
+          placeholder.textContent = `[${alt}]`
+          img.replaceWith(placeholder)
+        }
+      })
+    })
 
     const pdfUint8 = await page.pdf({
       format: 'A4',
