@@ -252,26 +252,67 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       toast.success('Downloaded as Text')
     } else if (format === 'pdf') {
       setIsPdfLoading(true)
-      const toastId = toast.loading('Generating PDF...')
       try {
-        const res = await fetch('/api/export-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ markdown: initialAnswer, title: title || 'report', sources }),
-        })
-        if (!res.ok) throw new Error('PDF generation failed')
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${normalizeFilename(title || 'answer')}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        toast.success('PDF downloaded!', { id: toastId })
+        // 1. Get the content
+        const contentHtml = containerRef.current?.innerHTML || ''
+
+        // 2. Create a hidden iframe for printing
+        const iframe = document.createElement('iframe')
+        iframe.style.position = 'fixed'
+        iframe.style.right = '0'
+        iframe.style.bottom = '0'
+        iframe.style.width = '0'
+        iframe.style.height = '0'
+        iframe.style.border = '0'
+        document.body.appendChild(iframe)
+
+        const doc = iframe.contentWindow?.document
+        if (!doc) throw new Error('Could not create print document')
+
+        // 3. Prepare the print document
+        // We include a simple but elegant print stylesheet
+        doc.write(`
+          <html lang="zh-CN">
+            <head>
+              <title>${title || 'Research Report'}</title>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #1a1a18; padding: 20mm; }
+                .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
+                h1 { font-size: 24pt; margin-bottom: 10pt; color: #1a1a18; }
+                h2 { font-size: 18pt; margin-top: 20pt; border-bottom: 1px solid #eee; padding-bottom: 5pt; }
+                img { max-width: 100%; height: auto; border-radius: 8px; margin: 10pt 0; }
+                pre { background: #f5f4ef; padding: 10pt; border-radius: 5pt; overflow-x: auto; font-family: monospace; font-size: 10pt; }
+                blockquote { border-left: 4px solid #20B2AA; padding-left: 10pt; font-style: italic; color: #666; }
+                table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
+                th, td { border: 1px solid #eee; padding: 8pt; text-align: left; }
+                a { color: #20B2AA; text-decoration: none; }
+                @page { size: A4; margin: 0; }
+                @media print {
+                  body { padding: 15mm; }
+                  .page-break { page-break-before: always; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="report-content">
+                ${contentHtml}
+              </div>
+              <script>
+                // Small delay to ensure images are ready
+                window.onload = () => {
+                  window.print();
+                  setTimeout(() => { window.frameElement.remove(); }, 100);
+                }
+              </script>
+            </body>
+          </html>
+        `)
+        doc.close()
+
+        toast.success('Print dialog opened. Choose "Save as PDF".')
       } catch (e) {
-        toast.error('Failed to generate PDF', { id: toastId })
+        console.error('Print error:', e)
+        toast.error('Failed to open print dialog')
       } finally {
         setIsPdfLoading(false)
       }
