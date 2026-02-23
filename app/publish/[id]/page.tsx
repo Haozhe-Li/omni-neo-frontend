@@ -2,25 +2,52 @@ import { redis } from '@/lib/redis'
 import { FinalAnswer } from '@/components/final-answer'
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
+import Link from 'next/link'
 
 interface PublishPageProps {
     params: Promise<{ id: string }>
 }
+
+const SITE_URL = 'https://omniknows.xyz'
+const SITE_NAME = 'Omni Knows'
+const LOGO_URL = `${SITE_URL}/android-chrome-512x512.png`
 
 export async function generateMetadata({ params }: PublishPageProps): Promise<Metadata> {
     const { id } = await params
     const rawData = await redis.get(`publish:${id}`)
 
     if (!rawData) {
-        return {
-            title: 'Report Not Found',
-        }
+        return { title: `Report Not Found | ${SITE_NAME}` }
     }
 
     const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
+    const reportTitle = data.title || 'AI Research Report'
+    const description = data.answer
+        ? String(data.answer).replace(/<[^>]+>/g, '').slice(0, 160).trimEnd() + '…'
+        : `An AI-generated research report created with ${SITE_NAME}.`
+    const pageUrl = `${SITE_URL}/publish/${id}`
+
     return {
-        title: data.title || 'Canvas Report',
-        description: 'A shared canvas report.',
+        title: `${reportTitle} | ${SITE_NAME}`,
+        description,
+        openGraph: {
+            type: 'article',
+            title: reportTitle,
+            description,
+            url: pageUrl,
+            siteName: SITE_NAME,
+            images: [{ url: LOGO_URL, width: 512, height: 512, alt: `${SITE_NAME} Logo` }],
+            locale: 'en_US',
+        },
+        twitter: {
+            card: 'summary_large_image',
+            title: reportTitle,
+            description,
+            images: [LOGO_URL],
+            creator: '@omniknows',
+        },
+        robots: { index: true, follow: true },
+        alternates: { canonical: pageUrl },
     }
 }
 
@@ -28,15 +55,14 @@ export default async function PublishPage({ params }: PublishPageProps) {
     const { id } = await params
     const rawData = await redis.get(`publish:${id}`)
 
-    if (!rawData) {
-        notFound()
-    }
+    if (!rawData) notFound()
 
     const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
 
     return (
-        <div className="min-h-screen bg-[var(--background)] py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-[1200px] mx-auto">
+        <div className="min-h-screen bg-[var(--background)] flex flex-col py-8 px-4 sm:px-6">
+            {/* Report card */}
+            <div className="max-w-[1200px] w-full mx-auto flex-1">
                 <FinalAnswer
                     answer={data.answer}
                     sources={data.sources}
@@ -45,6 +71,35 @@ export default async function PublishPage({ params }: PublishPageProps) {
                     isReadOnly={true}
                 />
             </div>
+
+            {/* Footer */}
+            <footer className="max-w-[1200px] w-full mx-auto mt-8 pt-4 border-t border-border">
+                <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
+                    <p>
+                        © {new Date().getFullYear()}{' '}
+                        <Link
+                            href="https://omniknows.xyz"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors"
+                        >
+                            Omni Knows
+                        </Link>
+                        {'. All rights reserved.'}
+                    </p>
+                    <p>
+                        Made with love by{' '}
+                        <Link
+                            href="https://haozhe.li"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors"
+                        >
+                            Haozhe Li
+                        </Link>
+                    </p>
+                </div>
+            </footer>
         </div>
     )
 }

@@ -424,10 +424,13 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
         <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
           <p>
-            &copy; {new Date().getFullYear()} <a href="/" className="hover:text-foreground transition-colors">Omni Knows</a>. All rights reserved.
+            &copy; {new Date().getFullYear()}{' '}
+            <a href="https://omniknows.xyz" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors">Omni Knows</a>
+            {'. All rights reserved.'}
           </p>
           <p>
-            Made with love by <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors underline decoration-border hover:decoration-foreground">Haozhe Li</a>
+            Made with love by{' '}
+            <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors">Haozhe Li</a>
           </p>
         </div>
       </footer>
