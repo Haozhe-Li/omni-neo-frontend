@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: PublishPageProps): Promise<Me
     const rawData = await redis.get(`publish:${id}`)
 
     if (!rawData) {
-        return { title: `Report Not Found | ${SITE_NAME}` }
+        return { title: { absolute: `Report Not Found | ${SITE_NAME}` } }
     }
 
     const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: PublishPageProps): Promise<Me
     const pageUrl = `${SITE_URL}/publish/${id}`
 
     return {
-        title: `${reportTitle} | ${SITE_NAME}`,
+        title: { absolute: `${reportTitle} | ${SITE_NAME}` },
         description,
         openGraph: {
             type: 'article',

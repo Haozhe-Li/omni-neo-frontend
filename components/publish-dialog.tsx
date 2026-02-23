@@ -90,12 +90,12 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                                     className={`
                                         relative flex flex-col items-center gap-2 p-3 rounded-lg border text-center transition-all duration-150
                                         ${selected === opt.id
-                                            ? 'border-accent bg-accent/5 text-foreground'
-                                            : 'border-border bg-background text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground'
+                                            ? 'border-accent bg-accent/[0.07] text-foreground'
+                                            : 'border-border bg-background text-muted-foreground hover:border-border/80 hover:bg-muted/40 hover:text-foreground'
                                         }
                                     `}
                                 >
-                                    <span className={`p-1.5 rounded-md transition-colors ${selected === opt.id ? 'bg-accent text-white' : 'bg-secondary'}`}>
+                                    <span className={`p-1.5 rounded-md transition-colors ${selected === opt.id ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
                                         {opt.icon}
                                     </span>
                                     <span className="text-[12px] font-semibold leading-tight">{opt.label}</span>
