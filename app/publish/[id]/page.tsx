@@ -10,7 +10,7 @@ interface PublishPageProps {
 
 const SITE_URL = 'https://omniknows.xyz'
 const SITE_NAME = 'Omni Knows'
-const COVER_URL = `${SITE_URL}/open_graph_cover.png`
+const COVER_URL = `${SITE_URL}/omniknows_canvas.png`
 
 export async function generateMetadata({ params }: PublishPageProps): Promise<Metadata> {
     const { id } = await params
