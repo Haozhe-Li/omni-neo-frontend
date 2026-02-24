@@ -12,6 +12,7 @@ import type { SSEMessage, TodoItem } from '@/lib/types'
 import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
+import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk } from '@clerk/nextjs'
 
@@ -829,6 +830,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     fetchHelper(currentInput, false, chatMessages, currentFollowUp)
   }
 
+  const handleChatInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!shouldSubmitOnEnter(e)) return
+    e.preventDefault()
+    handleChatSend()
+  }
+
   const getDurationForTitle = async () => {
     try {
       if (isUntitledTitle(query)) return
@@ -1111,7 +1118,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}
+                  onKeyDown={handleChatInputKeyDown}
                   placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan or ask a follow-up...'}
                   disabled={isQuotaLocked || isChatLoading || isResearching}
                   className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"

@@ -10,6 +10,7 @@ import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
+import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
 import { useAuth } from '@clerk/nextjs'
 
@@ -432,6 +433,12 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     toast.info('Feature coming soon')
   }
 
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!shouldSubmitOnEnter(e)) return
+    e.preventDefault()
+    handleSend()
+  }
+
   return (
     <div className="flex flex-col h-full bg-[var(--background)] relative" ref={containerRef}>
       <TextSelectionMenu
@@ -574,7 +581,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            onKeyDown={handleInputKeyDown}
             placeholder="Ask a follow-up..."
             disabled={isLoading}
             className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"

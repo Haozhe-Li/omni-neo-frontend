@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth } from '@clerk/nextjs'
+import { shouldSubmitOnEnter } from '@/lib/keyboard'
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string) => void
@@ -226,11 +227,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void handleSubmit(e as unknown as React.FormEvent)
-    }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!shouldSubmitOnEnter(e, { isMenuOpen: modelDropdownOpen })) return
+    e.preventDefault()
+    void handleSubmit(e as unknown as React.FormEvent)
   }
 
   const selectedModelLabel = model === 'auto' ? 'Auto' : model === 'canvas' ? 'Canvas' : 'Light'
