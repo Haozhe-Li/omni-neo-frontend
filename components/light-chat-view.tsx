@@ -28,6 +28,16 @@ interface Message {
   follow_up_content?: string
 }
 
+const isUntitledTitle = (value?: string) => {
+  const normalized = (value || '').trim().toLowerCase()
+  return !normalized || normalized === 'untitled' || normalized === 'untitled chat'
+}
+
+const inferTitleFromMessages = (messages: Message[], fallback: string) => {
+  const firstUserMessage = messages.find((message) => message.role === 'user' && typeof message.content === 'string' && message.content.trim())
+  return firstUserMessage?.content?.trim() || fallback
+}
+
 export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: LightChatViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
@@ -55,7 +65,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
       return message
     })
     const body: Record<string, unknown> = { messages: payloadMessages }
-    if (syncTitle) body.title = syncTitle
+    if (syncTitle && !isUntitledTitle(syncTitle)) body.title = syncTitle
     fetchWithAuth(`${backendUrl}/api/threads/${threadId}/sync`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -73,6 +83,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   useEffect(() => {
     const fetchTitle = async () => {
       try {
+        if (isUntitledTitle(query)) return
         const apiEndpoint =
           process.env.NEXT_PUBLIC_USE_MOCK === 'true'
             ? '/api/mock-get-title'
@@ -101,7 +112,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 const chatData = JSON.parse(stored)
                 chatData.title = data
                 localStorage.setItem(threadId, JSON.stringify(chatData))
-                syncToBackend(chatData.chat_history || [], data)
+                syncToBackend(Array.isArray(chatData.chat_history) ? chatData.chat_history : [], data)
               } catch (e) { }
             }
           }
@@ -115,7 +126,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 const chatData = JSON.parse(stored)
                 chatData.title = data.title
                 localStorage.setItem(threadId, JSON.stringify(chatData))
-                syncToBackend(chatData.chat_history || [], data.title)
+                syncToBackend(Array.isArray(chatData.chat_history) ? chatData.chat_history : [], data.title)
               } catch (e) { }
             }
           }
@@ -141,7 +152,12 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             const data = await res.json()
             if (Array.isArray(data?.messages) && data.messages.length > 0) {
               const remoteMessages = data.messages as Message[]
+              const remoteRawTitle = typeof data?.title === 'string' ? data.title.trim() : ''
+              const resolvedTitle = isUntitledTitle(remoteRawTitle)
+                ? inferTitleFromMessages(remoteMessages, query)
+                : remoteRawTitle
               setMessages(remoteMessages)
+              setTitle(resolvedTitle)
               setIsLoading(false)
 
               if (typeof window !== 'undefined') {
@@ -152,9 +168,13 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                   model: 'light',
                   chat_history: remoteMessages,
                   timestamp: Date.now(),
-                  title: title || query
+                  title: resolvedTitle
                 }
                 localStorage.setItem(threadId, JSON.stringify(historyData))
+              }
+
+              if (isUntitledTitle(remoteRawTitle) && !isUntitledTitle(resolvedTitle)) {
+                syncToBackend(remoteMessages, resolvedTitle)
               }
               return
             }

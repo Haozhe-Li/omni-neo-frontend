@@ -559,9 +559,9 @@ export default function SettingsPage() {
                                         className="w-full p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between hover:bg-[var(--secondary)]/30 transition-colors group"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-[var(--secondary)] flex items-center justify-center shrink-0">
+                                            {/* <div className="w-8 h-8 rounded-lg bg-[var(--secondary)] flex items-center justify-center shrink-0">
                                                 <Settings size={14} className="text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors" />
-                                            </div>
+                                            </div> */}
                                             <div className="text-left">
                                                 <span className="block text-sm font-medium text-[var(--foreground)]">Manage Account</span>
                                                 <span className="block text-xs text-[var(--muted-foreground)]">Profile, email, security, and connected accounts</span>

@@ -64,6 +64,16 @@ interface ResearchBlock {
   title: string
 }
 
+const isUntitledTitle = (value?: string) => {
+  const normalized = (value || '').trim().toLowerCase()
+  return !normalized || normalized === 'untitled' || normalized === 'untitled chat'
+}
+
+const inferTitleFromMessages = (messages: Array<{ role?: string; content?: string }>, fallback: string) => {
+  const firstUserMessage = messages.find((message) => message?.role === 'user' && typeof message?.content === 'string' && message.content.trim())
+  return firstUserMessage?.content?.trim() || fallback
+}
+
 export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen }: CanvasViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
@@ -129,7 +139,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       return message
     })
     const body: Record<string, unknown> = { messages: payloadMessages }
-    if (syncTitle) body.title = syncTitle
+    if (syncTitle && !isUntitledTitle(syncTitle)) body.title = syncTitle
     fetchWithAuth(`${backendUrl}/api/threads/${threadId}/sync`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -453,6 +463,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             const data = await res.json()
             if (Array.isArray(data?.messages) && data.messages.length > 0) {
               const remoteMessages = data.messages as ChatMessage[]
+              const remoteRawTitle = typeof data?.title === 'string' ? data.title.trim() : ''
+              const resolvedTitle = isUntitledTitle(remoteRawTitle)
+                ? inferTitleFromMessages(remoteMessages, query)
+                : remoteRawTitle
               const firstMessage = remoteMessages[0]
               const remoteCanvasState =
                 firstMessage &&
@@ -476,6 +490,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   : []
 
               setChatMessages(remoteMessages)
+              setTitle(resolvedTitle)
               setRewrittenQuery(recoveredRewrittenQuery)
               setResearchBlocks(recoveredResearchBlocks)
               setResearchTriggerIndex(recoveredResearchTriggerIndex)
@@ -494,9 +509,17 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   researchTriggerIndex: recoveredResearchTriggerIndex,
                   timestamp: Date.now(),
                   model: 'canvas',
-                  title: title || query,
+                  title: resolvedTitle,
                 }
                 localStorage.setItem(threadId, JSON.stringify(chatData))
+              }
+
+              if (isUntitledTitle(remoteRawTitle) && !isUntitledTitle(resolvedTitle)) {
+                syncToBackend(remoteMessages, resolvedTitle, {
+                  rewrittenQuery: recoveredRewrittenQuery,
+                  researchBlocks: recoveredResearchBlocks,
+                  researchTriggerIndex: recoveredResearchTriggerIndex,
+                })
               }
               return
             }
@@ -689,6 +712,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   const getDurationForTitle = async () => {
     try {
+      if (isUntitledTitle(query)) return
       const apiEndpoint = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
         ? '/api/mock-get-title'
         : process.env.NEXT_PUBLIC_BACKEND_URL
