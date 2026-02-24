@@ -2,24 +2,26 @@ import { NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
     try {
-        // TODO: Replace with your actual backend endpoint
-        const BACKEND_URL = process.env.BACKEND_URL || 'http://your-backend-url.com'
-        const targetUrl = BACKEND_URL.endsWith('/') ? `${BACKEND_URL}get_thread_id` : `${BACKEND_URL}/get_thread_id`
+        const backendBaseUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
+        const targetUrl = backendBaseUrl.endsWith('/') ? `${backendBaseUrl}get_thread_id` : `${backendBaseUrl}/get_thread_id`
+
+        const authHeader = request.headers.get('authorization')
+        const guestHeader = request.headers.get('x-guest-id')
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        }
+        if (authHeader) headers['Authorization'] = authHeader
+        if (guestHeader) headers['X-Guest-Id'] = guestHeader
 
         const response = await fetch(targetUrl, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers,
         })
 
         if (!response.ok) {
-            // If backend fails, maybe return a generated UUID or error?
-            // For now, let's propagate the error or return a fallback
             console.warn(`Backend responded with status: ${response.status}`)
-            // Fallback ID generation if backend is down but we want to proceed?
-            // return new Response(JSON.stringify({ thread_id: crypto.randomUUID() }), { status: 200 })
-            throw new Error(`Backend responded with status: ${response.status}`)
+            const errorText = await response.text()
+            return new Response(errorText || 'Request failed', { status: response.status })
         }
 
         const data = await response.json()

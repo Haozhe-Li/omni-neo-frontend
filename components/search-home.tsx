@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Sparkles, Menu, ChevronDown, Check } from 'lucide-react'
+import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock } from 'lucide-react'
+import { useApi } from '@/hooks/useApi'
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string) => void
@@ -10,9 +11,10 @@ interface SearchHomeProps {
   isMobile?: boolean
   model?: 'auto' | 'canvas' | 'light'
   onModelChange?: (model: 'auto' | 'canvas' | 'light') => void
+  quotaExceeded?: boolean
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange, quotaExceeded = false }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
@@ -79,6 +81,42 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   const [backendStatus, setBackendStatus] = useState<'unknown' | 'ready' | 'not-ready'>('unknown')
   const [isCheckPending, setIsCheckPending] = useState(true)
+  const { fetchWithAuth } = useApi()
+
+  const createLocalFallbackThreadId = useCallback(() => {
+    const fallbackId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    setThreadId(fallbackId)
+    return fallbackId
+  }, [])
+
+  const fetchThreadId = useCallback(async () => {
+    if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
+      const mockId = 'mock-thread-id-' + Date.now()
+      setThreadId(mockId)
+      return mockId
+    }
+
+    const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+    const endpoint = `${backendUrl}/get_thread_id`
+
+    try {
+      const res = await fetchWithAuth(endpoint)
+      if (res.ok) {
+        const data = await res.json()
+        if (data && typeof data === 'string') {
+          setThreadId(data)
+          return data as string
+        }
+        if (data && data.thread_id) {
+          setThreadId(data.thread_id)
+          return data.thread_id as string
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch thread ID', e)
+    }
+    return null
+  }, [fetchWithAuth])
 
   // Use refs for the interval ID to keep it accessible in cleanup
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
@@ -138,36 +176,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       }
     }
 
-    // Initialize thread ID
-    const fetchThreadId = async () => {
-      if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
-        const mockId = 'mock-thread-id-' + Date.now()
-        setThreadId(mockId)
-        return mockId
-      }
-
-      const endpoint = process.env.NEXT_PUBLIC_BACKEND_URL
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/get_thread_id`
-        : '/api/get_thread_id'
-
-      try {
-        const res = await fetch(endpoint)
-        if (res.ok) {
-          const data = await res.json()
-          if (data && typeof data === 'string') {
-            setThreadId(data)
-            return data
-          } else if (data && data.thread_id) {
-            setThreadId(data.thread_id)
-            return data.thread_id as string
-          }
-        }
-      } catch (e) {
-        console.error('Failed to fetch thread ID', e)
-      }
-      return null
-    }
-
     // 1. Check local storage first
     const stored = getStoredStatus()
     if (stored === 'ready') {
@@ -180,34 +188,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       intervalIdRef.current = setInterval(checkHealth, 5000)
     }
 
-    fetchThreadId()
-
     return () => {
       if (intervalIdRef.current) {
         clearInterval(intervalIdRef.current)
       }
     }
-  }, [])
-
-  // Re-fetch thread ID if backend becomes ready and we don't have one
-  useEffect(() => {
-    if (backendStatus === 'ready' && !threadId) {
-      const fetchAgain = async () => {
-        const endpoint = process.env.NEXT_PUBLIC_BACKEND_URL
-          ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/get_thread_id`
-          : '/api/get_thread_id'
-        try {
-          const res = await fetch(endpoint)
-          if (res.ok) {
-            const data = await res.json()
-            if (data && typeof data === 'string') setThreadId(data)
-            else if (data && data.thread_id) setThreadId(data.thread_id)
-          }
-        } catch (e) { }
-      }
-      fetchAgain()
-    }
-  }, [backendStatus, threadId])
+  }, [fetchThreadId])
 
 
   // Auto-resize textarea
@@ -224,28 +210,23 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }, [query])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (backendStatus !== 'ready') return
 
     // Ensure threadId is present
-    if (!threadId) {
-      console.warn("Thread ID missing, attempting to fetch...")
-      // We can't easily await here without refactoring `fetchThreadId` out of useEffect
-      // But the useEffect above should catch it.
-      // If still missing, we might want to block or show error.
-      return
-    }
+    const activeThreadId = threadId || await fetchThreadId() || createLocalFallbackThreadId()
+    if (!activeThreadId) return
 
     if (query.trim()) {
-      onSearch(query.trim(), threadId)
+      onSearch(query.trim(), activeThreadId)
     }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSubmit(e)
+      void handleSubmit(e as unknown as React.FormEvent)
     }
   }
 
@@ -335,10 +316,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
-                disabled={backendStatus !== 'ready' || !threadId}
+                disabled={backendStatus !== 'ready'}
                 placeholder={
                   backendStatus === 'ready'
-                    ? (threadId ? "Ask anything..." : "Initializing session...")
+                    ? "Ask anything..."
                     : isCheckPending
                       ? "Connecting to brain..."
                       : "Backend is not ready, please wait..."
@@ -366,31 +347,44 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
                         { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
                         { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
-                      ].map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            onModelChange?.(opt.value)
-                            setModelDropdownOpen(false)
-                          }}
-                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
+                      ].map((opt) => {
+                        const isDisabled = quotaExceeded && (opt.value === 'canvas' || opt.value === 'auto')
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            disabled={isDisabled}
+                            onClick={() => {
+                              if (isDisabled) return
+                              onModelChange?.(opt.value)
+                              setModelDropdownOpen(false)
+                            }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors ${
+                              isDisabled
+                                ? 'opacity-40 cursor-not-allowed'
+                                : `hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`
                             }`}
-                        >
-                          <div className="flex flex-col">
-                            <span className="text-[13px] font-medium">{opt.label}</span>
-                            <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">{opt.desc}</span>
-                          </div>
-                          {model === opt.value && <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />}
-                        </button>
-                      ))}
+                          >
+                            <div className="flex flex-col">
+                              <span className="text-[13px] font-medium flex items-center gap-1.5">
+                                {opt.label}
+                                {isDisabled && <Lock className="h-3 w-3" />}
+                              </span>
+                              <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                                {isDisabled ? 'Daily quota reached — sign in for unlimited' : opt.desc}
+                              </span>
+                            </div>
+                            {!isDisabled && model === opt.value && <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />}
+                          </button>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
 
                 <button
                   type="submit"
-                  disabled={!query.trim() || backendStatus !== 'ready' || !threadId}
+                  disabled={!query.trim() || backendStatus !== 'ready'}
                   className={`
                     flex items-center justify-center h-9 w-9 rounded-xl transition-all duration-200
                     ${query.trim() && backendStatus === 'ready'

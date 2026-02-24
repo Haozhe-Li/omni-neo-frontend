@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowLeft, ArrowUp, Copy, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
@@ -8,8 +8,10 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getUserLocation } from '@/lib/location'
-import { getLocalISOString } from '@/lib/utils'
+import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
+import { useApi } from '@/hooks/useApi'
+import { useAuth } from '@clerk/nextjs'
 
 interface LightChatViewProps {
   query: string
@@ -27,6 +29,8 @@ interface Message {
 }
 
 export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: LightChatViewProps) {
+  const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+  const { isSignedIn } = useAuth()
   const [messages, setMessages] = useState<Message[]>([
     { role: 'user', content: query },
     { role: 'assistant', content: '...' } // Loading placeholder
@@ -39,10 +43,28 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
   const [title, setTitle] = useState(query)
 
+  const { fetchWithAuth } = useApi()
+
+  const syncToBackend = useCallback((msgs: Message[], syncTitle?: string) => {
+    if (!threadId || isMockMode || !isSignedIn) return
+    const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+    const payloadMessages = msgs.map((message, index) => {
+      if (index === 0) {
+        return { ...message, mode: 'light' }
+      }
+      return message
+    })
+    const body: Record<string, unknown> = { messages: payloadMessages }
+    if (syncTitle) body.title = syncTitle
+    fetchWithAuth(`${backendUrl}/api/threads/${threadId}/sync`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).catch(() => { /* fire-and-forget */ })
+  }, [threadId, fetchWithAuth, isMockMode, isSignedIn])
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
-
   useEffect(() => {
     scrollToBottom()
   }, [messages])
@@ -79,6 +101,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 const chatData = JSON.parse(stored)
                 chatData.title = data
                 localStorage.setItem(threadId, JSON.stringify(chatData))
+                syncToBackend(chatData.chat_history || [], data)
               } catch (e) { }
             }
           }
@@ -92,6 +115,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 const chatData = JSON.parse(stored)
                 chatData.title = data.title
                 localStorage.setItem(threadId, JSON.stringify(chatData))
+                syncToBackend(chatData.chat_history || [], data.title)
               } catch (e) { }
             }
           }
@@ -108,28 +132,49 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   // Load from LocalStorage OR Fetch initial
   useEffect(() => {
     const initChat = async () => {
-      // 1. Try LocalStorage
+      // 1. Try backend persisted thread messages first (cross-device sync)
+      if (!isMockMode && isSignedIn) {
+        try {
+          const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+          const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadId}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data?.messages) && data.messages.length > 0) {
+              const remoteMessages = data.messages as Message[]
+              setMessages(remoteMessages)
+              setIsLoading(false)
+
+              if (typeof window !== 'undefined') {
+                const historyData = {
+                  thread_id: threadId,
+                  query,
+                  type: 'light',
+                  model: 'light',
+                  chat_history: remoteMessages,
+                  timestamp: Date.now(),
+                  title: title || query
+                }
+                localStorage.setItem(threadId, JSON.stringify(historyData))
+              }
+              return
+            }
+          }
+        } catch {
+          // Fall through to local cache and then fresh fetch
+        }
+      }
+
+      // 2. Fallback to localStorage
       if (typeof window !== 'undefined' && threadId) {
         const stored = localStorage.getItem(threadId)
         if (stored) {
           try {
             const data = JSON.parse(stored)
-            if (data.thread_id === threadId) {
-              // 1. Check for Light Mode history (Preferred)
-              if (data.type === 'light' && data.chat_history && Array.isArray(data.chat_history)) {
-                setMessages(data.chat_history)
-                if (data.title) setTitle(data.title)
-                setIsLoading(false)
-                return
-              }
-
-              // 2. Fallback: Check for Canvas Mode history (if we want to support viewing it)
-              // Canvas uses `messages` (SSE steps) and `final_answer`.
-              // For now, if we are in Light mode but open a Canvas thread, we might just show the final answer?
-              // Or better, if `messages` exists but it's not light mode, we might want to try to render what we can.
-              // But for the specific bug "history not saving/restoring in light mode", the above check fixes it.
-
-              // Let's keep the existing check for safety/compatibility if needed, but the above is what matters.
+            if (data.thread_id === threadId && data.type === 'light' && data.chat_history && Array.isArray(data.chat_history)) {
+              setMessages(data.chat_history)
+              if (data.title) setTitle(data.title)
+              setIsLoading(false)
+              return
             }
           } catch (e) {
             console.error("Failed to parse storage", e)
@@ -137,7 +182,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         }
       }
 
-      // 2. If no valid history, start fresh fetch
+      // 3. If no valid history, start fresh fetch
       setIsLoading(true)
       try {
         const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
@@ -175,13 +220,17 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
         appendQueryToMemoryQueue(query)
 
-        const res = await fetch(endpoint, {
+        const res = await fetchWithAuth(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         })
 
-        if (!res.ok) throw new Error("Failed to fetch")
+        if (!res.ok) {
+          const message = getAiRequestErrorMessage(res.status)
+          toast.error(message)
+          throw new Error(message)
+        }
 
         let data = await res.json()
         // Handle double-encoded JSON if necessary
@@ -217,13 +266,15 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             title: title || query
           }
           localStorage.setItem(threadId, JSON.stringify(historyData))
+          syncToBackend(newMessages, historyData.title)
         }
 
       } catch (e) {
         console.error(e)
+        const errorMessage = e instanceof Error ? e.message : '请求失败，请稍后重试。'
         setMessages(prev => {
           const copy = [...prev]
-          copy[1] = { role: 'assistant', content: "Sorry, something went wrong." }
+          copy[1] = { role: 'assistant', content: errorMessage }
           return copy
         })
         setIsLoading(false)
@@ -231,7 +282,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     }
 
     initChat()
-  }, [threadId]) // Only run once per threadId change
+  }, [threadId, query, fetchWithAuth, isMockMode, isSignedIn])
 
   // We don't really have a "chat" continuation in the requirements, just "Light chat rendering is traditional chatbot page".
   // But usually chatbot implies continuation. I'll add a simple input for "continuation" even if backend might not support context yet (the user didn't specify context behavior for light chat, just /light_chat endpoint).
@@ -260,6 +311,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         title: title || query
       }
       localStorage.setItem(threadId, JSON.stringify(historyData))
+      syncToBackend(newHistory, historyData.title)
     }
 
     try {
@@ -300,13 +352,17 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
       appendQueryToMemoryQueue(input)
 
-      const res = await fetch(endpoint, {
+      const res = await fetchWithAuth(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
 
-      if (!res.ok) throw new Error("Failed to fetch")
+      if (!res.ok) {
+        const message = getAiRequestErrorMessage(res.status)
+        toast.error(message)
+        throw new Error(message)
+      }
 
       let data = await res.json()
       if (typeof data === 'string') {
@@ -318,32 +374,27 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
       const answer = data.answer || (typeof data === 'string' ? data : "No answer returned.")
       const use_search = !!data.use_search
 
-      setMessages(prev => {
-        const copy = [...prev]
-        // Replace loading
-        copy[copy.length - 1] = { role: 'assistant', content: answer, use_search }
-
-        // Save
-        if (threadId) {
-          const historyData = {
-            thread_id: threadId,
-            query: query, // Main query remains the first one?
-            type: 'light',
-            model: 'light',
-            chat_history: copy,
-            timestamp: Date.now(),
-            title: title || query
-          }
-          localStorage.setItem(threadId, JSON.stringify(historyData))
+      const finalMessages: Message[] = [...newHistory, { role: 'assistant', content: answer, use_search }]
+      setMessages(finalMessages)
+      if (threadId) {
+        const historyData = {
+          thread_id: threadId,
+          query: query,
+          type: 'light',
+          model: 'light',
+          chat_history: finalMessages,
+          timestamp: Date.now(),
+          title: title || query
         }
-
-        return copy
-      })
+        localStorage.setItem(threadId, JSON.stringify(historyData))
+        syncToBackend(finalMessages, historyData.title)
+      }
       setIsLoading(false)
     } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : '请求失败，请稍后重试。'
       setMessages(prev => {
         const copy = [...prev]
-        copy[copy.length - 1] = { role: 'assistant', content: "Error getting response." }
+        copy[copy.length - 1] = { role: 'assistant', content: errorMessage }
         return copy
       })
       setIsLoading(false)

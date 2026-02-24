@@ -6,6 +6,9 @@ import { CanvasView } from '@/components/canvas-view'
 import { LightChatView } from '@/components/light-chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
 import { toast } from 'sonner'
+import { useApi } from '@/hooks/useApi'
+import { useGuestQuota } from '@/hooks/useGuestQuota'
+import { useAuth } from '@clerk/nextjs'
 
 // ... imports
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -18,6 +21,9 @@ export default function Home() {
   const [currentThreadId, setCurrentThreadId] = useState('')
   const [model, setModel] = useState<ModelType>('auto')
   const [isAutoDetecting, setIsAutoDetecting] = useState(false)
+  const { fetchWithAuth } = useApi()
+  const { isSignedIn } = useAuth()
+  const { quotaExceeded, refresh: refreshQuota } = useGuestQuota()
 
   // Sidebar state
   const isMobileCheck = useIsMobile()
@@ -53,6 +59,11 @@ export default function Home() {
   }, [])
 
   const handleModelChange = (newModel: ModelType) => {
+    // If quota exceeded, prevent selecting canvas or auto
+    if (quotaExceeded && (newModel === 'canvas' || newModel === 'auto')) {
+      toast.error('Daily quota reached. Sign in for unlimited Canvas & Auto mode.')
+      return
+    }
     setModel(newModel)
     localStorage.setItem('omni_model_preference', newModel)
   }
@@ -62,6 +73,12 @@ export default function Home() {
     setCurrentThreadId(threadId)
 
     if (model === 'auto') {
+      // If guest quota exceeded, fall back to light directly
+      if (quotaExceeded) {
+        toast.info('Daily quota reached — using Light mode.')
+        setView('light')
+        return
+      }
       // Auto mode: call /get_model first
       setIsAutoDetecting(true)
       try {
@@ -120,9 +137,31 @@ export default function Home() {
       }
     } else {
       // Manual mode: use the selected model directly
+      // Guard: if quota exceeded and user somehow selects canvas, fall back
+      if (quotaExceeded && model === 'canvas') {
+        toast.info('Daily quota reached — using Light mode.')
+        setView('light')
+        return
+      }
       setView(model)
     }
-  }, [model])
+  }, [model, quotaExceeded])
+
+  // Refresh quota every time user lands on home page
+  useEffect(() => {
+    if (view === 'home') {
+      refreshQuota()
+    }
+  }, [view, refreshQuota])
+
+  // Auto-downgrade model when quota is exceeded
+  useEffect(() => {
+    if (quotaExceeded && (model === 'canvas' || model === 'auto')) {
+      setModel('light')
+      localStorage.setItem('omni_model_preference', 'light')
+      toast.info('Daily quota reached — switched to Light mode. Sign in for unlimited access.')
+    }
+  }, [quotaExceeded, model])
 
   const handleNewSearch = useCallback(() => {
     setView('home')
@@ -131,24 +170,55 @@ export default function Home() {
     setIsAutoDetecting(false)
   }, [])
 
-  const handleSelectThread = useCallback((threadId: string, query: string) => {
+  const handleSelectThread = useCallback(async (threadId: string, query: string) => {
     setCurrentThreadId(threadId)
     setCurrentQuery(query)
+
+    if (isSignedIn) {
+      try {
+        const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+        const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadId}`)
+        if (res.ok) {
+          const data = await res.json()
+          const remoteMessages = Array.isArray(data?.messages) ? data.messages : []
+          const remoteMode = typeof remoteMessages?.[0]?.mode === 'string' ? remoteMessages[0].mode : null
+
+          if (remoteMode === 'light') {
+            setView('light')
+            return
+          }
+          if (remoteMode === 'canvas') {
+            setView('canvas')
+            return
+          }
+        }
+      } catch {
+        // Fallback to local cache detection below
+      }
+    }
 
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(threadId)
       if (stored) {
-        const data = JSON.parse(stored)
-        if (data.type === 'light') {
-          setView('light')
-          return
+        try {
+          const data = JSON.parse(stored)
+          if (data.type === 'light' || data.model === 'light') {
+            setView('light')
+            return
+          }
+          if (data.type === 'canvas' || data.model === 'canvas') {
+            setView('canvas')
+            return
+          }
+        } catch {
+          // ignore parse error, fallback below
         }
       }
     }
 
     // Default to canvas if not explicitly light
     setView('canvas')
-  }, [])
+  }, [fetchWithAuth, isSignedIn])
 
   // Check for pending thread from settings page navigation
   useEffect(() => {
@@ -212,6 +282,7 @@ export default function Home() {
             isMobile={isMobile}
             model={model}
             onModelChange={handleModelChange}
+            quotaExceeded={quotaExceeded}
           />
         )}
       </main>

@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
+  if (process.env.NEXT_PUBLIC_USE_MOCK !== 'true') {
+    return new Response('Not Found', { status: 404 })
+  }
+
   try {
     const { query } = await request.json()
     if (!query) return new Response('Query is required', { status: 400 })

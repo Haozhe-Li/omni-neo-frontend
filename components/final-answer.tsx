@@ -45,6 +45,7 @@ interface FinalAnswerProps {
   onFollowUp?: (text: string) => void
   onPublish?: (duration: PublishDuration) => Promise<string | null>
   isReadOnly?: boolean
+  isSignedIn?: boolean
 }
 
 /* ── Stable plugin arrays at module scope — never recreated ── */
@@ -226,7 +227,7 @@ function stripMarkdown(md: string): string {
     .trim()
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp, onPublish, isReadOnly = false }: FinalAnswerProps) {
+export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp, onPublish, isReadOnly = false, isSignedIn = true }: FinalAnswerProps) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
@@ -412,7 +413,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 sm:w-64 rounded-xl p-1.5 shadow-xl border-border">
-                {onPublish && (
+                {onPublish ? (
                   <div className="flex flex-col mb-1.5">
                     <DropdownMenuItem
                       onSelect={(e) => {
@@ -526,7 +527,21 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                       </div>
                     )}
                   </div>
-                )}
+                ) : !isSignedIn ? (
+                  <div className="flex flex-col mb-1.5">
+                    <DropdownMenuItem
+                      onSelect={(e) => {
+                        e.preventDefault()
+                        toast.info('Sign in to publish pages.')
+                      }}
+                      className="cursor-pointer opacity-50"
+                    >
+                      <Globe className="mr-2 h-4 w-4 text-foreground/70" />
+                      <span className="font-medium">Publish to Pages</span>
+                      <Lock className="ml-auto h-3.5 w-3.5 opacity-50" />
+                    </DropdownMenuItem>
+                  </div>
+                ) : null}
 
                 <DropdownMenuSeparator className="opacity-50" />
                 <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">

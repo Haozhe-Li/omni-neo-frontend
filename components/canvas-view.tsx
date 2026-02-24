@@ -10,8 +10,10 @@ import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { parseSSEMessage } from '@/lib/sse-parser'
 import type { SSEMessage, TodoItem } from '@/lib/types'
 import { getUserLocation } from '@/lib/location'
-import { getLocalISOString } from '@/lib/utils'
+import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
+import { useApi } from '@/hooks/useApi'
+import { useAuth } from '@clerk/nextjs'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -32,6 +34,14 @@ interface ChatMessage {
   content: string
   read_to_begin_research?: boolean
   follow_up_content?: string
+  mode?: 'canvas' | 'light'
+  canvas_state?: CanvasPersistState
+}
+
+interface CanvasPersistState {
+  rewrittenQuery: string
+  researchBlocks: ResearchBlock[]
+  researchTriggerIndex: number[]
 }
 
 // A single deep-research session embedded inline
@@ -55,6 +65,8 @@ interface ResearchBlock {
 }
 
 export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen }: CanvasViewProps) {
+  const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
+  const { isSignedIn } = useAuth()
   const [title, setTitle] = useState(query)
   const [isFading, setIsFading] = useState(false)
 
@@ -81,9 +93,48 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const lastMessageTime = useRef<number>(Date.now())
   const answerReceivedRef = useRef(false)
   const isCompleteRef = useRef(false)
+  const rewrittenQueryRef = useRef('')
+  const researchBlocksRef = useRef<ResearchBlock[]>([])
+  const researchTriggerIndexRef = useRef<number[]>([])
   const chatBottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInitializedRef = useRef(false)
+
+  const { fetchWithAuth } = useApi()
+
+  useEffect(() => {
+    rewrittenQueryRef.current = rewrittenQuery
+  }, [rewrittenQuery])
+
+  useEffect(() => {
+    researchBlocksRef.current = researchBlocks
+  }, [researchBlocks])
+
+  useEffect(() => {
+    researchTriggerIndexRef.current = researchTriggerIndex
+  }, [researchTriggerIndex])
+
+  const syncToBackend = useCallback((messages: unknown[], syncTitle?: string, stateOverride?: Partial<CanvasPersistState>) => {
+    if (!threadId || isMockMode || !isSignedIn) return
+    const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+    const canvasState: CanvasPersistState = {
+      rewrittenQuery: stateOverride?.rewrittenQuery ?? rewrittenQueryRef.current,
+      researchBlocks: stateOverride?.researchBlocks ?? researchBlocksRef.current,
+      researchTriggerIndex: stateOverride?.researchTriggerIndex ?? researchTriggerIndexRef.current,
+    }
+    const payloadMessages = messages.map((message: any, index) => {
+      if (index === 0 && typeof message === 'object' && message !== null) {
+        return { ...message, mode: 'canvas', canvas_state: canvasState }
+      }
+      return message
+    })
+    const body: Record<string, unknown> = { messages: payloadMessages }
+    if (syncTitle) body.title = syncTitle
+    fetchWithAuth(`${backendUrl}/api/threads/${threadId}/sync`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).catch(() => { /* fire-and-forget */ })
+  }, [threadId, fetchWithAuth, isMockMode, isSignedIn])
 
   // Scroll to bottom whenever chat or research changes
   useEffect(() => {
@@ -335,12 +386,16 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
       appendQueryToMemoryQueue(userQuery)
 
-      const res = await fetch(endpoint, {
+      const res = await fetchWithAuth(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      if (!res.ok) throw new Error('Failed to fetch helper')
+      if (!res.ok) {
+        const message = getAiRequestErrorMessage(res.status)
+        toast.error(message)
+        throw new Error(message)
+      }
       const data = await res.json()
 
       const finalMessages: ChatMessage[] = [
@@ -352,6 +407,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         }
       ]
       setChatMessages(finalMessages)
+      const nextRewrittenQuery = data.rewritten_query || rewrittenQueryRef.current
       if (data.rewritten_query) setRewrittenQuery(data.rewritten_query)
       setIsChatLoading(false)
 
@@ -364,7 +420,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           thread_id: threadId,
           query,
           chatMessages: finalMessages,
-          rewrittenQuery: data.rewritten_query || rewrittenQuery,
+          rewrittenQuery: nextRewrittenQuery,
           researchBlocks,
           researchTriggerIndex,
           timestamp: Date.now(),
@@ -372,11 +428,13 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           title: title || query,
         }
         localStorage.setItem(threadId, JSON.stringify(chatData))
+        syncToBackend(finalMessages, chatData.title, { rewrittenQuery: nextRewrittenQuery })
       }
-    } catch {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '请求失败，请稍后重试。'
       setChatMessages(prev => {
         const copy = [...prev]
-        copy[copy.length - 1] = { role: 'assistant', content: 'Error communicating with research helper.' }
+        copy[copy.length - 1] = { role: 'assistant', content: errorMessage }
         return copy
       })
       setIsChatLoading(false)
@@ -386,6 +444,69 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   // ── Init from local storage ────────────────────────────────────────
   useEffect(() => {
     const initCanvas = async () => {
+      // 1) Try backend persisted thread messages first (cross-device sync)
+      if (!isMockMode && isSignedIn) {
+        try {
+          const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+          const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadId}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data?.messages) && data.messages.length > 0) {
+              const remoteMessages = data.messages as ChatMessage[]
+              const firstMessage = remoteMessages[0]
+              const remoteCanvasState =
+                firstMessage &&
+                typeof firstMessage === 'object' &&
+                firstMessage.canvas_state &&
+                typeof firstMessage.canvas_state === 'object'
+                  ? firstMessage.canvas_state
+                  : null
+
+              const recoveredRewrittenQuery =
+                remoteCanvasState && typeof remoteCanvasState.rewrittenQuery === 'string'
+                  ? remoteCanvasState.rewrittenQuery
+                  : ''
+              const recoveredResearchBlocks =
+                remoteCanvasState && Array.isArray(remoteCanvasState.researchBlocks)
+                  ? remoteCanvasState.researchBlocks
+                  : []
+              const recoveredResearchTriggerIndex =
+                remoteCanvasState && Array.isArray(remoteCanvasState.researchTriggerIndex)
+                  ? remoteCanvasState.researchTriggerIndex
+                  : []
+
+              setChatMessages(remoteMessages)
+              setRewrittenQuery(recoveredRewrittenQuery)
+              setResearchBlocks(recoveredResearchBlocks)
+              setResearchTriggerIndex(recoveredResearchTriggerIndex)
+              answerReceivedRef.current = recoveredResearchBlocks.some((block) => block?.isComplete)
+              isCompleteRef.current = recoveredResearchBlocks.some((block) => block?.isComplete)
+              setIsChatLoading(false)
+              isInitializedRef.current = true
+
+              if (typeof window !== 'undefined') {
+                const chatData = {
+                  thread_id: threadId,
+                  query,
+                  chatMessages: remoteMessages,
+                  rewrittenQuery: recoveredRewrittenQuery,
+                  researchBlocks: recoveredResearchBlocks,
+                  researchTriggerIndex: recoveredResearchTriggerIndex,
+                  timestamp: Date.now(),
+                  model: 'canvas',
+                  title: title || query,
+                }
+                localStorage.setItem(threadId, JSON.stringify(chatData))
+              }
+              return
+            }
+          }
+        } catch {
+          // Fall through to local cache and then fresh generation
+        }
+      }
+
+      // 2) Fallback to local storage
       if (typeof window !== 'undefined' && threadId) {
         try {
           const stored = localStorage.getItem(threadId)
@@ -400,7 +521,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                 setResearchBlocks(data.researchBlocks)
                 setResearchTriggerIndex(data.researchTriggerIndex || [])
               } else if (data.final_answer) {
-                // Legacy: single research session
                 const block: ResearchBlock = {
                   id: 'legacy',
                   query: data.rewrittenQuery || data.query || query,
@@ -426,13 +546,15 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           }
         } catch { }
       }
+
+      // 3) No history, generate a fresh initial response
       if (!isInitializedRef.current && chatMessages.length === 0) {
         isInitializedRef.current = true
         fetchHelper(query, true, [])
       }
     }
     initCanvas()
-  }, [threadId, query])
+  }, [threadId, query, fetchWithAuth, isMockMode, isSignedIn])
 
   // ── Persist research blocks to localStorage when a block completes ─
   useEffect(() => {
@@ -446,9 +568,19 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         chatData.researchBlocks = researchBlocks
         chatData.researchTriggerIndex = researchTriggerIndex
         localStorage.setItem(threadId, JSON.stringify(chatData))
+        syncToBackend(chatData.chatMessages || [], chatData.title)
       }
     } catch { }
-  }, [researchBlocks, researchTriggerIndex, threadId])
+  }, [researchBlocks, researchTriggerIndex, threadId, syncToBackend])
+
+  // ── Sync full canvas state to backend for cross-device continuity ─
+  useEffect(() => {
+    if (!threadId || !isInitializedRef.current || chatMessages.length === 0) return
+    const timer = setTimeout(() => {
+      syncToBackend(chatMessages, title)
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [threadId, chatMessages, rewrittenQuery, researchBlocks, researchTriggerIndex, title, syncToBackend])
 
   // ── Start a new deep research session ─────────────────────────────
   const startDeepResearch = async (triggeredByMsgIdx: number, researchQuery?: string) => {
@@ -505,12 +637,16 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       if (Object.keys(personalization).length > 0) payload.personalization = personalization
       appendQueryToMemoryQueue(activeQuery)
 
-      const response = await fetch(apiEndpoint, {
+      const response = await fetchWithAuth(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!response.ok) throw new Error('Failed to fetch')
+      if (!response.ok) {
+        const message = getAiRequestErrorMessage(response.status)
+        toast.error(message)
+        throw new Error(message)
+      }
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
       if (!reader) return
@@ -529,11 +665,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           } catch { }
         }
       }
-    } catch {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Connection to Chat service failed.'
       setResearchBlocks(prev => {
         const copy = [...prev]
         if (copy[blockIdx]) {
-          copy[blockIdx] = { ...copy[blockIdx], error: 'Connection to Chat service failed.', isComplete: true }
+          copy[blockIdx] = { ...copy[blockIdx], error: errorMessage, isComplete: true }
         }
         return copy
       })
@@ -574,6 +711,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             const chatData = JSON.parse(stored)
             chatData.title = newTitle
             localStorage.setItem(threadId, JSON.stringify(chatData))
+            syncToBackend(chatData.chatMessages || [], newTitle)
           } catch { }
         }
       }
@@ -844,7 +982,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       title={reportBlock.title}
                       onBack={closeReport}
                       onFollowUp={handleAskOmni}
-                      onPublish={(duration) => handleShare(reportBlockIdx, duration)}
+                      onPublish={isSignedIn ? (duration) => handleShare(reportBlockIdx, duration) : undefined}
+                      isSignedIn={!!isSignedIn}
                     />
                   </div>
                 ) : (reportBlock?.error || reportBlock?.hasTimedOut) ? (

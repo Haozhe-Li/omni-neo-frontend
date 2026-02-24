@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@clerk/nextjs/server'
 import { redis } from '@/lib/redis'
 import { s3 } from '@/lib/s3'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
@@ -78,6 +79,11 @@ async function migrateImages(content: any, expires?: Date): Promise<any> {
 
 export async function POST(request: Request) {
     try {
+        const { userId } = await auth()
+        if (!userId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
         const rawData = await request.json()
         const { duration } = rawData
 

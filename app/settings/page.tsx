@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useTheme } from 'next-themes'
+import { useUser, useAuth, useClerk, SignInButton } from '@clerk/nextjs'
 import { AppSidebar } from '@/components/app-sidebar'
 import { useIsMobile } from '@/hooks/use-mobile'
 import {
@@ -29,10 +30,15 @@ import {
     Plus,
     MapPin,
     RefreshCw,
-    Navigation
+    Navigation,
+    LogOut,
+    Shield,
+    Settings,
+    ChevronRight
 } from 'lucide-react'
 import { getUserLocation, LocationData } from '@/lib/location'
 import { getMemories, type Memories } from '@/lib/memories'
+import { useGuestQuota } from '@/hooks/useGuestQuota'
 import {
     Select,
     SelectContent,
@@ -51,6 +57,9 @@ const APP_NAME = 'Omni Knows'
 export default function SettingsPage() {
     const router = useRouter()
     const { theme, setTheme } = useTheme()
+    const { isSignedIn } = useAuth()
+    const { user } = useUser()
+    const clerk = useClerk()
 
     const [chatModel, setChatModel] = useState<ModelType>('auto')
     const [responseLanguage, setResponseLanguage] = useState<string>('auto')
@@ -60,6 +69,7 @@ export default function SettingsPage() {
     const [isLocating, setIsLocating] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [activeSection, setActiveSection] = useState('Appearance')
+    const { quotaExceeded } = useGuestQuota()
 
     // Sidebar state
     const isMobileCheck = useIsMobile()
@@ -112,7 +122,7 @@ export default function SettingsPage() {
     // Scroll spy effect to update activeSection based on scroll position
     useEffect(() => {
         const handleScroll = () => {
-            const sections = ['Appearance', 'Preference', 'Personalization', 'Data Controls', 'About']
+            const sections = ['Appearance', 'Preference', 'Personalization', 'Account', 'Data Controls', 'About']
             for (const section of sections) {
                 const el = document.getElementById(section)
                 if (el) {
@@ -135,6 +145,9 @@ export default function SettingsPage() {
     }, [mounted])
 
     const handleModelChange = (newModel: ModelType) => {
+        if (quotaExceeded && (newModel === 'canvas' || newModel === 'auto')) {
+            return
+        }
         setChatModel(newModel)
         localStorage.setItem('omni_model_preference', newModel)
     }
@@ -305,18 +318,20 @@ export default function SettingsPage() {
                                     <ModelOption
                                         value="auto"
                                         title="Smart"
-                                        description="Automatically selects the best model for your query."
+                                        description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Automatically selects the best model for your query.'}
                                         icon={<Waypoints size={16} />}
                                         active={chatModel === 'auto'}
                                         onClick={() => handleModelChange('auto')}
+                                        disabled={quotaExceeded}
                                     />
                                     <ModelOption
                                         value="canvas"
                                         title="Canvas"
-                                        description="Comprehensive report on Canvas, with multi-step reasoning and deep research."
+                                        description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Comprehensive report on Canvas, with multi-step reasoning and deep research.'}
                                         icon={<Layout size={16} />}
                                         active={chatModel === 'canvas'}
                                         onClick={() => handleModelChange('canvas')}
+                                        disabled={quotaExceeded}
                                     />
                                     <ModelOption
                                         value="light"
@@ -496,6 +511,81 @@ export default function SettingsPage() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </section>
+
+                    {/* ───────── Account ───────── */}
+                    <section id="Account" className="scroll-mt-6 space-y-6">
+                        <SectionHeader icon={<Shield size={16} />} title="Account" />
+
+                        <div className="space-y-6">
+                            {isSignedIn && user ? (
+                                <>
+                                    {/* Profile Card */}
+                                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
+                                        <div className="p-5 flex items-center gap-4">
+                                            {user.imageUrl ? (
+                                                <img
+                                                    src={user.imageUrl}
+                                                    alt=""
+                                                    className="w-14 h-14 rounded-full ring-1 ring-[var(--border-subtle)] shrink-0 object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-14 h-14 rounded-full bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
+                                                    <User size={24} className="text-[var(--accent)]" />
+                                                </div>
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-base font-medium text-[var(--foreground)] truncate">
+                                                    {user.fullName || user.firstName || 'User'}
+                                                </p>
+                                                <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">
+                                                    {user.primaryEmailAddress?.emailAddress}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => clerk.signOut()}
+                                                className="p-2 rounded-lg text-[var(--muted-foreground)] hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
+                                                title="Sign Out"
+                                            >
+                                                <LogOut size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Manage Account */}
+                                    <button
+                                        onClick={() => clerk.openUserProfile()}
+                                        className="w-full p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between hover:bg-[var(--secondary)]/30 transition-colors group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-[var(--secondary)] flex items-center justify-center shrink-0">
+                                                <Settings size={14} className="text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors" />
+                                            </div>
+                                            <div className="text-left">
+                                                <span className="block text-sm font-medium text-[var(--foreground)]">Manage Account</span>
+                                                <span className="block text-xs text-[var(--muted-foreground)]">Profile, email, security, and connected accounts</span>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={16} className="text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors shrink-0" />
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="p-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] text-center space-y-4">
+                                    <div className="w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center mx-auto">
+                                        <User size={20} className="text-[var(--accent)]" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium text-[var(--foreground)]">Sign in for Unlimited Usage</p>
+                                        <p className="text-xs text-[var(--muted-foreground)]">Unlimited usage on Canvas plus chat history sync on all devices</p>
+                                    </div>
+                                    <SignInButton mode="modal">
+                                        <button className="px-6 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
+                                            Sign In
+                                        </button>
+                                    </SignInButton>
+                                </div>
+                            )}
                         </div>
                     </section>
 
@@ -684,7 +774,8 @@ function ModelOption({
     description,
     icon,
     active,
-    onClick
+    onClick,
+    disabled = false
 }: {
     value: string
     title: string
@@ -692,15 +783,19 @@ function ModelOption({
     icon: React.ReactNode
     active: boolean
     onClick: () => void
+    disabled?: boolean
 }) {
     return (
         <button
-            onClick={onClick}
+            onClick={disabled ? undefined : onClick}
+            disabled={disabled}
             className={cn(
                 "group relative w-full flex items-center justify-between p-4 rounded-xl border text-left transition-all duration-300",
-                active
-                    ? "bg-[var(--card)] border-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]"
-                    : "bg-[var(--card)] border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/40 hover:bg-[var(--secondary)]/30"
+                disabled
+                    ? "opacity-50 cursor-not-allowed bg-[var(--card)] border-[var(--border-subtle)]"
+                    : active
+                        ? "bg-[var(--card)] border-[var(--accent)] shadow-sm ring-1 ring-[var(--accent)]"
+                        : "bg-[var(--card)] border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/40 hover:bg-[var(--secondary)]/30"
             )}
         >
             <div className="flex items-start gap-3 pr-4">

@@ -4,7 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X, LogIn, LogOut, Loader2, User } from 'lucide-react'
+import { SignInButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
+import { toast } from 'sonner'
+import { useApi } from '@/hooks/useApi'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
@@ -40,11 +43,19 @@ export function AppSidebar({
 }: AppSidebarProps) {
     const router = useRouter()
     const pathname = usePathname()
+    const { isSignedIn } = useAuth()
+    const { user } = useUser()
+    const clerk = useClerk()
+    const { fetchWithAuth } = useApi()
+    const [mounted, setMounted] = useState(false)
     const [history, setHistory] = useState<StoredChat[]>([])
     const [searchQuery, setSearchQuery] = useState('')
-    // Removed internal state for isOpen/isMobile as they are now controlled
+    const [isSyncing, setIsSyncing] = useState(false)
 
-    const loadHistory = useCallback(() => {
+    useEffect(() => { setMounted(true) }, [])
+
+    // ── 1. Fast localStorage scan (runs every 2 s, no network) ────────
+    const loadLocalHistory = useCallback(() => {
         if (typeof window === 'undefined') return
         const items: StoredChat[] = []
         const now = Date.now()
@@ -58,51 +69,156 @@ export function AppSidebar({
                 const raw = localStorage.getItem(key)
                 if (!raw) continue
                 const data = JSON.parse(raw)
-                // Simple validation to ensure it's our chat data
                 if (data.thread_id && (data.query || data.title) && data.timestamp) {
                     const age = now - data.timestamp
-
-                    // Auto-deletion rule: > 3 days
-                    if (age > THREE_DAYS) {
-                        localStorage.removeItem(key)
-                        continue
-                    }
-
+                    if (age > THREE_DAYS) { localStorage.removeItem(key); continue }
                     items.push({
                         thread_id: data.thread_id,
-                        query: data.title || data.query, // Prefer title if available
+                        query: data.title || data.query,
                         timestamp: data.timestamp,
-                        model: data.model, // Add model loading
+                        model: data.model,
                         isExpiring: age > TWO_DAYS
                     })
                 }
-            } catch (e) {
-                // Not a chat item, ignore
-            }
+            } catch { }
         }
         items.sort((a, b) => b.timestamp - a.timestamp)
         setHistory(items)
     }, [])
 
+    // ── 2. Backend sync (runs once on mount + on auth change) ────────
+    const syncFromBackend = useCallback(async () => {
+        if (!isSignedIn) return
+        setIsSyncing(true)
+        try {
+            const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+            const res = await fetchWithAuth(`${backendUrl}/api/threads`)
+            if (!res.ok) return
+            const data = await res.json()
+            if (!data.threads || !Array.isArray(data.threads)) return
+
+            const remoteItems: StoredChat[] = data.threads.map((t: any) => ({
+                thread_id: t.thread_id,
+                query: t.title || 'Untitled Chat',
+                timestamp: new Date(t.updated_at).getTime(),
+                model: 'auto',
+                isExpiring: false,
+            }))
+
+            remoteItems.sort((a, b) => b.timestamp - a.timestamp)
+            setHistory(remoteItems)
+        } catch { }
+        finally { setIsSyncing(false) }
+    }, [isSignedIn, fetchWithAuth])
+
+    // Poll localStorage every 2 s (cheap, no network)
     useEffect(() => {
-        loadHistory()
-        const handleStorage = () => loadHistory()
+        if (isSignedIn) return
+        loadLocalHistory()
+        const handleStorage = () => loadLocalHistory()
         window.addEventListener('storage', handleStorage)
-        const interval = setInterval(loadHistory, 2000)
+        const interval = setInterval(loadLocalHistory, 2000)
         return () => {
             window.removeEventListener('storage', handleStorage)
             clearInterval(interval)
         }
-    }, [loadHistory])
+    }, [isSignedIn, loadLocalHistory])
 
-    const handleDelete = (e: React.MouseEvent, threadId: string) => {
+    // Sync from backend once on mount and whenever auth state changes
+    useEffect(() => {
+        if (!mounted) return
+        if (isSignedIn) {
+            syncFromBackend()
+        } else {
+            loadLocalHistory()
+        }
+    }, [mounted, isSignedIn, syncFromBackend, loadLocalHistory])
+
+    // Keep cloud list fresh for multi-device usage (controlled interval)
+    useEffect(() => {
+        if (!mounted || !isSignedIn) return
+        const interval = setInterval(syncFromBackend, 15000)
+        const onFocus = () => syncFromBackend()
+        window.addEventListener('focus', onFocus)
+        return () => {
+            clearInterval(interval)
+            window.removeEventListener('focus', onFocus)
+        }
+    }, [mounted, isSignedIn, syncFromBackend])
+
+    const removeThreadLocalCache = useCallback((threadId: string) => {
+        if (typeof window === 'undefined') return [] as Array<{ key: string; value: string }>
+        const removed: Array<{ key: string; value: string }> = []
+        const keys = Object.keys(localStorage)
+        for (const key of keys) {
+            const value = localStorage.getItem(key)
+            if (!value) continue
+
+            let shouldRemove = key === threadId || key.endsWith(`_chat_${threadId}`)
+            if (!shouldRemove) {
+                try {
+                    const data = JSON.parse(value)
+                    shouldRemove = data?.thread_id === threadId
+                } catch { }
+            }
+
+            if (shouldRemove) {
+                removed.push({ key, value })
+                localStorage.removeItem(key)
+            }
+        }
+        return removed
+    }, [])
+
+    const restoreRemovedLocalCache = useCallback((items: Array<{ key: string; value: string }>) => {
+        if (typeof window === 'undefined') return
+        items.forEach(item => localStorage.setItem(item.key, item.value))
+    }, [])
+
+    const handleDelete = async (e: React.MouseEvent, threadId: string) => {
         e.stopPropagation()
         if (typeof window !== 'undefined') {
-            localStorage.removeItem(threadId)
-            loadHistory()
-            // If deleted active thread, maybe go to new chat?
-            if (threadId === currentThreadId && onNewChat) {
-                onNewChat()
+            const removedLocalItems = removeThreadLocalCache(threadId)
+            setHistory(prev => prev.filter(item => item.thread_id !== threadId))
+
+            if (!isSignedIn) {
+                // Guest mode is local-only: skip cloud delete
+                if (threadId === currentThreadId && onNewChat) {
+                    onNewChat()
+                }
+                return
+            }
+
+            try {
+                const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+                const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadId}`, { method: 'DELETE' })
+                if (!res.ok) {
+                    restoreRemovedLocalCache(removedLocalItems)
+                    if (isSignedIn) {
+                        syncFromBackend()
+                    } else {
+                        loadLocalHistory()
+                    }
+                    toast.error('Delete failed on server')
+                    return
+                }
+
+                // If deleted active thread, go to new chat
+                if (threadId === currentThreadId && onNewChat) {
+                    onNewChat()
+                }
+
+                if (isSignedIn) {
+                    syncFromBackend()
+                }
+            } catch {
+                restoreRemovedLocalCache(removedLocalItems)
+                if (isSignedIn) {
+                    syncFromBackend()
+                } else {
+                    loadLocalHistory()
+                }
+                toast.error('Network error while deleting thread')
             }
         }
     }
@@ -135,13 +251,20 @@ export function AppSidebar({
                             </div>
                         </Link>
                         {!isMobile && (
-                            <button
-                                onClick={onToggle}
-                                className="p-1.5 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                                title="Collapse sidebar"
-                            >
-                                <PanelLeftClose size={18} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                                {isSyncing && (
+                                    <span title="Syncing…" className="flex items-center px-1">
+                                        <Loader2 size={13} className="animate-spin text-[var(--muted-foreground)]" />
+                                    </span>
+                                )}
+                                <button
+                                    onClick={onToggle}
+                                    className="p-1.5 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                                    title="Collapse sidebar"
+                                >
+                                    <PanelLeftClose size={18} />
+                                </button>
+                            </div>
                         )}
                         {/* Mobile close button is usually handled by clicking outside, but we can add an X if needed.
                             For now, let's keep the desktop approach or just hide the toggle on mobile since it's a drawer. 
@@ -282,8 +405,8 @@ export function AppSidebar({
                 )}
             </div>
 
-            {/* Footer / Settings */}
-            <div className="p-3 border-t border-[var(--border-subtle)]">
+            {/* Footer / Settings + User */}
+            <div className="p-3 border-t border-[var(--border-subtle)] space-y-1">
                 <button
                     onClick={() => {
                         if (pathname !== '/settings') {
@@ -303,6 +426,59 @@ export function AppSidebar({
                     <Settings size={18} />
                     {isExpanded && <span className="text-sm">Settings</span>}
                 </button>
+
+                {/* Auth row — only render after mount to avoid SSR/client hydration mismatch */}
+                {mounted && (
+                    isSignedIn ? (
+                        <div className={`
+                            flex items-center gap-3 w-full p-2 rounded-lg
+                            text-[var(--muted-foreground)]
+                            ${!isExpanded ? 'justify-center' : ''}
+                        `}>
+                            {user?.imageUrl ? (
+                                <img
+                                    src={user.imageUrl}
+                                    alt=""
+                                    className="w-[22px] h-[22px] rounded-full shrink-0 ring-1 ring-[var(--border-subtle)]"
+                                />
+                            ) : (
+                                <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
+                                    <User size={12} className="text-[var(--accent)]" />
+                                </div>
+                            )}
+                            {isExpanded && (
+                                <>
+                                    <span className="text-sm truncate flex-1">
+                                        {user?.firstName || 'Account'}
+                                    </span>
+                                    <button
+                                        onClick={() => clerk.signOut()}
+                                        className="p-1 rounded-md hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
+                                        title="Sign Out"
+                                    >
+                                        <LogOut size={14} />
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <SignInButton mode="modal">
+                            <button
+                                className={`
+                                    flex items-center gap-3 w-full p-2 rounded-lg
+                                    text-[var(--muted-foreground)]
+                                    hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
+                                    transition-all duration-200
+                                    ${!isExpanded ? 'justify-center' : ''}
+                                `}
+                                title="Sign in to sync your history"
+                            >
+                                <LogIn size={18} />
+                                {isExpanded && <span className="text-sm">Sign In</span>}
+                            </button>
+                        </SignInButton>
+                    )
+                )}
             </div>
         </>
     )

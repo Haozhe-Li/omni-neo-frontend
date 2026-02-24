@@ -21,3 +21,10 @@ export function getLocalISOString() {
     ':' + pad(d.getSeconds()) +
     dif + offH + ':' + offM
 }
+
+export function getAiRequestErrorMessage(status: number) {
+  if (status === 401) return '未检测到身份凭证，请先登录后重试。'
+  if (status === 403) return '无权访问该会话内容。'
+  if (status === 429) return '今日免费使用次数已用完，登录后可无限使用。'
+  return '请求失败，请稍后重试。'
+}

@@ -2,25 +2,33 @@ import { NextRequest } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { query, thread_id } = await request.json()
+    const payload = await request.json()
+    const { query } = payload
 
     if (!query) {
       return new Response('Query is required', { status: 400 })
     }
 
-    // TODO: Replace with your actual backend endpoint
-    const BACKEND_URL = process.env.BACKEND_URL || 'http://your-backend-url.com/chat'
+    const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://127.0.0.1:8000'
+    const targetUrl = backendBaseUrl.endsWith('/') ? `${backendBaseUrl}chat` : `${backendBaseUrl}/chat`
 
-    const response = await fetch(BACKEND_URL, {
+    const authHeader = request.headers.get('authorization')
+    const guestHeader = request.headers.get('x-guest-id')
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (authHeader) headers['Authorization'] = authHeader
+    if (guestHeader) headers['X-Guest-Id'] = guestHeader
+
+    const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query, thread_id }),
+      headers,
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {
-      throw new Error(`Backend responded with status: ${response.status}`)
+      const errorText = await response.text()
+      return new Response(errorText || 'Request failed', { status: response.status })
     }
 
     // Stream the response back to the client

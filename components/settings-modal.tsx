@@ -1,6 +1,6 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { X, Lock } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 interface SettingsModalProps {
@@ -8,9 +8,10 @@ interface SettingsModalProps {
     onClose: () => void
     model: 'canvas' | 'light'
     onModelChange: (model: 'canvas' | 'light') => void
+    quotaExceeded?: boolean
 }
 
-export function SettingsModal({ isOpen, onClose, model, onModelChange }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, model, onModelChange, quotaExceeded = false }: SettingsModalProps) {
     const [localModel, setLocalModel] = useState(model)
     const [isClosing, setIsClosing] = useState(false)
 
@@ -65,21 +66,24 @@ export function SettingsModal({ isOpen, onClose, model, onModelChange }: Setting
                         <label className="text-sm font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Model Preference</label>
                         <div className="grid grid-cols-2 gap-3">
                             <button
-                                onClick={() => setLocalModel('canvas')}
+                                onClick={() => !quotaExceeded && setLocalModel('canvas')}
+                                disabled={quotaExceeded}
                                 className={`
                     relative p-4 rounded-xl border-2 text-left transition-all duration-200
-                    ${localModel === 'canvas'
-                                        ? 'border-[var(--accent)] bg-[var(--accent)]/5'
-                                        : 'border-transparent bg-[var(--secondary)] hover:bg-[var(--secondary)]/80'
+                    ${quotaExceeded
+                                        ? 'opacity-50 cursor-not-allowed border-transparent bg-[var(--secondary)]'
+                                        : localModel === 'canvas'
+                                            ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                                            : 'border-transparent bg-[var(--secondary)] hover:bg-[var(--secondary)]/80'
                                     }
                 `}
                             >
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className={`font-semibold ${localModel === 'canvas' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>Canvas</span>
-                                    {localModel === 'canvas' && <div className="w-2 h-2 rounded-full bg-[var(--accent)]" />}
+                                    <span className={`font-semibold ${quotaExceeded ? 'text-[var(--muted-foreground)]' : localModel === 'canvas' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>Canvas</span>
+                                    {quotaExceeded ? <Lock size={14} className="text-[var(--muted-foreground)]" /> : localModel === 'canvas' && <div className="w-2 h-2 rounded-full bg-[var(--accent)]" />}
                                 </div>
                                 <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-                                    Deep research with thinking steps, source analysis, and a rich canvas interface.
+                                    {quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Deep research with thinking steps, source analysis, and a rich canvas interface.'}
                                 </p>
                             </button>
 

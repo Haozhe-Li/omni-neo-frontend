@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
 import { Inter, Geist_Mono, IBM_Plex_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { ClerkProvider } from '@clerk/nextjs'
+import { AuthListener } from '@/components/auth-listener'
+import { ClerkThemeProvider } from '@/components/clerk-theme-provider'
 import './globals.css'
 
 const _inter = Inter({ subsets: ["latin"] });
@@ -86,8 +89,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster />
+          <ClerkThemeProvider>
+            <AuthListener />
+            {children}
+            <Toaster />
+          </ClerkThemeProvider>
         </ThemeProvider>
         <Analytics />
       </body>
