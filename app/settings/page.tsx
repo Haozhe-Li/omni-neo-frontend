@@ -606,27 +606,23 @@ export default function SettingsPage() {
                                     <ul className="space-y-2.5 pl-1.5">
                                         <li className="flex gap-3">
                                             <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
-                                            <p><strong className="text-[var(--foreground)] font-medium">Local & Cloud Storage:</strong> Chat history is stored locally on your device and securely on our cloud servers to ensure seamless continuity across sessions.</p>
+                                            <p><strong className="text-[var(--foreground)] font-medium">Chat History: </strong> Chat history will be stored in our secure cloud servers, so you can access it from any device seamlessly.</p>
                                         </li>
                                         <li className="flex gap-3">
                                             <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
-                                            <p><strong className="text-[var(--foreground)] font-medium">Secure & Private:</strong> Data on our servers is heavily encrypted. We do not sell your personal information to any third parties.</p>
+                                            <p><strong className="text-[var(--foreground)] font-medium">Secure & Private: </strong> Data on our servers is heavily encrypted. We do not sell your personal information to any third parties.</p>
                                         </li>
                                         <li className="flex gap-3">
                                             <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
-                                            <p><strong className="text-[var(--foreground)] font-medium">Memory & Personalization:</strong> Omni will learn from you and remember details from your conversations to provide more personalized answers. You can manage your memory in the settings. All memory and personalization data will be only stored locally</p>
-                                        </li>
-                                        <li className="flex gap-3">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-[var(--muted-foreground)]/50 mt-1.5 flex-shrink-0" />
-                                            <p><strong className="text-[var(--foreground)] font-medium">Auto-Deletion:</strong> To minimize data footprint, any chat history that remains inactive for 3 days will be automatically and permanently deleted from both our servers and your local storage.</p>
+                                            <p><strong className="text-[var(--foreground)] font-medium">Auto-deletion: </strong> If you login to your account, your chat history will be automatically deleted after 90 days of inactivity. If you do not login to your account, your chat history will be automatically deleted after 3 days of inactivity.</p>
                                         </li>
                                     </ul>
                                 </div>
 
                                 <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between mt-2">
                                     <div className="space-y-1">
-                                        <span className="block text-sm font-medium text-[var(--foreground)]">Delete all data</span>
-                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all chat history, memory and personalization data.</span>
+                                        <span className="block text-sm font-medium text-[var(--foreground)]">Delete all local data</span>
+                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all local data (chat history, memory, and personalization settings). If you are logged in to an account, this action will not affect your cloud data.</span>
                                     </div>
                                     <button
                                         onClick={() => {

@@ -13,8 +13,6 @@ import {
   X,
   Share,
   Layout,
-  Clock,
-  Calendar,
   Lock,
   Globe,
   Loader2
@@ -436,45 +434,21 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                             <span className="text-[11px] font-medium text-muted-foreground/80 tracking-wide">Generating secure link...</span>
                           </div>
                         ) : !shareUrl ? (
-                          <>
-                            <div className="px-3.5 py-2 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest bg-secondary/20">
-                              Expiration
+                          <div className="p-3.5 space-y-3 animate-in fade-in duration-200">
+                            <div className="rounded-md border border-border/60 bg-background/60 px-3 py-2.5 flex items-center gap-2.5">
+                              <span className="h-6 w-6 rounded-md bg-accent/10 text-accent flex items-center justify-center">
+                                <Lock className="h-3.5 w-3.5" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-foreground">Permanent link</p>
+                                <p className="text-[11px] text-muted-foreground truncate">Once published, this page will not expire.</p>
+                              </div>
                             </div>
-                            <DropdownMenuItem
-                              onSelect={async (e) => {
-                                e.preventDefault()
-                                setIsPublishing(true)
-                                try {
-                                  const url = await onPublish('7d')
-                                  if (url) setShareUrl(url)
-                                } finally {
-                                  setIsPublishing(false)
-                                }
-                              }}
-                              className="cursor-pointer pl-4 py-2.5 text-xs hover:bg-secondary/50"
-                            >
-                              <Clock className="mr-2.5 h-3.5 w-3.5 opacity-60" />
-                              <span>7 Days</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={async (e) => {
-                                e.preventDefault()
-                                setIsPublishing(true)
-                                try {
-                                  const url = await onPublish('30d')
-                                  if (url) setShareUrl(url)
-                                } finally {
-                                  setIsPublishing(false)
-                                }
-                              }}
-                              className="cursor-pointer pl-4 py-2.5 text-xs border-t border-border/10 hover:bg-secondary/50"
-                            >
-                              <Calendar className="mr-2.5 h-3.5 w-3.5 opacity-60" />
-                              <span>1 Month</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={async (e) => {
-                                e.preventDefault()
+                            <Button
+                              size="sm"
+                              className="h-8 text-[11px] w-full rounded-lg bg-accent text-white hover:bg-accent/90"
+                              onClick={async (e) => {
+                                e.stopPropagation()
                                 setIsPublishing(true)
                                 try {
                                   const url = await onPublish('permanent')
@@ -483,25 +457,23 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                   setIsPublishing(false)
                                 }
                               }}
-                              className="cursor-pointer pl-4 py-2.5 text-xs border-t border-border/10 hover:bg-secondary/50"
                             >
-                              <Lock className="mr-2.5 h-3.5 w-3.5 opacity-60" />
-                              <span>Permanent</span>
-                            </DropdownMenuItem>
-                          </>
+                              Generate Link
+                            </Button>
+                          </div>
                         ) : (
-                          <div className="p-3.5 space-y-3.5 bg-secondary/10 animate-in zoom-in-95 duration-300">
-                            <div className="text-[10px] font-bold text-foreground/80 uppercase tracking-widest flex items-center gap-1.5">
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Published Successfully
+                          <div className="p-3.5 space-y-3.5 bg-secondary/10 animate-in zoom-in-95 duration-300 border-t border-border/40">
+                            <div className="text-[10px] font-bold text-accent uppercase tracking-widest flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Link Generated
                             </div>
-                            <div className="bg-background/80 border border-border/60 rounded-md px-2.5 py-2 text-[11px] font-mono break-all leading-tight shadow-inner">
+                            <div className="bg-background border border-border rounded-md px-2.5 py-2 text-[11px] font-mono break-all leading-tight">
                               {shareUrl}
                             </div>
                             <div className="flex items-center gap-2">
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                className="h-8 text-[11px] flex-1 rounded-lg border-border hover:bg-background transition-all"
+                                className="h-8 text-[11px] flex-1 rounded-lg border-border bg-background/70 hover:bg-background transition-all"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   navigator.clipboard.writeText(shareUrl)
@@ -513,7 +485,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                className="h-8 text-[11px] flex-1 rounded-lg border-border hover:bg-background transition-all"
+                                className="h-8 text-[11px] flex-1 rounded-lg border-border bg-background/70 hover:bg-background transition-all"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   window.open(shareUrl, '_blank')
