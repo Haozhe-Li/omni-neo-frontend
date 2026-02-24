@@ -635,10 +635,14 @@
   border-style: solid;
   padding: 0.9rem 1rem;
   overflow-x: auto;
-  background: color-mix(in srgb, var(--foreground) 10%, var(--background));
+  background: color-mix(in srgb, var(--secondary) 60%, transparent);
   border-color: color-mix(in srgb, var(--foreground) 22%, var(--background));
   color: var(--foreground);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+:root:not(.dark) .blog-markdown :not(pre)>code {
+  background: color-mix(in srgb, var(--secondary) 60%, transparent);
 }
 
 .dark .blog-markdown pre {
@@ -696,7 +700,7 @@
   margin: 1rem 0 1.2rem;
   padding: 0.7rem 0.85rem;
   border-radius: 0.7rem;
-  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  background: color-mix(in srgb, var(--secondary) 60%, transparent);
   border-color: color-mix(in srgb, var(--foreground) 16%, var(--background));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 7%, transparent);
 }
@@ -728,7 +732,7 @@
 .light-chat-markdown :not(pre)>code {
   border-radius: 0.45rem;
   padding: 0.06rem 0.34rem;
-  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  background: color-mix(in srgb, var(--secondary) 60%, transparent);
   border: 1px solid color-mix(in srgb, var(--foreground) 14%, var(--background));
 }
 
