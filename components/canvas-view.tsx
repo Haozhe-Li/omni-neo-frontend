@@ -948,7 +948,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                             </div>
                           ) : (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
-                              <div className={`dark:prose-invert max-w-none ${msg.role === 'user' ? 'prose prose-sm' : 'prose prose-p:text-[16px] prose-li:text-[16px] md:prose-p:text-[15px] md:prose-li:text-[15px] prose-p:leading-[1.75] prose-li:leading-[1.75]'}`}>
+                              <div className={`max-w-none ${msg.role === 'user' ? 'prose prose-sm dark:prose-invert' : 'blog-markdown markdown-body text-[16px] leading-[1.8]'}`}>
                                 {msg.role === 'user' && msg.follow_up_content && (
                                   <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
                                     {msg.follow_up_content}

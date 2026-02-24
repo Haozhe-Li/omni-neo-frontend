@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, memo, useRef } from 'react'
+import { useState, memo, useRef, type ReactNode } from 'react'
 import Image from 'next/image'
 import {
   ChevronDown,
@@ -51,6 +51,17 @@ interface FinalAnswerProps {
 const remarkPlugins = [remarkGfm]
 const rehypePlugins = [rehypeHighlight]
 
+function extractNodeText(node: ReactNode): string {
+  if (node == null) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractNodeText).join('')
+  if (typeof node === 'object' && 'props' in node) {
+    const withProps = node as { props?: { children?: ReactNode } }
+    return extractNodeText(withProps.props?.children)
+  }
+  return ''
+}
+
 /* ── Stable markdown component overrides at module scope ── */
 const markdownComponents: Components = {
   a: ({ href, children }) => (
@@ -65,11 +76,11 @@ const markdownComponents: Components = {
   ),
   pre: ({ children }) => (
     <div className="relative group my-4">
-      <pre className="rounded-xl bg-[#1e1e2e] dark:bg-[#0d0d14] p-4 overflow-x-auto text-sm leading-relaxed border border-white/5">
+      <pre className="rounded-xl bg-[color-mix(in_srgb,var(--foreground)_10%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_14%,var(--background))] p-4 overflow-x-auto text-sm leading-relaxed border border-[color-mix(in_srgb,var(--foreground)_22%,var(--background))] dark:border-[color-mix(in_srgb,var(--foreground)_26%,var(--background))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_10%,transparent)] dark:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_14%,transparent)]">
         {children}
       </pre>
       <CopyButton getText={() => {
-        return (children as any)?.props?.children || ''
+        return extractNodeText(children)
       }} />
     </div>
   ),
@@ -576,7 +587,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
       {/* Answer body */}
       <div className="px-5 py-6 sm:px-10 sm:py-8">
-        <div className="max-w-none markdown-body">
+        <div className="max-w-none markdown-body blog-markdown">
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
             rehypePlugins={rehypePlugins}
@@ -684,7 +695,7 @@ function CopyButton({ getText }: { getText: () => string }) {
   return (
     <button
       onClick={handleCopy}
-      className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 transition-all text-xs opacity-0 group-hover:opacity-100 cursor-pointer"
+      className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/70 bg-background/80 hover:bg-secondary/70 text-muted-foreground hover:text-foreground transition-all text-xs opacity-0 group-hover:opacity-100 cursor-pointer"
       title="Copy code"
     >
       {copied ? (

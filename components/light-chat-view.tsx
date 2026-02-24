@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { ArrowLeft, ArrowUp, Copy, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import type { Components } from 'react-markdown'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
@@ -27,6 +28,63 @@ interface Message {
   content: string
   use_search?: boolean
   follow_up_content?: string
+}
+
+function extractNodeText(node: ReactNode): string {
+  if (node == null) return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractNodeText).join('')
+  if (typeof node === 'object' && 'props' in node) {
+    const withProps = node as { props?: { children?: ReactNode } }
+    return extractNodeText(withProps.props?.children)
+  }
+  return ''
+}
+
+function CodeCopyButton({ getText }: { getText: () => string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    const text = getText().trim()
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      toast.success('Code copied')
+      setTimeout(() => setCopied(false), 1600)
+    } catch {
+      toast.error('Failed to copy code')
+    }
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="absolute top-2.5 right-2.5 flex items-center gap-1.5 px-2 py-1 rounded-md border border-border/70 bg-background/80 hover:bg-secondary/70 text-muted-foreground hover:text-foreground transition-all text-xs opacity-0 group-hover:opacity-100 cursor-pointer"
+      title="Copy code"
+    >
+      {copied ? (
+        <>
+          <Check className="h-3 w-3" />
+          <span>Copied</span>
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3" />
+          <span>Copy</span>
+        </>
+      )}
+    </button>
+  )
+}
+
+const markdownComponents: Components = {
+  pre: ({ children }) => (
+    <div className="relative group my-4">
+      <pre>{children}</pre>
+      <CodeCopyButton getText={() => extractNodeText(children)} />
+    </div>
+  ),
 }
 
 const isUntitledTitle = (value?: string) => {
@@ -505,7 +563,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                         <span>Searched the web</span>
                       </div>
                     )}
-                    <div className={`dark:prose-invert max-w-none ${msg.role === 'user' ? 'prose prose-sm' : 'prose prose-p:text-[16px] prose-li:text-[16px] md:prose-p:text-[15px] md:prose-li:text-[15px] prose-p:leading-[1.75] prose-li:leading-[1.75]'}`}>
+                    <div className={`max-w-none ${msg.role === 'user' ? 'prose prose-sm dark:prose-invert' : 'blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]'}`}>
                       {msg.role === 'user' && msg.follow_up_content && (
                         <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
                           {msg.follow_up_content}
@@ -514,6 +572,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[rehypeHighlight]}
+                        components={markdownComponents}
                       >
                         {msg.content}
                       </ReactMarkdown>

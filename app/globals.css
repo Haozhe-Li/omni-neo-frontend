@@ -553,3 +553,182 @@
 .cl-identityPreview {
   border-radius: 0.75rem !important;
 }
+
+.blog-shell {
+  background:
+    radial-gradient(900px 420px at 50% -180px, color-mix(in srgb, var(--accent) 9%, transparent), transparent 72%),
+    var(--background);
+}
+
+.blog-markdown {
+  color: var(--foreground);
+}
+
+.blog-markdown h1,
+.blog-markdown h2,
+.blog-markdown h3,
+.blog-markdown h4 {
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+
+.blog-markdown h2 {
+  margin-top: 2.2rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  font-size: 1.55rem;
+  font-weight: 600;
+}
+
+.blog-markdown h3 {
+  margin-top: 1.7rem;
+  margin-bottom: 0.6rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.blog-markdown p {
+  margin: 0 0 1.1rem;
+  color: var(--foreground);
+  text-wrap: pretty;
+}
+
+.blog-markdown ul,
+.blog-markdown ol {
+  margin: 0.8rem 0 1.2rem;
+  padding-left: 1.45rem;
+}
+
+.blog-markdown ul {
+  list-style: disc;
+}
+
+.blog-markdown ol {
+  list-style: decimal;
+}
+
+.blog-markdown li {
+  margin-bottom: 0.45rem;
+}
+
+.blog-markdown img {
+  width: 100%;
+  max-height: 520px;
+  object-fit: cover;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  margin: 1.25rem 0;
+}
+
+.blog-markdown pre,
+.blog-markdown table,
+.blog-markdown blockquote,
+.blog-markdown a,
+.blog-markdown code {
+  transition: all 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.blog-markdown pre {
+  border-radius: 0.85rem;
+  border-width: 1px;
+  border-style: solid;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--foreground) 10%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 22%, var(--background));
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.dark .blog-markdown pre {
+  background: color-mix(in srgb, var(--foreground) 14%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 26%, var(--background));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+.blog-markdown pre code {
+  display: block;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--foreground);
+}
+
+.blog-markdown .hljs {
+  color: var(--foreground);
+}
+
+.blog-markdown .hljs-comment {
+  color: var(--muted-foreground);
+}
+
+.blog-markdown .hljs-keyword,
+.blog-markdown .hljs-selector-tag,
+.blog-markdown .hljs-built_in,
+.blog-markdown .hljs-title.function_,
+.blog-markdown .hljs-meta,
+.blog-markdown .hljs-tag {
+  color: var(--accent);
+}
+
+.blog-markdown .hljs-string,
+.blog-markdown .hljs-number,
+.blog-markdown .hljs-literal,
+.blog-markdown .hljs-regexp,
+.blog-markdown .hljs-type,
+.blog-markdown .hljs-class .hljs-title,
+.blog-markdown .hljs-property,
+.blog-markdown .hljs-attr,
+.blog-markdown .hljs-params,
+.blog-markdown .hljs-variable,
+.blog-markdown .hljs-punctuation,
+.blog-markdown .hljs-operator {
+  color: var(--foreground);
+}
+
+.light-chat-markdown p {
+  margin-bottom: 0.95rem;
+}
+
+.light-chat-markdown pre {
+  margin: 1rem 0 1.2rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 16%, var(--background));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+
+.light-chat-markdown p+pre,
+.light-chat-markdown ul+pre,
+.light-chat-markdown ol+pre {
+  margin-top: 1.2rem;
+}
+
+.light-chat-markdown pre+p,
+.light-chat-markdown pre+ul,
+.light-chat-markdown pre+ol {
+  margin-top: 1rem;
+}
+
+.dark .light-chat-markdown pre {
+  background: color-mix(in srgb, var(--foreground) 11%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 20%, var(--background));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 11%, transparent);
+}
+
+.light-chat-markdown pre code {
+  font-size: 13px;
+  line-height: 1.55;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+.light-chat-markdown :not(pre)>code {
+  border-radius: 0.45rem;
+  padding: 0.06rem 0.34rem;
+  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+  border: 1px solid color-mix(in srgb, var(--foreground) 14%, var(--background));
+}
+
