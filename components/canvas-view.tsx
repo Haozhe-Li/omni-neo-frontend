@@ -115,7 +115,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   }, [researchTriggerIndex])
 
   const syncToBackend = useCallback((messages: unknown[], syncTitle?: string, stateOverride?: Partial<CanvasPersistState>) => {
-    if (!threadId || isMockMode || !isSignedIn) return
+    if (!threadId || isMockMode) return
     const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
     const canvasState: CanvasPersistState = {
       rewrittenQuery: stateOverride?.rewrittenQuery ?? rewrittenQueryRef.current,
@@ -134,7 +134,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       method: 'POST',
       body: JSON.stringify(body),
     }).catch(() => { /* fire-and-forget */ })
-  }, [threadId, fetchWithAuth, isMockMode, isSignedIn])
+  }, [threadId, fetchWithAuth, isMockMode])
 
   // Scroll to bottom whenever chat or research changes
   useEffect(() => {

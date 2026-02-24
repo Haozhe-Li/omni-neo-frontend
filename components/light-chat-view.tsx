@@ -46,7 +46,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   const { fetchWithAuth } = useApi()
 
   const syncToBackend = useCallback((msgs: Message[], syncTitle?: string) => {
-    if (!threadId || isMockMode || !isSignedIn) return
+    if (!threadId || isMockMode) return
     const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
     const payloadMessages = msgs.map((message, index) => {
       if (index === 0) {
@@ -60,7 +60,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
       method: 'POST',
       body: JSON.stringify(body),
     }).catch(() => { /* fire-and-forget */ })
-  }, [threadId, fetchWithAuth, isMockMode, isSignedIn])
+  }, [threadId, fetchWithAuth, isMockMode])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
