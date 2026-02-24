@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X, LogIn, LogOut, Loader2, User } from 'lucide-react'
-import { SignInButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
+import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import type { TodoItem } from '@/lib/types'
@@ -452,7 +452,12 @@ export function AppSidebar({
                                         {user?.firstName || 'Account'}
                                     </span>
                                     <button
-                                        onClick={() => clerk.signOut()}
+                                        onClick={async () => {
+                                            await clerk.signOut()
+                                            if (typeof window !== 'undefined') {
+                                                window.location.reload()
+                                            }
+                                        }}
                                         className="p-1 rounded-md hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
                                         title="Sign Out"
                                     >
@@ -462,7 +467,7 @@ export function AppSidebar({
                             )}
                         </div>
                     ) : (
-                        <SignInButton mode="modal">
+                        <SignUpButton mode="modal">
                             <button
                                 className={`
                                     flex items-center gap-3 w-full p-2 rounded-lg
@@ -471,12 +476,12 @@ export function AppSidebar({
                                     transition-all duration-200
                                     ${!isExpanded ? 'justify-center' : ''}
                                 `}
-                                title="Sign in to sync your history"
+                                title="Get started to sync your history and settings"
                             >
                                 <LogIn size={18} />
-                                {isExpanded && <span className="text-sm">Sign In</span>}
+                                {isExpanded && <span className="text-sm">Get Started</span>}
                             </button>
-                        </SignInButton>
+                        </SignUpButton>
                     )
                 )}
             </div>

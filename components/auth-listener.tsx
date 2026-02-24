@@ -2,6 +2,7 @@
 
 import { useAuth } from '@clerk/nextjs'
 import { useEffect, useRef } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { useApi } from '@/hooks/useApi'
 
 /**
@@ -15,8 +16,14 @@ import { useApi } from '@/hooks/useApi'
 export function AuthListener() {
   const { isSignedIn, userId } = useAuth()
   const { fetchWithAuth } = useApi()
+  const pathname = usePathname()
+  const router = useRouter()
   const hasMerged = useRef(false)
   const previousSignedInRef = useRef<boolean | null>(null)
+
+  const MIGRATION_IN_PROGRESS_KEY = 'guest_merge_in_progress'
+  const MIGRATION_RETURN_TO_KEY = 'guest_merge_return_to'
+  const MIGRATION_DONE_KEY = 'guest_merge_done'
 
   const clearLocalChatRecords = () => {
     if (typeof window === 'undefined') return
@@ -64,11 +71,24 @@ export function AuthListener() {
     if (prevSignedIn === true && !isSignedIn) {
       clearLocalChatRecords()
       hasMerged.current = false
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+        localStorage.removeItem(MIGRATION_RETURN_TO_KEY)
+        localStorage.removeItem(MIGRATION_DONE_KEY)
+      }
       console.log('[AuthListener] User signed out. Local chat cache cleared.')
     }
 
     previousSignedInRef.current = isSignedIn
   }, [isSignedIn])
+
+  useEffect(() => {
+    if (!isSignedIn || typeof window === 'undefined') return
+    const inProgress = localStorage.getItem(MIGRATION_IN_PROGRESS_KEY) === '1'
+    if (inProgress && pathname !== '/migrating') {
+      router.replace('/migrating')
+    }
+  }, [isSignedIn, pathname, router])
 
   useEffect(() => {
     if (!isSignedIn || !userId || hasMerged.current) return
@@ -77,6 +97,19 @@ export function AuthListener() {
     if (!guestId) return
 
     hasMerged.current = true
+    const currentPath = typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/'
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(MIGRATION_IN_PROGRESS_KEY, '1')
+      localStorage.removeItem(MIGRATION_DONE_KEY)
+      if (currentPath !== '/migrating') {
+        localStorage.setItem(MIGRATION_RETURN_TO_KEY, currentPath)
+      }
+    }
+
+    if (pathname !== '/migrating') {
+      router.replace('/migrating')
+    }
+
     const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
     fetchWithAuth(`${backendUrl}/api/users/merge`, {
@@ -86,14 +119,24 @@ export function AuthListener() {
       .then((res) => {
         if (res.ok) {
           localStorage.removeItem('guest_id')
+          localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+          localStorage.setItem(MIGRATION_DONE_KEY, '1')
           console.log('[AuthListener] Guest assets merged into user account.')
+        } else {
+          localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+          localStorage.setItem(MIGRATION_DONE_KEY, '1')
+          hasMerged.current = false
         }
       })
       .catch(() => {
         // Reset flag so it can retry on next render cycle
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+          localStorage.setItem(MIGRATION_DONE_KEY, '1')
+        }
         hasMerged.current = false
       })
-  }, [isSignedIn, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isSignedIn, userId, pathname, router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
 }

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
+import { SignUpButton, useAuth } from '@clerk/nextjs'
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string) => void
@@ -12,13 +13,15 @@ interface SearchHomeProps {
   model?: 'auto' | 'canvas' | 'light'
   onModelChange?: (model: 'auto' | 'canvas' | 'light') => void
   quotaExceeded?: boolean
+  remainingQuota?: number | null
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange, quotaExceeded = false }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange, quotaExceeded = false, remainingQuota = null }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const { isSignedIn } = useAuth()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -230,6 +233,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }
 
+  const selectedModelLabel = model === 'auto' ? 'Auto' : model === 'canvas' ? 'Canvas' : 'Light'
+  const showCanvasRemaining = model === 'canvas' && !quotaExceeded && remainingQuota !== null
+  const showSelectedLock = quotaExceeded && (model === 'canvas' || model === 'auto')
+
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
 
@@ -335,9 +342,20 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   <button
                     type="button"
                     onClick={() => setModelDropdownOpen(prev => !prev)}
-                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
                   >
-                    <span>{model === 'auto' ? 'Auto' : model === 'canvas' ? 'Canvas' : 'Light'}</span>
+                    <span>{selectedModelLabel}</span>
+                    {showCanvasRemaining && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
+                        {remainingQuota} left
+                      </span>
+                    )}
+                    {showSelectedLock && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
+                        Sign in
+                      </span>
+                    )}
+                    {showSelectedLock && <Lock className="h-3 w-3" />}
                     <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
 
@@ -348,33 +366,43 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
                         { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
                       ].map((opt) => {
-                        const isDisabled = quotaExceeded && (opt.value === 'canvas' || opt.value === 'auto')
+                        const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
+                        const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
+                        const isLocked = isAutoOptionLocked || isCanvasOptionLocked
+                        const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
                         return (
                           <button
                             key={opt.value}
                             type="button"
-                            disabled={isDisabled}
                             onClick={() => {
-                              if (isDisabled) return
                               onModelChange?.(opt.value)
                               setModelDropdownOpen(false)
                             }}
-                            className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors ${
-                              isDisabled
-                                ? 'opacity-40 cursor-not-allowed'
-                                : `hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`
-                            }`}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
                           >
-                            <div className="flex flex-col">
+                            <div className="flex flex-col min-w-0">
                               <span className="text-[13px] font-medium flex items-center gap-1.5">
                                 {opt.label}
-                                {isDisabled && <Lock className="h-3 w-3" />}
+                                {isLocked && <Lock className="h-3 w-3" />}
                               </span>
                               <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                                {isDisabled ? 'Daily quota reached — sign in for unlimited' : opt.desc}
+                                {isAutoOptionLocked || isCanvasOptionLocked
+                                    ? 'Daily quota reached — sign in for unlimited'
+                                    : opt.desc}
                               </span>
                             </div>
-                            {!isDisabled && model === opt.value && <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />}
+                            <div className="ml-2 w-[78px] flex items-center justify-end gap-2 shrink-0">
+                              {showRemaining && (
+                                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
+                                  {remainingQuota} left
+                                </span>
+                              )}
+                              {model === opt.value ? (
+                                <Check className="h-4 w-4 text-[var(--accent)]" />
+                              ) : (
+                                <span className="h-4 w-4" aria-hidden="true" />
+                              )}
+                            </div>
                           </button>
                         )
                       })}
@@ -399,6 +427,22 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
               </div>
             </div>
           </form>
+
+          {isSignedIn === false && (
+            <div className="mt-3 w-full max-w-[680px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
+              <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
+                Sync chats and settings across devices for a smoother experience.
+              </span>
+              <SignUpButton mode="modal">
+                <button
+                  type="button"
+                  className="h-7 px-3 rounded-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors whitespace-nowrap"
+                >
+                  Get Started
+                </button>
+              </SignUpButton>
+            </div>
+          )}
         </div>
       </div>
 

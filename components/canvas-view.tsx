@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Loader } from 'lucide-react'
+import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share } from 'lucide-react'
 import { toast } from 'sonner'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
@@ -13,7 +13,7 @@ import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 import { useApi } from '@/hooks/useApi'
-import { useAuth } from '@clerk/nextjs'
+import { SignUpButton, useAuth, useClerk } from '@clerk/nextjs'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -77,6 +77,7 @@ const inferTitleFromMessages = (messages: Array<{ role?: string; content?: strin
 export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen }: CanvasViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
+  const clerk = useClerk()
   const [title, setTitle] = useState(query)
   const [isFading, setIsFading] = useState(false)
 
@@ -90,6 +91,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const [isChatLoading, setIsChatLoading] = useState(false)
   const [rewrittenQuery, setRewrittenQuery] = useState('')
   const [followUpText, setFollowUpText] = useState('')
+  const [isQuotaLocked, setIsQuotaLocked] = useState(false)
+  const [quotaLockedBlockId, setQuotaLockedBlockId] = useState<string | null>(null)
 
   // Research blocks (one per "Start Research" click)
   const [researchBlocks, setResearchBlocks] = useState<ResearchBlock[]>([])
@@ -112,9 +115,48 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   const { fetchWithAuth } = useApi()
 
+  const lockCanvasForQuota = useCallback((blockId?: string, shouldOpenSignIn = true) => {
+    setIsQuotaLocked(true)
+    setChatInput('')
+    setFollowUpText('')
+    if (blockId) {
+      setQuotaLockedBlockId(blockId)
+    } else if (!quotaLockedBlockId) {
+      const lastBlockId = researchBlocksRef.current[researchBlocksRef.current.length - 1]?.id
+      if (lastBlockId) setQuotaLockedBlockId(lastBlockId)
+    }
+    if (shouldOpenSignIn) {
+      clerk.openSignIn()
+    }
+  }, [clerk, quotaLockedBlockId])
+
+  const checkQuotaAfterCanvasAnswer = useCallback(async (blockId: string) => {
+    if (isSignedIn) return
+    try {
+      const backendUrl = (
+        process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
+      ).replace(/\/$/, '')
+      const res = await fetchWithAuth(`${backendUrl}/api/guests/daily-quota`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (typeof data?.remaining === 'number' && data.remaining <= 0) {
+        lockCanvasForQuota(blockId, false)
+      }
+    } catch {
+      // silently ignore post-answer quota check failure
+    }
+  }, [fetchWithAuth, isSignedIn, lockCanvasForQuota])
+
   useEffect(() => {
     rewrittenQueryRef.current = rewrittenQuery
   }, [rewrittenQuery])
+
+  useEffect(() => {
+    if (isSignedIn && isQuotaLocked) {
+      setIsQuotaLocked(false)
+      setQuotaLockedBlockId(null)
+    }
+  }, [isSignedIn, isQuotaLocked])
 
   useEffect(() => {
     researchBlocksRef.current = researchBlocks
@@ -283,6 +325,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
               }
               return copy
             })
+            const resolvedBlockId = researchBlocksRef.current[blockIdx]?.id
+            if (resolvedBlockId) {
+              void checkQuotaAfterCanvasAnswer(resolvedBlockId)
+            }
             isCompleteRef.current = true
           } catch (e) {
             console.error('Failed to parse answer JSON', e)
@@ -318,7 +364,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         })
       }
     }
-  }, [KNOWN_TOOLS, query])
+  }, [KNOWN_TOOLS, query, checkQuotaAfterCanvasAnswer])
 
   // ── Tick clock for active research block ───────────────────────────
   useEffect(() => {
@@ -402,6 +448,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         body: JSON.stringify(payload)
       })
       if (!res.ok) {
+        if (res.status === 429) {
+          setChatMessages(updatedMessages)
+          setIsChatLoading(false)
+          lockCanvasForQuota()
+          return
+        }
         const message = getAiRequestErrorMessage(res.status)
         toast.error(message)
         throw new Error(message)
@@ -489,13 +541,53 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   ? remoteCanvasState.researchTriggerIndex
                   : []
 
+              // If backend merge misses canvas_state, recover richer canvas data from local cache.
+              let localRewrittenQuery = ''
+              let localResearchBlocks: ResearchBlock[] = []
+              let localResearchTriggerIndex: number[] = []
+              if (typeof window !== 'undefined') {
+                try {
+                  const localRaw = localStorage.getItem(threadId)
+                  if (localRaw) {
+                    const localData = JSON.parse(localRaw)
+                    if (localData?.thread_id === threadId) {
+                      if (typeof localData.rewrittenQuery === 'string') {
+                        localRewrittenQuery = localData.rewrittenQuery
+                      }
+                      if (Array.isArray(localData.researchBlocks)) {
+                        localResearchBlocks = localData.researchBlocks
+                      }
+                      if (Array.isArray(localData.researchTriggerIndex)) {
+                        localResearchTriggerIndex = localData.researchTriggerIndex
+                      }
+                    }
+                  }
+                } catch {
+                  // ignore invalid local cache
+                }
+              }
+
+              const hasRemoteCanvasBlocks = recoveredResearchBlocks.length > 0
+              const hasLocalCanvasBlocks = localResearchBlocks.length > 0
+              const shouldHydrateFromLocal = !hasRemoteCanvasBlocks && hasLocalCanvasBlocks
+
+              const finalRewrittenQuery = shouldHydrateFromLocal
+                ? (localRewrittenQuery || recoveredRewrittenQuery)
+                : recoveredRewrittenQuery
+              const finalResearchBlocks = shouldHydrateFromLocal
+                ? localResearchBlocks
+                : recoveredResearchBlocks
+              const finalResearchTriggerIndex = shouldHydrateFromLocal
+                ? (localResearchTriggerIndex.length > 0 ? localResearchTriggerIndex : recoveredResearchTriggerIndex)
+                : recoveredResearchTriggerIndex
+
               setChatMessages(remoteMessages)
               setTitle(resolvedTitle)
-              setRewrittenQuery(recoveredRewrittenQuery)
-              setResearchBlocks(recoveredResearchBlocks)
-              setResearchTriggerIndex(recoveredResearchTriggerIndex)
-              answerReceivedRef.current = recoveredResearchBlocks.some((block) => block?.isComplete)
-              isCompleteRef.current = recoveredResearchBlocks.some((block) => block?.isComplete)
+              setRewrittenQuery(finalRewrittenQuery)
+              setResearchBlocks(finalResearchBlocks)
+              setResearchTriggerIndex(finalResearchTriggerIndex)
+              answerReceivedRef.current = finalResearchBlocks.some((block) => block?.isComplete)
+              isCompleteRef.current = finalResearchBlocks.some((block) => block?.isComplete)
               setIsChatLoading(false)
               isInitializedRef.current = true
 
@@ -504,9 +596,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   thread_id: threadId,
                   query,
                   chatMessages: remoteMessages,
-                  rewrittenQuery: recoveredRewrittenQuery,
-                  researchBlocks: recoveredResearchBlocks,
-                  researchTriggerIndex: recoveredResearchTriggerIndex,
+                  rewrittenQuery: finalRewrittenQuery,
+                  researchBlocks: finalResearchBlocks,
+                  researchTriggerIndex: finalResearchTriggerIndex,
                   timestamp: Date.now(),
                   model: 'canvas',
                   title: resolvedTitle,
@@ -514,11 +606,11 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                 localStorage.setItem(threadId, JSON.stringify(chatData))
               }
 
-              if (isUntitledTitle(remoteRawTitle) && !isUntitledTitle(resolvedTitle)) {
+              if ((isUntitledTitle(remoteRawTitle) && !isUntitledTitle(resolvedTitle)) || shouldHydrateFromLocal) {
                 syncToBackend(remoteMessages, resolvedTitle, {
-                  rewrittenQuery: recoveredRewrittenQuery,
-                  researchBlocks: recoveredResearchBlocks,
-                  researchTriggerIndex: recoveredResearchTriggerIndex,
+                  rewrittenQuery: finalRewrittenQuery,
+                  researchBlocks: finalResearchBlocks,
+                  researchTriggerIndex: finalResearchTriggerIndex,
                 })
               }
               return
@@ -607,13 +699,18 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   // ── Start a new deep research session ─────────────────────────────
   const startDeepResearch = async (triggeredByMsgIdx: number, researchQuery?: string) => {
+    if (isQuotaLocked) {
+      clerk.openSignIn()
+      return
+    }
     const blockIdx = researchBlocks.length
     answerReceivedRef.current = false
     isCompleteRef.current = false
 
     const activeQuery = researchQuery || rewrittenQuery || query
+    const blockId = `research-${Date.now()}`
     const newBlock: ResearchBlock = {
-      id: `research-${Date.now()}`,
+      id: blockId,
       query: activeQuery,
       messages: [],
       todos: [],
@@ -631,11 +728,11 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     setActiveResearchIdx(blockIdx)
     lastMessageTime.current = Date.now()
 
-    await fetchDeepResearch(activeQuery, blockIdx)
+    await fetchDeepResearch(activeQuery, blockIdx, blockId)
   }
 
   // ── Stream a deep research request ────────────────────────────────
-  const fetchDeepResearch = async (activeQuery: string, blockIdx: number) => {
+  const fetchDeepResearch = async (activeQuery: string, blockIdx: number, blockId: string) => {
     const handler = makeSSEHandler(blockIdx)
     try {
       const apiEndpoint = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
@@ -666,6 +763,24 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         body: JSON.stringify(payload),
       })
       if (!response.ok) {
+        if (response.status === 429) {
+          setResearchBlocks(prev => {
+            const copy = [...prev]
+            if (copy[blockIdx]) {
+              copy[blockIdx] = {
+                ...copy[blockIdx],
+                isComplete: true,
+                error: null,
+                hasTimedOut: false,
+                executionTime: Date.now() - copy[blockIdx].startTime,
+              }
+            }
+            return copy
+          })
+          isCompleteRef.current = true
+          lockCanvasForQuota(blockId)
+          return
+        }
         const message = getAiRequestErrorMessage(response.status)
         toast.error(message)
         throw new Error(message)
@@ -702,6 +817,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   }
 
   const handleChatSend = () => {
+    if (isQuotaLocked) {
+      clerk.openSignIn()
+      return
+    }
     if (!chatInput.trim() || isChatLoading) return
     const currentInput = chatInput
     const currentFollowUp = followUpText
@@ -865,8 +984,18 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                   <div className="flex flex-col gap-2.5 w-full">
                                     <div className="flex items-center gap-2.5">
                                       <button
-                                        onClick={() => startDeepResearch(i)}
-                                        className="px-6 py-2.5 bg-[var(--accent)] text-white rounded-full text-sm font-medium hover:opacity-90 flex items-center justify-center gap-2 shadow-sm transition-all hover:scale-[1.02] shrink-0"
+                                        onClick={() => {
+                                          if (isQuotaLocked) {
+                                            clerk.openSignIn()
+                                            return
+                                          }
+                                          startDeepResearch(i)
+                                        }}
+                                        className={`px-6 py-2.5 rounded-full text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-all shrink-0 ${
+                                          isQuotaLocked
+                                            ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                                            : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
+                                        }`}
                                       >
                                         <Layout size={16} />
                                         Start Research
@@ -920,6 +1049,21 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                 }
                               }}
                             />
+                            {isQuotaLocked && quotaLockedBlockId === block.id && (
+                              <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
+                                <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
+                                  Your daily quota is used up. Please sign in to continue in Canvas mode.
+                                </span>
+                                <SignUpButton mode="modal">
+                                  <button
+                                    type="button"
+                                    className="h-7 px-3 rounded-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors whitespace-nowrap"
+                                  >
+                                    Get Started
+                                  </button>
+                                </SignUpButton>
+                              </div>
+                            )}
                           </div>
                           {/* Action buttons below the research block */}
                           {block.isComplete && (
@@ -968,17 +1112,17 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}
-                  placeholder={isResearching ? 'Researching... please wait' : 'Discuss the research plan or ask a follow-up...'}
-                  disabled={isChatLoading || isResearching}
+                  placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan or ask a follow-up...'}
+                  disabled={isQuotaLocked || isChatLoading || isResearching}
                   className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <button
                   onClick={handleChatSend}
-                  disabled={!chatInput.trim() || isChatLoading || isResearching}
+                  disabled={isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching}
                   className={`
                     absolute right-2 top-1/2 -translate-y-1/2
                     flex items-center justify-center p-2 rounded-lg transition-all duration-200
-                    ${!chatInput.trim() || isChatLoading || isResearching
+                    ${isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
                       ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
                       : 'bg-[var(--accent)] text-white hover:opacity-90'
                     }
@@ -1052,14 +1196,24 @@ interface InlineResearchBlockProps {
 
 function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress, onViewReport }: InlineResearchBlockProps) {
   return (
-    <div className="border border-[var(--border-subtle)] bg-card/50 rounded-xl p-4 sm:p-5 shadow-sm animate-fade-in">
+    <div className="relative border border-[var(--border-subtle)] bg-card/50 rounded-xl p-4 sm:p-5 shadow-sm animate-fade-in">
+      {!block.isComplete && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -inset-1 rounded-xl animate-pulse"
+          style={{
+            boxShadow: '0 0 20px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 36px color-mix(in srgb, var(--accent) 12%, transparent)',
+            animationDuration: '2.6s',
+          }}
+        />
+      )}
       {/* Header: always stacked column layout */}
       <div className="flex flex-col gap-3">
         {/* Icon + title */}
         <div className="flex items-start gap-3 overflow-hidden min-w-0">
           <div className="relative flex h-8 w-8 items-center justify-center shrink-0 overflow-hidden rounded-full bg-[var(--accent)]/20 mt-0.5">
             {!block.isComplete ? (
-              <Loader className="h-4 w-4 text-[var(--accent)] animate-spin" />
+              <div className="h-2 w-2 rounded-full bg-[var(--accent)]/80" />
             ) : (
               <Layout className="h-4 w-4 text-[var(--accent)]" />
             )}

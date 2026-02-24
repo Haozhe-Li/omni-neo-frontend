@@ -31,6 +31,7 @@ import { SourceItem } from '@/components/source-item'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import { useClerk } from '@clerk/nextjs'
 import type { Components } from 'react-markdown'
 import type { Source, PublishDuration } from '@/lib/types'
 
@@ -232,6 +233,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
   const [isPublishExpanded, setIsPublishExpanded] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [isPublishing, setIsPublishing] = useState(false)
+  const clerk = useClerk()
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -504,7 +506,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                     <DropdownMenuItem
                       onSelect={(e) => {
                         e.preventDefault()
-                        toast.info('Sign in to publish pages.')
+                        clerk.openSignIn()
                       }}
                       className="cursor-pointer opacity-50"
                     >

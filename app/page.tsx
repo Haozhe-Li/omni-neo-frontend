@@ -8,7 +8,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useGuestQuota } from '@/hooks/useGuestQuota'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, useClerk } from '@clerk/nextjs'
 
 // ... imports
 import { useIsMobile } from '@/hooks/use-mobile'
@@ -23,7 +23,8 @@ export default function Home() {
   const [isAutoDetecting, setIsAutoDetecting] = useState(false)
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
-  const { quotaExceeded, refresh: refreshQuota } = useGuestQuota()
+  const clerk = useClerk()
+  const { quota, quotaExceeded, refresh: refreshQuota } = useGuestQuota()
 
   // Sidebar state
   const isMobileCheck = useIsMobile()
@@ -59,10 +60,18 @@ export default function Home() {
   }, [])
 
   const handleModelChange = (newModel: ModelType) => {
-    // If quota exceeded, prevent selecting canvas or auto
-    if (quotaExceeded && (newModel === 'canvas' || newModel === 'auto')) {
-      toast.error('Daily quota reached. Sign in for unlimited Canvas & Auto mode.')
-      return
+    // If quota exceeded for guests: Canvas/Auto selection should trigger sign-in modal
+    if (!isSignedIn && quotaExceeded) {
+      if (newModel === 'auto') {
+        toast.info('Daily quota reached. Sign in to continue with Auto mode.')
+        clerk.openSignIn()
+        return
+      }
+      if (newModel === 'canvas') {
+        toast.info('Daily quota reached. Sign in to continue with Canvas mode.')
+        clerk.openSignIn()
+        return
+      }
     }
     setModel(newModel)
     localStorage.setItem('omni_model_preference', newModel)
@@ -73,10 +82,10 @@ export default function Home() {
     setCurrentThreadId(threadId)
 
     if (model === 'auto') {
-      // If guest quota exceeded, fall back to light directly
-      if (quotaExceeded) {
-        toast.info('Daily quota reached — using Light mode.')
-        setView('light')
+      // If guest quota exceeded, selecting/using Auto should prompt sign-in
+      if (!isSignedIn && quotaExceeded) {
+        toast.info('Daily quota reached. Sign in to continue with Auto mode.')
+        clerk.openSignIn()
         return
       }
       // Auto mode: call /get_model first
@@ -137,15 +146,15 @@ export default function Home() {
       }
     } else {
       // Manual mode: use the selected model directly
-      // Guard: if quota exceeded and user somehow selects canvas, fall back
-      if (quotaExceeded && model === 'canvas') {
-        toast.info('Daily quota reached — using Light mode.')
-        setView('light')
+      // Guard: when guest quota is exceeded and Canvas is selected, prompt sign-in
+      if (!isSignedIn && quotaExceeded && model === 'canvas') {
+        toast.info('Daily quota reached. Sign in to continue with Canvas mode.')
+        clerk.openSignIn()
         return
       }
       setView(model)
     }
-  }, [model, quotaExceeded])
+  }, [model, quotaExceeded, isSignedIn, clerk])
 
   // Refresh quota every time user lands on home page
   useEffect(() => {
@@ -153,15 +162,6 @@ export default function Home() {
       refreshQuota()
     }
   }, [view, refreshQuota])
-
-  // Auto-downgrade model when quota is exceeded
-  useEffect(() => {
-    if (quotaExceeded && (model === 'canvas' || model === 'auto')) {
-      setModel('light')
-      localStorage.setItem('omni_model_preference', 'light')
-      toast.info('Daily quota reached — switched to Light mode. Sign in for unlimited access.')
-    }
-  }, [quotaExceeded, model])
 
   const handleNewSearch = useCallback(() => {
     setView('home')
@@ -283,6 +283,7 @@ export default function Home() {
             model={model}
             onModelChange={handleModelChange}
             quotaExceeded={quotaExceeded}
+            remainingQuota={!isSignedIn && quota && quota.remaining > 0 ? quota.remaining : null}
           />
         )}
       </main>

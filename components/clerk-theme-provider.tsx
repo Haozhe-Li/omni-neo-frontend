@@ -4,6 +4,36 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { dark } from '@clerk/themes'
 import { useTheme } from 'next-themes'
 
+const clerkLocalization = {
+    locale: 'en-US',
+    socialButtonsBlockButton: 'Continue with {{provider|titleize}}',
+    dividerText: 'or',
+    formButtonPrimary: 'Continue',
+    formFieldLabel__emailAddress: 'Email',
+    formFieldInputPlaceholder__emailAddress: 'Enter your email',
+    formFieldLabel__password: 'Password',
+    formFieldInputPlaceholder__password: 'Enter your password',
+    formResendCodeNotReceivedMessage: "Didn't receive a code?",
+    formResendCodeLink: 'Resend',
+    footerActionLink__useAnotherMethod: 'Use another method',
+    signIn: {
+        start: {
+            title: 'Sign in to Omni Knows',
+            subtitle: 'Sign in to sync your chats and settings across all devices, and continue using Canvas and Auto mode',
+            actionText: "Don't have an account?",
+            actionLink: 'Sign up',
+        },
+    },
+    signUp: {
+        start: {
+            title: 'Create your Omni Knows account',
+            subtitle: 'Create an account to sync your chats and settings across all devices and unlock unlimited usage',
+            actionText: 'Already have an account?',
+            actionLink: 'Sign in',
+        },
+    },
+} as const
+
 const lightVars = {
     colorPrimary: '#20B2AA',
     colorBackground: '#ffffff',
@@ -49,6 +79,7 @@ export function ClerkThemeProvider({ children }: { children: React.ReactNode }) 
                     avatarBox: 'rounded-full',
                 },
             }}
+            localization={clerkLocalization}
         >
             {children}
         </ClerkProvider>

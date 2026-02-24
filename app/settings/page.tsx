@@ -34,7 +34,8 @@ import {
     LogOut,
     Shield,
     Settings,
-    ChevronRight
+    ChevronRight,
+    Lock
 } from 'lucide-react'
 import { getUserLocation, LocationData } from '@/lib/location'
 import { getMemories, type Memories } from '@/lib/memories'
@@ -69,7 +70,8 @@ export default function SettingsPage() {
     const [isLocating, setIsLocating] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [activeSection, setActiveSection] = useState('Appearance')
-    const { quotaExceeded } = useGuestQuota()
+    const { quota, quotaExceeded } = useGuestQuota()
+    const remainingQuota = !isSignedIn && quota && quota.remaining > 0 ? quota.remaining : null
 
     // Sidebar state
     const isMobileCheck = useIsMobile()
@@ -145,8 +147,15 @@ export default function SettingsPage() {
     }, [mounted])
 
     const handleModelChange = (newModel: ModelType) => {
-        if (quotaExceeded && (newModel === 'canvas' || newModel === 'auto')) {
-            return
+        if (!isSignedIn && quotaExceeded) {
+            if (newModel === 'auto') {
+                clerk.openSignIn()
+                return
+            }
+            if (newModel === 'canvas') {
+                clerk.openSignIn()
+                return
+            }
         }
         setChatModel(newModel)
         localStorage.setItem('omni_model_preference', newModel)
@@ -322,7 +331,7 @@ export default function SettingsPage() {
                                         icon={<Waypoints size={16} />}
                                         active={chatModel === 'auto'}
                                         onClick={() => handleModelChange('auto')}
-                                        disabled={quotaExceeded}
+                                        locked={quotaExceeded}
                                     />
                                     <ModelOption
                                         value="canvas"
@@ -331,7 +340,8 @@ export default function SettingsPage() {
                                         icon={<Layout size={16} />}
                                         active={chatModel === 'canvas'}
                                         onClick={() => handleModelChange('canvas')}
-                                        disabled={quotaExceeded}
+                                        locked={quotaExceeded}
+                                        badgeText={!quotaExceeded && remainingQuota !== null ? `${remainingQuota} left` : undefined}
                                     />
                                     <ModelOption
                                         value="light"
@@ -544,7 +554,12 @@ export default function SettingsPage() {
                                                 </p>
                                             </div>
                                             <button
-                                                onClick={() => clerk.signOut()}
+                                                onClick={async () => {
+                                                    await clerk.signOut()
+                                                    if (typeof window !== 'undefined') {
+                                                        window.location.reload()
+                                                    }
+                                                }}
                                                 className="p-2 rounded-lg text-[var(--muted-foreground)] hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
                                                 title="Sign Out"
                                             >
@@ -622,7 +637,7 @@ export default function SettingsPage() {
                                 <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between mt-2">
                                     <div className="space-y-1">
                                         <span className="block text-sm font-medium text-[var(--foreground)]">Delete all local data</span>
-                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all local data (chat history, memory, and personalization settings). If you are logged in to an account, this action will not affect your cloud data.</span>
+                                        <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all local data.</span>
                                     </div>
                                     <button
                                         onClick={() => {
@@ -771,7 +786,9 @@ function ModelOption({
     icon,
     active,
     onClick,
-    disabled = false
+    disabled = false,
+    locked = false,
+    badgeText
 }: {
     value: string
     title: string
@@ -780,6 +797,8 @@ function ModelOption({
     active: boolean
     onClick: () => void
     disabled?: boolean
+    locked?: boolean
+    badgeText?: string
 }) {
     return (
         <button
@@ -802,24 +821,31 @@ function ModelOption({
                     {icon}
                 </div>
                 <div className="space-y-1">
-                    <span className={cn(
-                        "block text-sm font-medium transition-colors duration-300",
-                        active ? "text-[var(--foreground)]" : "text-[var(--foreground)]"
-                    )}>
-                        {title}
+                    <span className="block text-sm font-medium text-[var(--foreground)]">
+                        <span className="inline-flex items-center gap-1.5">
+                            {title}
+                            {locked && <Lock size={13} className="text-[var(--muted-foreground)]" />}
+                        </span>
                     </span>
                     <span className="block text-xs text-[var(--muted-foreground)] leading-relaxed">
                         {description}
                     </span>
                 </div>
             </div>
-            <div className={cn(
-                "w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-300 flex-shrink-0",
-                active
-                    ? "border-[var(--accent)] bg-[var(--accent)] text-white"
-                    : "border-[var(--muted-foreground)]/40 bg-transparent"
-            )}>
-                {active && <Check size={12} strokeWidth={3} />}
+            <div className="ml-2 w-[84px] flex items-center justify-end gap-2 flex-shrink-0">
+                {badgeText && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-[var(--border-subtle)] text-[var(--muted-foreground)]">
+                        {badgeText}
+                    </span>
+                )}
+                <div className={cn(
+                    "w-5 h-5 rounded-full border flex items-center justify-center transition-all duration-300",
+                    active
+                        ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                        : "border-[var(--muted-foreground)]/40 bg-transparent"
+                )}>
+                    {active && <Check size={12} strokeWidth={3} />}
+                </div>
             </div>
         </button>
     )
