@@ -592,7 +592,7 @@ export default function SettingsPage() {
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-sm font-medium text-[var(--foreground)]">Sign in for Unlimited Usage</p>
-                                        <p className="text-xs text-[var(--muted-foreground)]">Unlimited usage on Canvas plus chat history sync on all devices</p>
+                                        <p className="text-xs text-[var(--muted-foreground)]">Unlimited usage on Canvas and chat history sync on all devices</p>
                                     </div>
                                     <SignInButton mode="modal">
                                         <button className="px-6 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
