@@ -478,8 +478,8 @@ export function AppSidebar({
                                 `}
                                 title="Get started to sync your history and settings"
                             >
-                                <LogIn size={18} />
-                                {isExpanded && <span className="text-sm">Get Started</span>}
+                                <User size={18} />
+                                {isExpanded && <span className="text-sm">Sign In</span>}
                             </button>
                         </SignUpButton>
                     )

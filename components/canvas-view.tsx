@@ -1113,7 +1113,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                     type="button"
                                     className="h-7 px-3 rounded-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors whitespace-nowrap"
                                   >
-                                    Get Started
+                                    Sign In
                                   </button>
                                 </SignUpButton>
                               </div>

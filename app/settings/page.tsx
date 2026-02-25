@@ -642,7 +642,11 @@ export default function SettingsPage() {
                                     <button
                                         onClick={() => {
                                             if (confirm('Are you sure you want to delete all chat history, memory and personalization data? This action cannot be undone.')) {
+                                                const preservedGuestId = localStorage.getItem('guest_id')
                                                 localStorage.clear()
+                                                if (preservedGuestId) {
+                                                    localStorage.setItem('guest_id', preservedGuestId)
+                                                }
                                                 window.location.reload()
                                             }
                                         }}
