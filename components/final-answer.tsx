@@ -140,13 +140,13 @@ const markdownComponents: Components = {
     <h3 className="text-lg font-medium text-foreground mt-6 mb-2">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="my-3 ml-1 space-y-1.5 list-none">{children}</ul>
+    <ul className="my-3 ml-1 space-y-1.5">{children}</ul>
   ),
   ol: ({ children }) => (
     <ol className="my-3 ml-1 space-y-1.5 list-decimal list-inside">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="text-foreground leading-[1.7] pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-accent/60 before:font-bold">
+    <li className="text-foreground leading-[1.7]">
       {children}
     </li>
   ),
