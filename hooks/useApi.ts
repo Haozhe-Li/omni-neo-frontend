@@ -9,9 +9,13 @@ export const useApi = () => {
 
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
     const token = await getToken()
+    const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string>),
-      'Content-Type': 'application/json',
+    }
+
+    if (!isFormDataBody && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json'
     }
 
     if (token) {

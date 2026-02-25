@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock } from 'lucide-react'
+import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock, Mic, Loader2 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -22,9 +22,25 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const [isFocused, setIsFocused] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isSstPending, setIsSstPending] = useState(false)
+  const [sstPrompt, setSstPrompt] = useState('')
   const { isSignedIn } = useAuth()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const vadRafRef = useRef<number | null>(null)
+  const speechDetectedRef = useRef(false)
+  const voicedFramesRef = useRef(0)
+  const silenceDurationRef = useRef(0)
+  const lastVadTsRef = useRef<number | null>(null)
+  const recordingStartTsRef = useRef(0)
+  const sstPromptRef = useRef('')
+  const sstPromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stopReasonRef = useRef<'manual' | 'initial-silence' | 'trailing-silence' | 'max-duration' | 'unknown'>('unknown')
 
   // Mouse glow state — we track both "target" (instant mouse) and "rendered" (smoothed)
   const glowRef = useRef<HTMLDivElement>(null)
@@ -237,6 +253,269 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const showCanvasRemaining = model === 'canvas' && !quotaExceeded && remainingQuota !== null
   const showSelectedLock = quotaExceeded && (model === 'canvas' || model === 'auto')
 
+  const VAD_RMS_THRESHOLD = 0.02
+  const VAD_MIN_VOICED_FRAMES = 3
+  const VAD_AUTO_STOP_ON_SILENCE_MS = 900
+  const VAD_NUDGE_NO_SPEECH_MS = 5000
+  const VAD_FORCE_STOP_NO_SPEECH_MS = 10000
+  const VAD_MAX_RECORDING_MS = 60000
+
+  const updateSstPrompt = useCallback((nextPrompt: string) => {
+    if (sstPromptRef.current === nextPrompt) return
+    sstPromptRef.current = nextPrompt
+    setSstPrompt(nextPrompt)
+  }, [])
+
+  const clearSstPromptTimer = useCallback(() => {
+    if (sstPromptTimeoutRef.current) {
+      clearTimeout(sstPromptTimeoutRef.current)
+      sstPromptTimeoutRef.current = null
+    }
+  }, [])
+
+  const showSstPromptForDuration = useCallback((message: string, durationMs: number) => {
+    clearSstPromptTimer()
+    updateSstPrompt(message)
+    sstPromptTimeoutRef.current = setTimeout(() => {
+      updateSstPrompt('')
+      sstPromptTimeoutRef.current = null
+    }, durationMs)
+  }, [clearSstPromptTimer, updateSstPrompt])
+
+  const stopVadMonitoring = useCallback(() => {
+    if (vadRafRef.current !== null) {
+      cancelAnimationFrame(vadRafRef.current)
+      vadRafRef.current = null
+    }
+    if (audioContextRef.current) {
+      void audioContextRef.current.close().catch(() => undefined)
+      audioContextRef.current = null
+    }
+    silenceDurationRef.current = 0
+    lastVadTsRef.current = null
+  }, [])
+
+  const stopMediaTracks = useCallback(() => {
+    mediaStreamRef.current?.getTracks().forEach(track => track.stop())
+    mediaStreamRef.current = null
+  }, [])
+
+  const startVadMonitoring = useCallback((stream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext()
+      const source = audioContext.createMediaStreamSource(stream)
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 2048
+      analyser.smoothingTimeConstant = 0.85
+      source.connect(analyser)
+
+      audioContextRef.current = audioContext
+      speechDetectedRef.current = false
+      voicedFramesRef.current = 0
+      silenceDurationRef.current = 0
+      lastVadTsRef.current = null
+
+      const data = new Uint8Array(analyser.fftSize)
+
+      const monitor = (ts: number) => {
+        analyser.getByteTimeDomainData(data)
+        let sum = 0
+        for (let i = 0; i < data.length; i += 1) {
+          const normalized = (data[i] - 128) / 128
+          sum += normalized * normalized
+        }
+        const rms = Math.sqrt(sum / data.length)
+
+        const prevTs = lastVadTsRef.current ?? ts
+        const delta = ts - prevTs
+        lastVadTsRef.current = ts
+
+        if (rms > VAD_RMS_THRESHOLD) {
+          voicedFramesRef.current += 1
+          silenceDurationRef.current = 0
+          if (voicedFramesRef.current >= VAD_MIN_VOICED_FRAMES) {
+            speechDetectedRef.current = true
+          }
+        } else if (speechDetectedRef.current) {
+          silenceDurationRef.current += delta
+        }
+
+        const elapsed = ts - recordingStartTsRef.current
+        if (!speechDetectedRef.current) {
+          if (elapsed >= VAD_NUDGE_NO_SPEECH_MS) {
+            updateSstPrompt('are you speaking?')
+          } else {
+            updateSstPrompt('listening...')
+          }
+        } else {
+          updateSstPrompt('listening...')
+        }
+
+        const shouldStopForInitialSilence = !speechDetectedRef.current && elapsed >= VAD_FORCE_STOP_NO_SPEECH_MS
+        const shouldStopForTrailingSilence = speechDetectedRef.current && silenceDurationRef.current >= VAD_AUTO_STOP_ON_SILENCE_MS
+        const shouldStopForMaxDuration = elapsed >= VAD_MAX_RECORDING_MS
+
+        if (shouldStopForInitialSilence || shouldStopForTrailingSilence || shouldStopForMaxDuration) {
+          if (shouldStopForInitialSilence) {
+            stopReasonRef.current = 'initial-silence'
+          } else if (shouldStopForTrailingSilence) {
+            stopReasonRef.current = 'trailing-silence'
+          } else {
+            stopReasonRef.current = 'max-duration'
+          }
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop()
+          }
+          return
+        }
+
+        vadRafRef.current = requestAnimationFrame(monitor)
+      }
+
+      vadRafRef.current = requestAnimationFrame(monitor)
+    } catch (error) {
+      console.error('VAD init failed', error)
+      speechDetectedRef.current = true
+    }
+  }, [updateSstPrompt])
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      }
+      clearSstPromptTimer()
+      stopVadMonitoring()
+      stopMediaTracks()
+    }
+  }, [clearSstPromptTimer, stopMediaTracks, stopVadMonitoring])
+
+  const resolveSstText = (payload: unknown): string => {
+    if (!payload || typeof payload !== 'object') return ''
+    const data = payload as Record<string, unknown>
+    const direct = data.text ?? data.transcript ?? data.result
+    if (typeof direct === 'string') return direct.trim()
+    if (data.data && typeof data.data === 'object') {
+      const nested = data.data as Record<string, unknown>
+      const nestedText = nested.text ?? nested.transcript ?? nested.result
+      if (typeof nestedText === 'string') return nestedText.trim()
+    }
+    return ''
+  }
+
+  const stopRecording = () => {
+    stopReasonRef.current = 'manual'
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+  }
+
+  const handleSst = async () => {
+    if (backendStatus !== 'ready' || isSstPending) return
+
+    if (isRecording) {
+      stopRecording()
+      return
+    }
+
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      audioChunksRef.current = []
+      speechDetectedRef.current = false
+      voicedFramesRef.current = 0
+      recordingStartTsRef.current = performance.now()
+      stopReasonRef.current = 'unknown'
+      clearSstPromptTimer()
+      updateSstPrompt('listening...')
+
+      const preferredTypes = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+      const selectedMimeType = preferredTypes.find(type => MediaRecorder.isTypeSupported(type))
+      const mediaRecorder = selectedMimeType
+        ? new MediaRecorder(stream, { mimeType: selectedMimeType })
+        : new MediaRecorder(stream)
+
+      mediaRecorderRef.current = mediaRecorder
+      setIsRecording(true)
+      startVadMonitoring(stream)
+
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        setIsRecording(false)
+        stopVadMonitoring()
+        stopMediaTracks()
+
+        if (!speechDetectedRef.current) {
+          if (stopReasonRef.current === 'initial-silence') {
+            showSstPromptForDuration('No audio detected. Check microphone permissions or retry.', 5000)
+          } else {
+            updateSstPrompt('')
+          }
+          audioChunksRef.current = []
+          return
+        }
+
+        if (!audioChunksRef.current.length) return
+
+        const recorderType = mediaRecorder.mimeType || selectedMimeType || 'audio/webm'
+        const extension = recorderType.includes('mp4') ? 'm4a' : 'webm'
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorderType })
+        const audioFile = new File([audioBlob], `speech-${Date.now()}.${extension}`, { type: recorderType })
+        const formData = new FormData()
+        formData.append('file', audioFile)
+
+        const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+        const endpoint = `${backendUrl}/api/sst`
+
+        setIsSstPending(true)
+        try {
+          const res = await fetchWithAuth(endpoint, {
+            method: 'POST',
+            body: formData,
+          })
+          if (!res.ok) return
+
+          const contentType = res.headers.get('content-type') || ''
+          let text = ''
+          if (contentType.includes('application/json')) {
+            const payload = await res.json()
+            text = resolveSstText(payload)
+          } else {
+            text = (await res.text()).trim()
+          }
+
+          if (!text) return
+
+          setQuery(text)
+          inputRef.current?.focus()
+        } catch (error) {
+          console.error('SST failed', error)
+        } finally {
+          setIsSstPending(false)
+          audioChunksRef.current = []
+          updateSstPrompt('')
+        }
+      }
+
+      mediaRecorder.start()
+    } catch (error) {
+      setIsRecording(false)
+      stopVadMonitoring()
+      stopMediaTracks()
+      updateSstPrompt('')
+      console.error('Failed to start SST recording', error)
+    }
+  }
+
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
 
@@ -325,11 +604,13 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 onKeyDown={handleKeyDown}
                 disabled={backendStatus !== 'ready'}
                 placeholder={
-                  backendStatus === 'ready'
-                    ? "Ask anything..."
-                    : isCheckPending
-                      ? "Connecting to brain..."
-                      : "Backend is not ready, please wait..."
+                  (isRecording || !!sstPrompt)
+                    ? (sstPrompt || 'listening...')
+                    : backendStatus === 'ready'
+                      ? "Ask anything..."
+                      : isCheckPending
+                        ? "Connecting to brain..."
+                        : "Backend is not ready, please wait..."
                 }
                 className={`w-full resize-none bg-transparent px-6 pt-5 pb-2 text-base text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
                 style={{ minHeight: '52px' }}
@@ -411,6 +692,27 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 </div>
 
                 <button
+                  type="button"
+                  onClick={handleSst}
+                  disabled={backendStatus !== 'ready' || isSstPending}
+                  className={`
+                    relative flex items-center justify-center h-9 w-9 rounded-xl transition-all duration-200
+                    ${backendStatus === 'ready' && !isSstPending
+                      ? isRecording
+                        ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
+                        : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                      : 'bg-muted text-muted-foreground cursor-not-allowed'
+                    }
+                  `}
+                  aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+                >
+                  {isRecording && !isSstPending && (
+                    <span className="absolute inset-0 rounded-xl border border-[var(--accent-foreground)]/35 animate-ping" aria-hidden="true" />
+                  )}
+                  {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
+                </button>
+
+                <button
                   type="submit"
                   disabled={!query.trim() || backendStatus !== 'ready'}
                   className={`
@@ -431,7 +733,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           {isSignedIn === false && (
             <div className="mt-3 w-full max-w-[680px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
               <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
-                Sync chats and settings across devices for a smoother experience.
+                Unlimited usage and sync chats across devices for a smoother experience.
               </span>
               <SignUpButton mode="modal">
                 <button

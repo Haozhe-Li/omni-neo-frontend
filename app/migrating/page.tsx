@@ -94,8 +94,8 @@ export default function MigratingPage() {
             <div className="h-4 w-4 rounded-full border-[1.5px] border-[var(--accent)] border-t-transparent animate-spin" />
           </div>
           <div>
-            <h1 className="text-base font-semibold text-[var(--foreground)]">Syncing your chats</h1>
-            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">We’re securely migrating your guest history to your account.</p>
+            <h1 className="text-base font-semibold text-[var(--foreground)]">Syncing your data...</h1>
+            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">We’re securely syncing your workspace and preferences.</p>
           </div>
         </div>
 

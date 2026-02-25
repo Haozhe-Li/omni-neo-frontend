@@ -75,6 +75,9 @@ const inferTitleFromMessages = (messages: Array<{ role?: string; content?: strin
   return firstUserMessage?.content?.trim() || fallback
 }
 
+const fetchedTitleThreadSet = new Set<string>()
+const inFlightTitleThreadSet = new Set<string>()
+
 export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen }: CanvasViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
@@ -115,6 +118,19 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const isInitializedRef = useRef(false)
 
   const { fetchWithAuth } = useApi()
+
+  const getStoredTitle = useCallback(() => {
+    if (typeof window === 'undefined' || !threadId) return ''
+    const stored = localStorage.getItem(threadId)
+    if (!stored) return ''
+    try {
+      const parsed = JSON.parse(stored)
+      const parsedTitle = typeof parsed?.title === 'string' ? parsed.title.trim() : ''
+      return parsedTitle
+    } catch {
+      return ''
+    }
+  }, [threadId])
 
   const lockCanvasForQuota = useCallback((blockId?: string, shouldOpenSignIn = true) => {
     setIsQuotaLocked(true)
@@ -584,6 +600,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
               setChatMessages(remoteMessages)
               setTitle(resolvedTitle)
+              if (!isUntitledTitle(resolvedTitle)) {
+                fetchedTitleThreadSet.add(threadId)
+              }
               setRewrittenQuery(finalRewrittenQuery)
               setResearchBlocks(finalResearchBlocks)
               setResearchTriggerIndex(finalResearchTriggerIndex)
@@ -631,7 +650,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             if (data.thread_id === threadId) {
               if (data.chatMessages) setChatMessages(data.chatMessages)
               if (data.rewrittenQuery) setRewrittenQuery(data.rewrittenQuery)
-              if (data.title) setTitle(data.title)
+              if (data.title) {
+                setTitle(data.title)
+                if (!isUntitledTitle(data.title)) {
+                  fetchedTitleThreadSet.add(threadId)
+                }
+              }
 
               if (data.researchBlocks && Array.isArray(data.researchBlocks)) {
                 setResearchBlocks(data.researchBlocks)
@@ -838,7 +862,23 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   const getDurationForTitle = async () => {
     try {
+      if (!threadId) return
       if (isUntitledTitle(query)) return
+      if (!isUntitledTitle(title)) {
+        fetchedTitleThreadSet.add(threadId)
+        return
+      }
+
+      const storedTitle = getStoredTitle()
+      if (!isUntitledTitle(storedTitle)) {
+        setTitle(storedTitle)
+        fetchedTitleThreadSet.add(threadId)
+        return
+      }
+
+      if (fetchedTitleThreadSet.has(threadId) || inFlightTitleThreadSet.has(threadId)) return
+      inFlightTitleThreadSet.add(threadId)
+
       const apiEndpoint = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
         ? '/api/mock-get-title'
         : process.env.NEXT_PUBLIC_BACKEND_URL
@@ -854,6 +894,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       const data = await response.json()
       const newTitle = (typeof data === 'string' ? data : data?.title) || title
       setTitle(newTitle)
+      if (!isUntitledTitle(newTitle)) {
+        fetchedTitleThreadSet.add(threadId)
+      }
       if (typeof window !== 'undefined' && threadId) {
         const stored = localStorage.getItem(threadId)
         if (stored) {
@@ -867,10 +910,14 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       }
     } catch {
       console.error('Failed to fetch title')
+    } finally {
+      if (threadId) {
+        inFlightTitleThreadSet.delete(threadId)
+      }
     }
   }
 
-  useEffect(() => { getDurationForTitle() }, [query])
+  useEffect(() => { getDurationForTitle() }, [query, threadId, title, getStoredTitle])
 
   const isResearching = activeResearchIdx >= 0 && !researchBlocks[activeResearchIdx]?.isComplete
   const reportBlock = reportBlockIdx >= 0 ? researchBlocks[reportBlockIdx] : null
@@ -1121,7 +1168,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   onKeyDown={handleChatInputKeyDown}
                   placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan or ask a follow-up...'}
                   disabled={isQuotaLocked || isChatLoading || isResearching}
-                  className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <button
                   onClick={handleChatSend}

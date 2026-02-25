@@ -97,6 +97,9 @@ const inferTitleFromMessages = (messages: Message[], fallback: string) => {
   return firstUserMessage?.content?.trim() || fallback
 }
 
+const fetchedTitleThreadSet = new Set<string>()
+const inFlightTitleThreadSet = new Set<string>()
+
 export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: LightChatViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
@@ -131,6 +134,19 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     }).catch(() => { /* fire-and-forget */ })
   }, [threadId, fetchWithAuth, isMockMode])
 
+  const getStoredTitle = useCallback(() => {
+    if (typeof window === 'undefined' || !threadId) return ''
+    const stored = localStorage.getItem(threadId)
+    if (!stored) return ''
+    try {
+      const parsed = JSON.parse(stored)
+      const parsedTitle = typeof parsed?.title === 'string' ? parsed.title.trim() : ''
+      return parsedTitle
+    } catch {
+      return ''
+    }
+  }, [threadId])
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -142,7 +158,23 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   useEffect(() => {
     const fetchTitle = async () => {
       try {
+        if (!threadId) return
         if (isUntitledTitle(query)) return
+        if (!isUntitledTitle(title)) {
+          fetchedTitleThreadSet.add(threadId)
+          return
+        }
+
+        const storedTitle = getStoredTitle()
+        if (!isUntitledTitle(storedTitle)) {
+          setTitle(storedTitle)
+          fetchedTitleThreadSet.add(threadId)
+          return
+        }
+
+        if (fetchedTitleThreadSet.has(threadId) || inFlightTitleThreadSet.has(threadId)) return
+        inFlightTitleThreadSet.add(threadId)
+
         const apiEndpoint =
           process.env.NEXT_PUBLIC_USE_MOCK === 'true'
             ? '/api/mock-get-title'
@@ -163,6 +195,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         const data = await response.json()
         if (data && typeof data === 'string') {
           setTitle(data)
+          fetchedTitleThreadSet.add(threadId)
           // Persist to local storage immediately
           if (typeof window !== 'undefined' && threadId) {
             const stored = localStorage.getItem(threadId)
@@ -177,6 +210,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
           }
         } else if (data && data.title) {
           setTitle(data.title)
+          fetchedTitleThreadSet.add(threadId)
           // Persist to local storage immediately
           if (typeof window !== 'undefined' && threadId) {
             const stored = localStorage.getItem(threadId)
@@ -192,12 +226,16 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         }
       } catch (error) {
         console.error('Failed to fetch title:', error)
+      } finally {
+        if (threadId) {
+          inFlightTitleThreadSet.delete(threadId)
+        }
       }
     }
 
     // Only fetch if not using mock, or if mock has a specific endpoint
     fetchTitle()
-  }, [query, threadId])
+  }, [query, threadId, title, getStoredTitle])
 
   // Load from LocalStorage OR Fetch initial
   useEffect(() => {
@@ -217,6 +255,9 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 : remoteRawTitle
               setMessages(remoteMessages)
               setTitle(resolvedTitle)
+              if (!isUntitledTitle(resolvedTitle)) {
+                fetchedTitleThreadSet.add(threadId)
+              }
               setIsLoading(false)
 
               if (typeof window !== 'undefined') {
@@ -251,7 +292,12 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             const data = JSON.parse(stored)
             if (data.thread_id === threadId && data.type === 'light' && data.chat_history && Array.isArray(data.chat_history)) {
               setMessages(data.chat_history)
-              if (data.title) setTitle(data.title)
+              if (data.title) {
+                setTitle(data.title)
+                if (!isUntitledTitle(data.title)) {
+                  fetchedTitleThreadSet.add(threadId)
+                }
+              }
               setIsLoading(false)
               return
             }
@@ -643,7 +689,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             onKeyDown={handleInputKeyDown}
             placeholder="Ask a follow-up..."
             disabled={isLoading}
-            className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-full pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
+            className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
           />
           <button
             onClick={handleSend}
