@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
         // Step 3: Tavily search
         send({
-          type: 'tool', tool: 'tavily_search', agent: 'Sub-agent', content: 'Tool Calling',
+          type: 'tool', tool: 'google_search', agent: 'Sub-agent', content: 'Tool Calling',
           raw: { args: { query, max_results: 5, topic: 'general' } },
         })
 

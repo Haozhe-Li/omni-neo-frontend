@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -14,6 +15,12 @@ import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
 import { useAuth } from '@clerk/nextjs'
+import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
+
+const LightChatMiniMap = dynamic(
+  () => import('@/components/light-chat-mini-map').then((mod) => mod.LightChatMiniMap),
+  { ssr: false }
+)
 
 interface LightChatViewProps {
   query: string
@@ -31,6 +38,7 @@ interface Message {
   sources?: LightChatSource[]
   stock?: LightChatStock | null
   weather?: LightChatWeather | null
+  mapPoints?: LightChatMapPoint[]
 }
 
 interface LightChatSource {
@@ -118,6 +126,69 @@ function normalizeWeather(raw: unknown): LightChatWeather | null {
   const hasHumidity = typeof weather.humidity === 'number'
   if (!hasStatus && !hasTemp && !hasHumidity) return null
   return weather
+}
+
+function toCoordinateNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function toOptionalNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function toOptionalInteger(value: unknown) {
+  const num = toOptionalNumber(value)
+  return typeof num === 'number' ? Math.round(num) : undefined
+}
+
+function toOptionalString(value: unknown) {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+function normalizeMapPoints(raw: unknown): LightChatMapPoint[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).points)
+      ? (raw as Record<string, unknown>).points as unknown[]
+      : []
+
+  return list.reduce<LightChatMapPoint[]>((acc, item, index) => {
+    if (!item || typeof item !== 'object') return acc
+    const mapItem = item as Record<string, unknown>
+    const lat = toCoordinateNumber(mapItem.lat ?? mapItem.latitude)
+    const lng = toCoordinateNumber(mapItem.lng ?? mapItem.lon ?? mapItem.longitude ?? mapItem.long)
+    if (lat == null || lng == null) return acc
+
+    const nameRaw = mapItem.name ?? mapItem.title ?? mapItem.location ?? mapItem.place
+    const name = typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim() : `Location ${index + 1}`
+    const idRaw = mapItem.id
+    const id = typeof idRaw === 'string' && idRaw.trim() ? idRaw : `${lat}-${lng}-${index}`
+    const position = toOptionalInteger(mapItem.position ?? mapItem.pos ?? mapItem.rank)
+    const url = toOptionalString(mapItem.url)
+    const address = toOptionalString(mapItem.address ?? mapItem.formatted_address ?? mapItem.location_address)
+    const rating = toOptionalNumber(mapItem.rating ?? mapItem.google_rating ?? mapItem.score)
+    const reviewCount = toOptionalInteger(mapItem.review_count ?? mapItem.ratingCount ?? mapItem.user_ratings_total ?? mapItem.reviews)
+    const priceLevel = toOptionalString(mapItem.price_level ?? mapItem.priceLevel ?? mapItem.price ?? mapItem.price_range)
+    const category = toOptionalString(mapItem.category ?? mapItem.type ?? mapItem.place_type)
+    const status = toOptionalString(mapItem.business_status ?? mapItem.status ?? mapItem.opening_status)
+    const imageUrl = toOptionalString(mapItem.image_url ?? mapItem.image ?? mapItem.thumbnail)
+    const cid = toOptionalString(mapItem.cid ?? mapItem.google_cid)
+
+    acc.push({ id, name, lat, lng, position, url, address, rating, reviewCount, priceLevel, category, status, imageUrl, cid })
+    return acc
+  }, [])
 }
 
 function formatStockPrice(price?: number, currency = 'USD') {
@@ -571,10 +642,11 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         const sources = getResponseSources(data)
         const stock = normalizeStock(data.stock)
         const weather = normalizeWeather(data.weather)
+        const mapPoints = normalizeMapPoints(data.map)
 
         const newMessages: Message[] = [
           { role: 'user', content: query },
-          { role: 'assistant', content: answer, use_search, sources, stock, weather }
+          { role: 'assistant', content: answer, use_search, sources, stock, weather, mapPoints }
         ]
 
         setMessages(newMessages)
@@ -701,8 +773,9 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
       const sources = getResponseSources(data)
       const stock = normalizeStock(data.stock)
       const weather = normalizeWeather(data.weather)
+      const mapPoints = normalizeMapPoints(data.map)
 
-      const finalMessages: Message[] = [...newHistory, { role: 'assistant', content: answer, use_search, sources, stock, weather }]
+      const finalMessages: Message[] = [...newHistory, { role: 'assistant', content: answer, use_search, sources, stock, weather, mapPoints }]
       setMessages(finalMessages)
       if (threadId) {
         const historyData = {
@@ -815,89 +888,130 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                         <span>Searched the web</span>
                       </div>
                     )}
-                    {msg.role === 'assistant' && (msg.stock?.data?.symbol || msg.weather || (msg.sources?.length ?? 0) > 0) && (
+                    {msg.role === 'assistant' && ((msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather || (msg.sources?.length ?? 0) > 0) && (
                       <div className="mb-3 space-y-2">
-                        {msg.weather && (
-                          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-3.5 py-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Weather Snapshot</p>
-                                <p className="text-sm font-semibold text-[var(--foreground)] truncate flex items-center gap-1.5 mt-0.5">
-                                  <CloudSun className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                  <span>{msg.weather.status || 'Current Weather'}</span>
-                                </p>
-                                {getWeatherLocation(msg.weather) && (
-                                  <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">{getWeatherLocation(msg.weather)}</p>
-                                )}
-                                {msg.weather.detailed_status && (
-                                  <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">{msg.weather.detailed_status}</p>
-                                )}
+                        {(msg.mapPoints?.length ?? 0) > 0 && (
+                          <LightChatMiniMap points={msg.mapPoints || []} />
+                        )}
+
+                        {msg.weather && (() => {
+                          const w = msg.weather
+                          const location = getWeatherLocation(w)
+                          const tempMain = formatTemperature(w.temperature?.temp, useFahrenheit)
+                          const feelsLike = formatTemperature(w.temperature?.feels_like, useFahrenheit)
+                          const tempLow = w.temperature?.temp_min != null ? formatTemperature(w.temperature.temp_min, useFahrenheit) : null
+                          const tempHigh = w.temperature?.temp_max != null ? formatTemperature(w.temperature.temp_max, useFahrenheit) : null
+                          const humidity = typeof w.humidity === 'number' ? w.humidity : null
+                          const windSpeed = typeof w.wind?.speed === 'number' ? w.wind.speed : null
+                          const vis = typeof w.visibility_distance === 'number' ? w.visibility_distance : null
+                          const tone = getWeatherTone(w.status)
+
+                          return (
+                            <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
+                              {/* header row */}
+                              <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <CloudSun className="h-4 w-4 text-[var(--muted-foreground)] flex-none" />
+                                  <span className="text-[13px] font-medium text-[var(--foreground)] truncate">{location || 'Weather'}</span>
+                                  {w.status && (
+                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${tone}`}>
+                                      {w.status}
+                                    </span>
+                                  )}
+                                </div>
                                 <a
                                   href={getOpenWeatherMapUrl()}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex mt-1.5 p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                  title="OpenWeatherMap"
-                                  aria-label="OpenWeatherMap"
+                                  className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
                                 >
                                   <ExternalLink className="h-3.5 w-3.5" />
                                 </a>
                               </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-base sm:text-lg font-semibold text-[var(--foreground)]">
-                                  {formatTemperature(msg.weather.temperature?.temp, useFahrenheit)}
-                                </p>
-                                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                                  Feels {formatTemperature(msg.weather.temperature?.feels_like, useFahrenheit)}
-                                </p>
-                                {(msg.weather.temperature?.temp_min != null || msg.weather.temperature?.temp_max != null) && (
-                                  <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
-                                    L {formatTemperature(msg.weather.temperature?.temp_min, useFahrenheit)} · H {formatTemperature(msg.weather.temperature?.temp_max, useFahrenheit)}
-                                  </p>
-                                )}
-                                <p className="text-[11px] text-[var(--muted-foreground)] mt-1 max-w-[180px] sm:max-w-none text-right">
-                                  {[formatWeatherMeta(msg), formatVisibility(msg.weather.visibility_distance)].filter(Boolean).join(' · ') || 'Live weather data'}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
 
-                        {msg.stock?.data?.symbol && (
-                          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-3.5 py-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Stock Snapshot</p>
-                                <p className="text-sm font-semibold text-[var(--foreground)] truncate">{msg.stock.data.symbol}</p>
-                                {msg.stock.data.companyName && (
-                                  <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">{msg.stock.data.companyName}</p>
-                                )}
-                                {msg.stock.data.symbol && (
-                                  <a
-                                    href={getYahooQuoteUrl(msg.stock.data.symbol)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex mt-1.5 p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                    title="Yahoo Finance"
-                                    aria-label="Yahoo Finance"
-                                  >
-                                    <ExternalLink className="h-3.5 w-3.5" />
-                                  </a>
-                                )}
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-base sm:text-lg font-semibold text-[var(--foreground)]">
-                                  {formatStockPrice(msg.stock.data.currentPrice, msg.stock.data.currency || 'USD')}
-                                </p>
-                                {formatStockDelta(msg.stock.data.change, msg.stock.data.changePercent) && (
-                                  <p className={`text-xs mt-0.5 ${getStockDeltaTone(msg.stock.data.change)}`}>
-                                    {formatStockDelta(msg.stock.data.change, msg.stock.data.changePercent)}
+                              {/* body */}
+                              <div className="px-3.5 py-3 flex items-center justify-between gap-4">
+                                {/* temperature */}
+                                <div>
+                                  <p className="text-3xl font-semibold tracking-tight text-[var(--foreground)] leading-none">{tempMain}</p>
+                                  <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                    Feels like {feelsLike}
+                                    {tempLow && tempHigh ? ` · ${tempLow} – ${tempHigh}` : ''}
                                   </p>
+                                </div>
+
+                                {/* stats */}
+                                <div className="flex gap-4">
+                                  {humidity != null && (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <Droplets className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                      <span className="text-xs font-medium text-[var(--foreground)]">{humidity}%</span>
+                                      <span className="text-[10px] text-[var(--muted-foreground)]">Humidity</span>
+                                    </div>
+                                  )}
+                                  {windSpeed != null && (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <Wind className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                      <span className="text-xs font-medium text-[var(--foreground)]">{windSpeed.toFixed(1)}</span>
+                                      <span className="text-[10px] text-[var(--muted-foreground)]">m/s</span>
+                                    </div>
+                                  )}
+                                  {vis != null && (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <Eye className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                      <span className="text-xs font-medium text-[var(--foreground)]">{(vis / 1000).toFixed(1)}</span>
+                                      <span className="text-[10px] text-[var(--muted-foreground)]">km</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+
+                        {msg.stock?.data?.symbol && (() => {
+                          const s = msg.stock.data
+                          const price = formatStockPrice(s.currentPrice, s.currency || 'USD')
+                          const delta = formatStockDelta(s.change, s.changePercent)
+                          const deltaTone = getStockDeltaTone(s.change)
+                          const TrendIcon = typeof s.change === 'number' ? (s.change > 0 ? TrendingUp : s.change < 0 ? TrendingDown : Minus) : Minus
+
+                          return (
+                            <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
+                              {/* header row */}
+                              <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <TrendIcon className={`h-4 w-4 flex-none ${deltaTone}`} />
+                                  <span className="text-[13px] font-medium text-[var(--foreground)] truncate">{s.symbol}</span>
+                                  {s.companyName && (
+                                    <span className="text-[11px] text-[var(--muted-foreground)] truncate hidden sm:inline">{s.companyName}</span>
+                                  )}
+                                </div>
+                                <a
+                                  href={getYahooQuoteUrl(s.symbol)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </div>
+
+                              {/* body */}
+                              <div className="px-3.5 py-3 flex items-end justify-between gap-4">
+                                <div>
+                                  <p className="text-3xl font-semibold tracking-tight text-[var(--foreground)] leading-none">{price}</p>
+                                  {delta && (
+                                    <p className={`text-xs font-medium mt-1.5 ${deltaTone}`}>{delta}</p>
+                                  )}
+                                </div>
+                                {s.companyName && (
+                                  <p className="text-xs text-[var(--muted-foreground)] text-right truncate max-w-[140px] sm:hidden">{s.companyName}</p>
                                 )}
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )
+                        })()}
 
                         {sources.length > 0 && (
                           <details className="px-1 py-1 group">

@@ -83,7 +83,7 @@ final_answer你需要给渲染好展示给用户，final_source要在answer最�
 {
     "type": "reasoning",
     "agent": "Sub-agent",
-    "content": "We need to produce a concise research report with key findings and source list. Must use tavily_search then skim if needed. Let's do a search query.",
+    "content": "We need to produce a concise research report with key findings and source list. Must use google_search then skim if needed. Let's do a search query.",
     "raw": {}
 }
 ````
@@ -102,7 +102,7 @@ Tavily Search是当agent调用网络搜索工具时会显示：
 ````json
 {
     "type": "tool",
-    "tool": "tavily_search",
+    "tool": "google_search",
     "agent": "Sub-agent",
     "content": "Tool Calling",
     "raw": {

@@ -261,7 +261,7 @@ function ToolContent({ message }: { message: SSEMessage }) {
 
   const getToolLabel = (): { label: React.ReactNode; detail: React.ReactNode } => {
     switch (tool) {
-      case 'tavily_search':
+      case 'google_search':
         return {
           label: 'Searching',
           detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
