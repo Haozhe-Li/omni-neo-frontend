@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -28,6 +28,198 @@ interface Message {
   content: string
   use_search?: boolean
   follow_up_content?: string
+  sources?: LightChatSource[]
+  stock?: LightChatStock | null
+  weather?: LightChatWeather | null
+}
+
+interface LightChatSource {
+  title: string
+  url: string
+  content?: string
+}
+
+interface LightChatStockData {
+  symbol?: string
+  companyName?: string
+  currentPrice?: number
+  currency?: string
+  change?: number
+  changePercent?: number
+}
+
+interface LightChatStock {
+  success?: boolean
+  data?: LightChatStockData
+  timestamp?: number
+}
+
+interface LightChatWeatherTemperature {
+  temp?: number
+  temp_max?: number
+  temp_min?: number
+  feels_like?: number
+}
+
+interface LightChatWeatherWind {
+  speed?: number
+  deg?: number
+}
+
+interface LightChatWeather {
+  location?: unknown
+  status?: string
+  detailed_status?: string
+  weather_icon_name?: string
+  humidity?: number
+  visibility_distance?: number
+  precipitation_probability?: number | null
+  temperature?: LightChatWeatherTemperature
+  wind?: LightChatWeatherWind
+}
+
+function normalizeSources(raw: unknown): LightChatSource[] {
+  if (!Array.isArray(raw)) return []
+  return raw.reduce<LightChatSource[]>((acc, item) => {
+  if (!item || typeof item !== 'object') return acc
+      const source = item as Record<string, unknown>
+      const title = typeof source.title === 'string' ? source.title.trim() : ''
+      const url = typeof source.url === 'string' ? source.url.trim() : ''
+      const content = typeof source.content === 'string' ? source.content.trim() : undefined
+      if (!title || !url) return acc
+      acc.push({ title, url, content })
+      return acc
+    }, [])
+}
+
+function getResponseSources(data: unknown): LightChatSource[] {
+  if (!data || typeof data !== 'object') return []
+  const payload = data as Record<string, unknown>
+  return normalizeSources(payload.sources ?? payload.source)
+}
+
+function normalizeStock(raw: unknown): LightChatStock | null {
+  if (!raw || typeof raw !== 'object') return null
+  const stock = raw as LightChatStock
+  if (typeof stock.success === 'boolean' && !stock.success) {
+    return stock
+  }
+  if (stock.data && typeof stock.data === 'object') {
+    return stock
+  }
+  return null
+}
+
+function normalizeWeather(raw: unknown): LightChatWeather | null {
+  if (!raw || typeof raw !== 'object') return null
+  const weather = raw as LightChatWeather
+  const hasStatus = typeof weather.status === 'string' || typeof weather.detailed_status === 'string'
+  const hasTemp = typeof weather.temperature?.temp === 'number'
+  const hasHumidity = typeof weather.humidity === 'number'
+  if (!hasStatus && !hasTemp && !hasHumidity) return null
+  return weather
+}
+
+function formatStockPrice(price?: number, currency = 'USD') {
+  if (typeof price !== 'number' || Number.isNaN(price)) return '--'
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(price)
+  } catch {
+    return `${currency} ${price.toFixed(2)}`
+  }
+}
+
+function formatStockDelta(change?: number, changePercent?: number) {
+  if (typeof change !== 'number' || typeof changePercent !== 'number') return null
+  const sign = change > 0 ? '+' : ''
+  return `${sign}${change.toFixed(2)} (${sign}${(changePercent * 100).toFixed(2)}%)`
+}
+
+function getStockDeltaTone(change?: number) {
+  if (typeof change !== 'number' || Number.isNaN(change)) return 'text-[var(--muted-foreground)]'
+  if (change > 0) return 'text-emerald-600 dark:text-emerald-400'
+  if (change < 0) return 'text-rose-600 dark:text-rose-400'
+  return 'text-[var(--muted-foreground)]'
+}
+
+function getSourceDomain(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return 'External source'
+  }
+}
+
+function getYahooQuoteUrl(symbol?: string) {
+  if (!symbol) return ''
+  return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}`
+}
+
+function getOpenWeatherMapUrl() {
+  return 'https://openweathermap.org/'
+}
+
+function toCelsius(temp?: number) {
+  if (typeof temp !== 'number' || Number.isNaN(temp)) return null
+  return temp > 170 ? temp - 273.15 : temp
+}
+
+function shouldUseFahrenheit() {
+  if (typeof window === 'undefined') return false
+  const savedLang = (localStorage.getItem('omni_response_language') || '').toLowerCase()
+  const normalizedSaved = savedLang.replace('_', '-')
+  const locale = normalizedSaved && normalizedSaved !== 'auto' ? normalizedSaved : (navigator.language || '').toLowerCase()
+  if (!locale) return false
+  return locale.startsWith('en-us')
+}
+
+function formatTemperature(temp?: number, useFahrenheit = false) {
+  const celsius = toCelsius(temp)
+  if (celsius == null) return '--'
+  if (!useFahrenheit) return `${Math.round(celsius)}°C`
+  const fahrenheit = (celsius * 9) / 5 + 32
+  return `${Math.round(fahrenheit)}°F`
+}
+
+function formatWeatherMeta(msg: Message) {
+  const humidity = typeof msg.weather?.humidity === 'number' ? `${msg.weather.humidity}% humidity` : null
+  const windSpeed = typeof msg.weather?.wind?.speed === 'number' ? `${msg.weather.wind.speed.toFixed(1)} m/s wind` : null
+  return [humidity, windSpeed].filter(Boolean).join(' · ')
+}
+
+function getWeatherLocation(weather?: LightChatWeather | null) {
+  if (!weather?.location) return ''
+  if (typeof weather.location === 'string') return weather.location
+  if (typeof weather.location === 'object') {
+    const obj = weather.location as Record<string, unknown>
+    const city = typeof obj.city === 'string' ? obj.city : typeof obj.name === 'string' ? obj.name : ''
+    const country = typeof obj.country === 'string' ? obj.country : ''
+    return [city, country].filter(Boolean).join(', ')
+  }
+  return ''
+}
+
+function formatVisibility(visibilityDistance?: number) {
+  if (typeof visibilityDistance !== 'number' || Number.isNaN(visibilityDistance)) return null
+  return `${(visibilityDistance / 1000).toFixed(1)} km visibility`
+}
+
+function getWeatherTone(status?: string) {
+  const normalized = (status || '').toLowerCase()
+  if (normalized.includes('rain') || normalized.includes('drizzle') || normalized.includes('thunder')) {
+    return 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+  }
+  if (normalized.includes('clear')) {
+    return 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+  }
+  if (normalized.includes('snow') || normalized.includes('mist') || normalized.includes('fog')) {
+    return 'bg-slate-500/10 text-slate-700 dark:text-slate-300'
+  }
+  return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
 }
 
 function extractNodeText(node: ReactNode): string {
@@ -114,6 +306,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [title, setTitle] = useState(query)
+  const [useFahrenheit, setUseFahrenheit] = useState(false)
 
   const { fetchWithAuth } = useApi()
 
@@ -155,6 +348,10 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   }, [messages])
 
   // Fetch Title effect
+  useEffect(() => {
+    setUseFahrenheit(shouldUseFahrenheit())
+  }, [])
+
   useEffect(() => {
     const fetchTitle = async () => {
       try {
@@ -371,10 +568,13 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
         const answer = data.answer || (typeof data === 'string' ? data : "No answer returned.")
         const use_search = !!data.use_search
+        const sources = getResponseSources(data)
+        const stock = normalizeStock(data.stock)
+        const weather = normalizeWeather(data.weather)
 
         const newMessages: Message[] = [
           { role: 'user', content: query },
-          { role: 'assistant', content: answer, use_search }
+          { role: 'assistant', content: answer, use_search, sources, stock, weather }
         ]
 
         setMessages(newMessages)
@@ -498,8 +698,11 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
       const answer = data.answer || (typeof data === 'string' ? data : "No answer returned.")
       const use_search = !!data.use_search
+      const sources = getResponseSources(data)
+      const stock = normalizeStock(data.stock)
+      const weather = normalizeWeather(data.weather)
 
-      const finalMessages: Message[] = [...newHistory, { role: 'assistant', content: answer, use_search }]
+      const finalMessages: Message[] = [...newHistory, { role: 'assistant', content: answer, use_search, sources, stock, weather }]
       setMessages(finalMessages)
       if (threadId) {
         const historyData = {
@@ -580,12 +783,15 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
               key={i}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
+              {(() => {
+                const sources = msg.sources ?? []
+                return (
               <div
                 className={`
-                            max-w-[85%] rounded-2xl px-5 py-3 flex flex-col gap-2
+                            rounded-2xl px-5 py-3 flex flex-col gap-2
                             ${msg.role === 'user'
-                    ? 'bg-[var(--secondary)] text-[var(--foreground)]'
-                    : 'bg-transparent text-[var(--foreground)]'
+                    ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]'
+                    : 'w-full bg-transparent text-[var(--foreground)]'
                   }
                         `}
               >
@@ -607,6 +813,119 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                       <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)] bg-[var(--secondary)]/50 w-fit px-2.5 py-1 rounded-md mb-2 border border-[var(--border-subtle)]/50">
                         <Globe size={12} className="opacity-70" />
                         <span>Searched the web</span>
+                      </div>
+                    )}
+                    {msg.role === 'assistant' && (msg.stock?.data?.symbol || msg.weather || (msg.sources?.length ?? 0) > 0) && (
+                      <div className="mb-3 space-y-2">
+                        {msg.weather && (
+                          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-3.5 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Weather Snapshot</p>
+                                <p className="text-sm font-semibold text-[var(--foreground)] truncate flex items-center gap-1.5 mt-0.5">
+                                  <CloudSun className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                  <span>{msg.weather.status || 'Current Weather'}</span>
+                                </p>
+                                {getWeatherLocation(msg.weather) && (
+                                  <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">{getWeatherLocation(msg.weather)}</p>
+                                )}
+                                {msg.weather.detailed_status && (
+                                  <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">{msg.weather.detailed_status}</p>
+                                )}
+                                <a
+                                  href={getOpenWeatherMapUrl()}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex mt-1.5 p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                  title="OpenWeatherMap"
+                                  aria-label="OpenWeatherMap"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-base sm:text-lg font-semibold text-[var(--foreground)]">
+                                  {formatTemperature(msg.weather.temperature?.temp, useFahrenheit)}
+                                </p>
+                                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                                  Feels {formatTemperature(msg.weather.temperature?.feels_like, useFahrenheit)}
+                                </p>
+                                {(msg.weather.temperature?.temp_min != null || msg.weather.temperature?.temp_max != null) && (
+                                  <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+                                    L {formatTemperature(msg.weather.temperature?.temp_min, useFahrenheit)} · H {formatTemperature(msg.weather.temperature?.temp_max, useFahrenheit)}
+                                  </p>
+                                )}
+                                <p className="text-[11px] text-[var(--muted-foreground)] mt-1 max-w-[180px] sm:max-w-none text-right">
+                                  {[formatWeatherMeta(msg), formatVisibility(msg.weather.visibility_distance)].filter(Boolean).join(' · ') || 'Live weather data'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {msg.stock?.data?.symbol && (
+                          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-3.5 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs text-[var(--muted-foreground)] uppercase tracking-wide">Stock Snapshot</p>
+                                <p className="text-sm font-semibold text-[var(--foreground)] truncate">{msg.stock.data.symbol}</p>
+                                {msg.stock.data.companyName && (
+                                  <p className="text-xs text-[var(--muted-foreground)] truncate mt-0.5">{msg.stock.data.companyName}</p>
+                                )}
+                                {msg.stock.data.symbol && (
+                                  <a
+                                    href={getYahooQuoteUrl(msg.stock.data.symbol)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex mt-1.5 p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                    title="Yahoo Finance"
+                                    aria-label="Yahoo Finance"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-base sm:text-lg font-semibold text-[var(--foreground)]">
+                                  {formatStockPrice(msg.stock.data.currentPrice, msg.stock.data.currency || 'USD')}
+                                </p>
+                                {formatStockDelta(msg.stock.data.change, msg.stock.data.changePercent) && (
+                                  <p className={`text-xs mt-0.5 ${getStockDeltaTone(msg.stock.data.change)}`}>
+                                    {formatStockDelta(msg.stock.data.change, msg.stock.data.changePercent)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {sources.length > 0 && (
+                          <details className="px-1 py-1 group">
+                            <summary className="list-none cursor-pointer flex items-center justify-between gap-2">
+                              <span className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+                                <Globe className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                <span>{sources.length} sources total</span>
+                              </span>
+                              <span className="text-xs text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180">⌄</span>
+                            </summary>
+                            <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                              {sources.map((source, sourceIndex) => (
+                                <a
+                                  key={`${source.url}-${sourceIndex}`}
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="group/source block py-0.5"
+                                >
+                                  <p className="text-sm text-[var(--foreground)]/90 group-hover/source:text-[var(--foreground)] transition-colors line-clamp-1">
+                                    {sourceIndex + 1}. {source.title}
+                                  </p>
+                                  <p className="text-xs text-[var(--muted-foreground)]/90 line-clamp-1">{getSourceDomain(source.url)}</p>
+                                </a>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                       </div>
                     )}
                     <div className={`max-w-none ${msg.role === 'user' ? 'prose prose-sm dark:prose-invert' : 'blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]'}`}>
@@ -658,6 +977,8 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                   </div>
                 )}
               </div>
+                )
+              })()}
             </div>
           ))}
           <div ref={messagesEndRef} />

@@ -978,8 +978,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       {/* Chat message bubble */}
                       <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`
-                          max-w-[85%] rounded-2xl px-5 py-3 flex flex-col gap-2
-                          ${msg.role === 'user' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : 'bg-transparent text-[var(--foreground)]'}
+                          rounded-2xl px-5 py-3 flex flex-col gap-2
+                          ${msg.role === 'user' ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]' : 'w-full bg-transparent text-[var(--foreground)]'}
                         `}>
                           {msg.role === 'assistant' && msg.content === '...' ? (
                             <div className="flex flex-col gap-3 w-full py-1 min-w-[240px] sm:min-w-[320px]">
