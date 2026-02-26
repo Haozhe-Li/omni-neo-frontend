@@ -363,7 +363,14 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
   return (
     <div ref={containerRef} className="rounded-xl border border-border bg-card shadow-sm relative group/answer flex flex-col">
-      {!isReadOnly && <TextSelectionMenu containerRef={containerRef} sources={sources} onFollowUp={onFollowUp} />}
+      {!isReadOnly && (
+        <TextSelectionMenu
+          containerRef={containerRef}
+          sources={sources}
+          onFollowUp={onFollowUp}
+          allowedSelectors={['[data-selection-scope="canvas-body"]']}
+        />
+      )}
 
       {/* Action Buttons (Sticky Header) */}
       {isReadOnly ? (
@@ -587,7 +594,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
       {/* Answer body */}
       <div className="px-5 py-6 sm:px-10 sm:py-8">
-        <div className="max-w-none markdown-body blog-markdown">
+        <div className="max-w-none markdown-body blog-markdown" data-selection-scope="canvas-body">
           <ReactMarkdown
             remarkPlugins={remarkPlugins}
             rehypePlugins={rehypePlugins}

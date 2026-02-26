@@ -16,9 +16,10 @@ interface TextSelectionMenuProps {
     sources?: Source[]
     showCheckSource?: boolean
     onFollowUp?: (text: string) => void
+    allowedSelectors?: string[]
 }
 
-export function TextSelectionMenu({ containerRef, sources = [], showCheckSource = true, onFollowUp }: TextSelectionMenuProps) {
+export function TextSelectionMenu({ containerRef, sources = [], showCheckSource = true, onFollowUp, allowedSelectors = [] }: TextSelectionMenuProps) {
     // We use ref-based positioning for performance (avoiding re-renders on scroll)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -66,6 +67,24 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
         const isDesktop = window.matchMedia('(hover: hover) and (pointer: fine)').matches
         if (!isDesktop) return
 
+        const isNodeInAllowedScope = (node: Node | null) => {
+            if (!node) return false
+            if (!containerRef.current) return false
+            if (allowedSelectors.length === 0) return true
+
+            const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
+            if (!element) return false
+
+            return allowedSelectors.some((selector) => {
+                try {
+                    const matched = element.closest(selector)
+                    return !!matched && containerRef.current?.contains(matched)
+                } catch {
+                    return false
+                }
+            })
+        }
+
         const handleSelectionChange = () => {
             // ... logic same as before ... 
             const selection = window.getSelection()
@@ -75,6 +94,12 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
                 return
             }
             if (containerRef.current && !containerRef.current.contains(selection.anchorNode)) {
+                setIsVisible(false)
+                activeRangeRef.current = null
+                return
+            }
+
+            if (!isNodeInAllowedScope(selection.anchorNode) || !isNodeInAllowedScope(selection.focusNode)) {
                 setIsVisible(false)
                 activeRangeRef.current = null
                 return
@@ -108,7 +133,7 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
             document.removeEventListener('mousedown', handleMouseDown)
             document.removeEventListener('selectionchange', handleDocSelectionChange)
         }
-    }, [containerRef])
+    }, [containerRef, allowedSelectors])
 
     const handleCopy = () => {
         navigator.clipboard.writeText(selectedText)

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -348,6 +348,15 @@ const markdownComponents: Components = {
       <CodeCopyButton getText={() => extractNodeText(children)} />
     </div>
   ),
+  a: ({ className, ...props }) => (
+    <a
+      {...props}
+      className={[
+        className,
+        'text-[var(--accent)] hover:underline underline-offset-2 decoration-[0.08em] transition-colors',
+      ].filter(Boolean).join(' ')}
+    />
+  ),
 }
 
 const isUntitledTitle = (value?: string) => {
@@ -373,8 +382,12 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [followUpText, setFollowUpText] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isSstPending, setIsSstPending] = useState(false)
+  const lastAutoScrolledAssistantKeyRef = useRef<string>('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const recognitionRef = useRef<any>(null)
 
   const [title, setTitle] = useState(query)
   const [useFahrenheit, setUseFahrenheit] = useState(false)
@@ -411,11 +424,29 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     }
   }, [threadId])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
   useEffect(() => {
-    scrollToBottom()
+    let lastAssistantIndex = -1
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'assistant') {
+        lastAssistantIndex = index
+        break
+      }
+    }
+    if (lastAssistantIndex < 0) return
+    const assistantContent = messages[lastAssistantIndex]?.content ?? ''
+    const assistantPhase = assistantContent === '...' ? 'placeholder' : 'final'
+    const scrollKey = `${lastAssistantIndex}:${assistantPhase}`
+    if (scrollKey === lastAutoScrolledAssistantKeyRef.current) return
+
+    lastAutoScrolledAssistantKeyRef.current = scrollKey
+    requestAnimationFrame(() => {
+      // Scroll to the user query preceding the AI reply so user sees their own question at the top
+      const userIndex = lastAssistantIndex - 1
+      const target = containerRef.current?.querySelector(
+        `[data-message-index="${userIndex >= 0 ? userIndex : lastAssistantIndex}"]`
+      ) as HTMLElement | null
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }, [messages])
 
   // Fetch Title effect
@@ -813,11 +844,85 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
     toast.info('Feature coming soon')
   }
 
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!shouldSubmitOnEnter(e)) return
     e.preventDefault()
     handleSend()
   }
+
+  const handleSst = useCallback(() => {
+    if (isLoading) return
+
+    if (isRecording) {
+      recognitionRef.current?.stop()
+      return
+    }
+
+    const RecognitionCtor = typeof window !== 'undefined'
+      ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      : null
+
+    if (!RecognitionCtor) {
+      toast.info('Speech-to-text is not supported in this browser.')
+      return
+    }
+
+    let transcript = ''
+
+    try {
+      const recognition = new RecognitionCtor()
+      recognition.lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US'
+      recognition.interimResults = false
+      recognition.continuous = false
+      recognition.maxAlternatives = 1
+
+      recognition.onstart = () => {
+        setIsRecording(true)
+        setIsSstPending(false)
+      }
+
+      recognition.onresult = (event: any) => {
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const part = event.results[index]?.[0]?.transcript
+          if (typeof part === 'string') transcript += part
+        }
+      }
+
+      recognition.onerror = () => {
+        setIsSstPending(false)
+        setIsRecording(false)
+        toast.error('Speech recognition failed. Please retry.')
+      }
+
+      recognition.onend = () => {
+        setIsSstPending(false)
+        setIsRecording(false)
+        recognitionRef.current = null
+        const finalText = transcript.trim()
+        if (!finalText) return
+        setInput((prev) => {
+          const base = prev.trim()
+          return base ? `${base} ${finalText}` : finalText
+        })
+      }
+
+      recognitionRef.current = recognition
+      setIsSstPending(true)
+      recognition.start()
+    } catch {
+      setIsSstPending(false)
+      setIsRecording(false)
+      recognitionRef.current = null
+      toast.error('Unable to start speech recognition.')
+    }
+  }, [isLoading, isRecording])
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.()
+      recognitionRef.current = null
+    }
+  }, [])
 
   return (
     <div className="flex flex-col h-full bg-[var(--background)] relative" ref={containerRef}>
@@ -825,6 +930,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         containerRef={containerRef}
         showCheckSource={false}
         onFollowUp={(text) => setFollowUpText(text)}
+        allowedSelectors={['[data-selection-scope="assistant-message"]']}
       />
       {/* Header */}
       <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-between px-4 z-30 sticky top-0 relative">
@@ -845,15 +951,18 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
           </span>
         </div>
 
-        <div className="w-10 flex-shrink-0" /> {/* Spacer */}
+        <div className="w-10 flex-shrink-0" />
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
         <div className="max-w-2xl mx-auto space-y-8">
           {messages.map((msg, i) => (
             <div
               key={i}
+              data-message-index={i}
+              data-ai-message-index={msg.role === 'assistant' ? i : undefined}
+              data-selection-scope={msg.role === 'assistant' ? 'assistant-message' : undefined}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {(() => {
@@ -1042,20 +1151,26 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                         )}
                       </div>
                     )}
-                    <div className={`max-w-none ${msg.role === 'user' ? 'prose prose-sm dark:prose-invert' : 'blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]'}`}>
-                      {msg.role === 'user' && msg.follow_up_content && (
-                        <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
-                          {msg.follow_up_content}
-                        </div>
-                      )}
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight]}
-                        components={markdownComponents}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
+                    {msg.role === 'user' ? (
+                      <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
+                        {msg.follow_up_content && (
+                          <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
+                            {msg.follow_up_content}
+                          </div>
+                        )}
+                        <div>{msg.content}</div>
+                      </div>
+                    ) : (
+                      <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[rehypeHighlight]}
+                          components={markdownComponents}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                     {msg.role === 'assistant' && (
                       <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
                         <button
@@ -1095,7 +1210,6 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
               })()}
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 
@@ -1117,29 +1231,47 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
               </button>
             </div>
           )}
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleInputKeyDown}
-            placeholder="Ask a follow-up..."
+            placeholder="Ask a follow-up"
             disabled={isLoading}
-            className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
+            rows={1}
+            className="w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-28 py-4 min-h-[92px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading}
-            className={`
-                            absolute right-2 top-1/2 -translate-y-1/2 
-                            flex items-center justify-center p-2 rounded-lg transition-all duration-200
-                            ${!input.trim() || isLoading
-                ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                : 'bg-[var(--accent)] text-white hover:opacity-90'
-              }
-                        `}
-          >
-            <ArrowUp size={18} />
-          </button>
+          <div className="absolute right-3 bottom-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSst}
+              disabled={isLoading || isSstPending}
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
+                isLoading || isSstPending
+                  ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                  : isRecording
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+              }`}
+              aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+            >
+              {isRecording && !isSstPending && (
+                <span className="absolute inset-0 rounded-full border border-white/45 animate-ping" aria-hidden="true" />
+              )}
+              {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
+            </button>
+
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || isLoading}
+              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
+                !input.trim() || isLoading
+                  ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                  : 'bg-[var(--accent)] text-white hover:opacity-90'
+              }`}
+            >
+              <ArrowUp size={18} />
+            </button>
+          </div>
         </div>
         <div className="text-center mt-2 text-xs text-[var(--muted-foreground)] opacity-60">
           Answers generated by AI. Check important info.

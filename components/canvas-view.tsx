@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share } from 'lucide-react'
+import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
@@ -93,6 +93,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [isChatLoading, setIsChatLoading] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isSstPending, setIsSstPending] = useState(false)
   const [rewrittenQuery, setRewrittenQuery] = useState('')
   const [followUpText, setFollowUpText] = useState('')
   const [isQuotaLocked, setIsQuotaLocked] = useState(false)
@@ -113,9 +115,11 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const rewrittenQueryRef = useRef('')
   const researchBlocksRef = useRef<ResearchBlock[]>([])
   const researchTriggerIndexRef = useRef<number[]>([])
-  const chatBottomRef = useRef<HTMLDivElement>(null)
+  const lastAutoScrolledAssistantKeyRef = useRef<string>('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
   const isInitializedRef = useRef(false)
+  const recognitionRef = useRef<any>(null)
 
   const { fetchWithAuth } = useApi()
 
@@ -205,10 +209,31 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     }).catch(() => { /* fire-and-forget */ })
   }, [threadId, fetchWithAuth, isMockMode])
 
-  // Scroll to bottom whenever chat or research changes
+  // Scroll to latest assistant message whenever new chat appears
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages, researchBlocks, isChatLoading])
+    let lastAssistantIndex = -1
+    for (let index = chatMessages.length - 1; index >= 0; index -= 1) {
+      if (chatMessages[index]?.role === 'assistant') {
+        lastAssistantIndex = index
+        break
+      }
+    }
+    if (lastAssistantIndex < 0) return
+    const assistantContent = chatMessages[lastAssistantIndex]?.content ?? ''
+    const assistantPhase = assistantContent === '...' ? 'placeholder' : 'final'
+    const scrollKey = `${lastAssistantIndex}:${assistantPhase}`
+    if (scrollKey === lastAutoScrolledAssistantKeyRef.current) return
+
+    lastAutoScrolledAssistantKeyRef.current = scrollKey
+    requestAnimationFrame(() => {
+      // Scroll to the user query preceding the AI reply so user sees their own question at the top
+      const userIndex = lastAssistantIndex - 1
+      const target = containerRef.current?.querySelector(
+        `[data-message-index="${userIndex >= 0 ? userIndex : lastAssistantIndex}"]`
+      ) as HTMLElement | null
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [chatMessages])
 
   const handleCopy = (text: string) => {
     if (typeof navigator !== 'undefined') {
@@ -854,11 +879,86 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     fetchHelper(currentInput, false, chatMessages, currentFollowUp)
   }
 
-  const handleChatInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleChatInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!shouldSubmitOnEnter(e)) return
     e.preventDefault()
     handleChatSend()
   }
+
+  const handleSst = useCallback(() => {
+    const currentlyResearching = activeResearchIdx >= 0 && !researchBlocks[activeResearchIdx]?.isComplete
+    if (isQuotaLocked || isChatLoading || currentlyResearching) return
+
+    if (isRecording) {
+      recognitionRef.current?.stop()
+      return
+    }
+
+    const RecognitionCtor = typeof window !== 'undefined'
+      ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      : null
+
+    if (!RecognitionCtor) {
+      toast.info('Speech-to-text is not supported in this browser.')
+      return
+    }
+
+    let transcript = ''
+
+    try {
+      const recognition = new RecognitionCtor()
+      recognition.lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US'
+      recognition.interimResults = false
+      recognition.continuous = false
+      recognition.maxAlternatives = 1
+
+      recognition.onstart = () => {
+        setIsRecording(true)
+        setIsSstPending(false)
+      }
+
+      recognition.onresult = (event: any) => {
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const part = event.results[index]?.[0]?.transcript
+          if (typeof part === 'string') transcript += part
+        }
+      }
+
+      recognition.onerror = () => {
+        setIsSstPending(false)
+        setIsRecording(false)
+        toast.error('Speech recognition failed. Please retry.')
+      }
+
+      recognition.onend = () => {
+        setIsSstPending(false)
+        setIsRecording(false)
+        recognitionRef.current = null
+        const finalText = transcript.trim()
+        if (!finalText) return
+        setChatInput((prev) => {
+          const base = prev.trim()
+          return base ? `${base} ${finalText}` : finalText
+        })
+      }
+
+      recognitionRef.current = recognition
+      setIsSstPending(true)
+      recognition.start()
+    } catch {
+      setIsSstPending(false)
+      setIsRecording(false)
+      recognitionRef.current = null
+      toast.error('Unable to start speech recognition.')
+    }
+  }, [isQuotaLocked, isChatLoading, isRecording, activeResearchIdx, researchBlocks])
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.()
+      recognitionRef.current = null
+    }
+  }, [])
 
   const getDurationForTitle = async () => {
     try {
@@ -928,6 +1028,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         containerRef={containerRef}
         showCheckSource={false}
         onFollowUp={handleAskOmni}
+        allowedSelectors={['[data-selection-scope="assistant-message"]']}
       />
       {isResearching && (
         <div className="absolute inset-0 z-0 pointer-events-none animate-flash-edges" />
@@ -966,7 +1067,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             } ${isReportOpen && isMobile ? 'hidden' : ''}`}>
 
             {/* Chat scroll */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+            <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
               <div className="max-w-2xl mx-auto space-y-8">
 
                 {chatMessages.map((msg, i) => {
@@ -974,7 +1075,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   const block = researchBlockIdx >= 0 ? researchBlocks[researchBlockIdx] : null
 
                   return (
-                    <div key={i}>
+                    <div
+                      key={i}
+                      data-message-index={i}
+                      data-ai-message-index={msg.role === 'assistant' ? i : undefined}
+                      data-selection-scope={msg.role === 'assistant' ? 'assistant-message' : undefined}
+                    >
                       {/* Chat message bubble */}
                       <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`
@@ -995,16 +1101,22 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                             </div>
                           ) : (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
-                              <div className={`max-w-none ${msg.role === 'user' ? 'prose prose-sm dark:prose-invert' : 'blog-markdown markdown-body text-[16px] leading-[1.8]'}`}>
-                                {msg.role === 'user' && msg.follow_up_content && (
-                                  <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
-                                    {msg.follow_up_content}
-                                  </div>
-                                )}
-                                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                                  {msg.content}
-                                </ReactMarkdown>
-                              </div>
+                              {msg.role === 'user' ? (
+                                <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
+                                  {msg.follow_up_content && (
+                                    <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
+                                      {msg.follow_up_content}
+                                    </div>
+                                  )}
+                                  <div>{msg.content}</div>
+                                </div>
+                              ) : (
+                                <div className="max-w-none blog-markdown markdown-body text-[16px] leading-[1.8]">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                                    {msg.content}
+                                  </ReactMarkdown>
+                                </div>
+                              )}
 
                               {/* Action buttons: only on messages without a research block */}
                               {msg.role === 'assistant' && !block && (
@@ -1138,8 +1250,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     </div>
                   )
                 })}
-
-                <div ref={chatBottomRef} className="h-4" />
               </div>
             </div>
 
@@ -1160,30 +1270,48 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     </button>
                   </div>
                 )}
-                <input
+                <textarea
                   id="chat-input"
-                  type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={handleChatInputKeyDown}
-                  placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan or ask a follow-up...'}
+                  placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan'}
                   disabled={isQuotaLocked || isChatLoading || isResearching}
-                  className="w-full bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
+                  rows={1}
+                  className="w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-28 py-4 min-h-[92px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
                 />
-                <button
-                  onClick={handleChatSend}
-                  disabled={isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching}
-                  className={`
-                    absolute right-2 top-1/2 -translate-y-1/2
-                    flex items-center justify-center p-2 rounded-lg transition-all duration-200
-                    ${isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
-                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                      : 'bg-[var(--accent)] text-white hover:opacity-90'
-                    }
-                  `}
-                >
-                  <ArrowUp size={18} />
-                </button>
+                <div className="absolute right-3 bottom-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSst}
+                    disabled={isQuotaLocked || isChatLoading || isResearching || isSstPending}
+                    className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
+                      isQuotaLocked || isChatLoading || isResearching || isSstPending
+                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                        : isRecording
+                          ? 'bg-[var(--accent)] text-white'
+                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                    }`}
+                    aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+                  >
+                    {isRecording && !isSstPending && (
+                      <span className="absolute inset-0 rounded-full border border-white/45 animate-ping" aria-hidden="true" />
+                    )}
+                    {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
+                  </button>
+
+                  <button
+                    onClick={handleChatSend}
+                    disabled={isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
+                      isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
+                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                        : 'bg-[var(--accent)] text-white hover:opacity-90'
+                    }`}
+                  >
+                    <ArrowUp size={18} />
+                  </button>
+                </div>
               </div>
               <div className="mt-2 text-center text-[11px] sm:text-xs text-[var(--muted-foreground)]/70 px-4 select-none">
                 Answers generated by AI. Check important info.

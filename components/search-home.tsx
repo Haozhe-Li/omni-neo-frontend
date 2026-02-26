@@ -696,7 +696,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   onClick={handleSst}
                   disabled={backendStatus !== 'ready' || isSstPending}
                   className={`
-                    relative flex items-center justify-center h-9 w-9 rounded-xl transition-all duration-200
+                    relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
                     ${backendStatus === 'ready' && !isSstPending
                       ? isRecording
                         ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
@@ -707,7 +707,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
                 >
                   {isRecording && !isSstPending && (
-                    <span className="absolute inset-0 rounded-xl border border-[var(--accent-foreground)]/35 animate-ping" aria-hidden="true" />
+                    <span className="absolute inset-0 rounded-full border border-[var(--accent-foreground)]/35 animate-ping" aria-hidden="true" />
                   )}
                   {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
                 </button>
@@ -716,7 +716,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   type="submit"
                   disabled={!query.trim() || backendStatus !== 'ready'}
                   className={`
-                    flex items-center justify-center h-9 w-9 rounded-xl transition-all duration-200
+                    flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
                     ${query.trim() && backendStatus === 'ready'
                       ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
                       : 'bg-muted text-muted-foreground cursor-not-allowed'
