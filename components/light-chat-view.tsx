@@ -89,15 +89,15 @@ interface LightChatWeather {
 function normalizeSources(raw: unknown): LightChatSource[] {
   if (!Array.isArray(raw)) return []
   return raw.reduce<LightChatSource[]>((acc, item) => {
-  if (!item || typeof item !== 'object') return acc
-      const source = item as Record<string, unknown>
-      const title = typeof source.title === 'string' ? source.title.trim() : ''
-      const url = typeof source.url === 'string' ? source.url.trim() : ''
-      const content = typeof source.content === 'string' ? source.content.trim() : undefined
-      if (!title || !url) return acc
-      acc.push({ title, url, content })
-      return acc
-    }, [])
+    if (!item || typeof item !== 'object') return acc
+    const source = item as Record<string, unknown>
+    const title = typeof source.title === 'string' ? source.title.trim() : ''
+    const url = typeof source.url === 'string' ? source.url.trim() : ''
+    const content = typeof source.content === 'string' ? source.content.trim() : undefined
+    if (!title || !url) return acc
+    acc.push({ title, url, content })
+    return acc
+  }, [])
 }
 
 function getResponseSources(data: unknown): LightChatSource[] {
@@ -968,244 +968,244 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
               {(() => {
                 const sources = msg.sources ?? []
                 return (
-              <div
-                className={`
+                  <div
+                    className={`
                             rounded-2xl px-5 py-3 flex flex-col gap-2
                             ${msg.role === 'user'
-                    ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]'
-                    : 'w-full bg-transparent text-[var(--foreground)]'
-                  }
+                        ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]'
+                        : 'w-full bg-transparent text-[var(--foreground)]'
+                      }
                         `}
-              >
-                {msg.role === 'assistant' && msg.content === '...' ? (
-                  <div className="flex flex-col gap-3 w-full py-1 min-w-[240px] sm:min-w-[320px]">
-                    <div className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)] mb-1">
-                      <div className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--muted-foreground)] border-t-transparent animate-spin opacity-70" />
-                      <span className="opacity-80">Thinking Hard...</span>
-                    </div>
-                    <div className="space-y-3 w-full">
-                      <div className="h-3 w-full bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" />
-                      <div className="h-3 w-[85%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                      <div className="h-3 w-[60%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
-                    {msg.role === 'assistant' && msg.use_search && (
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)] bg-[var(--secondary)]/50 w-fit px-2.5 py-1 rounded-md mb-2 border border-[var(--border-subtle)]/50">
-                        <Globe size={12} className="opacity-70" />
-                        <span>Searched the web</span>
-                      </div>
-                    )}
-                    {msg.role === 'assistant' && ((msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather || (msg.sources?.length ?? 0) > 0) && (
-                      <div className="mb-3 space-y-2">
-                        {(msg.mapPoints?.length ?? 0) > 0 && (
-                          <LightChatMiniMap points={msg.mapPoints || []} />
-                        )}
-
-                        {msg.weather && (() => {
-                          const w = msg.weather
-                          const location = getWeatherLocation(w)
-                          const tempMain = formatTemperature(w.temperature?.temp, useFahrenheit)
-                          const feelsLike = formatTemperature(w.temperature?.feels_like, useFahrenheit)
-                          const tempLow = w.temperature?.temp_min != null ? formatTemperature(w.temperature.temp_min, useFahrenheit) : null
-                          const tempHigh = w.temperature?.temp_max != null ? formatTemperature(w.temperature.temp_max, useFahrenheit) : null
-                          const humidity = typeof w.humidity === 'number' ? w.humidity : null
-                          const windSpeed = typeof w.wind?.speed === 'number' ? w.wind.speed : null
-                          const vis = typeof w.visibility_distance === 'number' ? w.visibility_distance : null
-                          const tone = getWeatherTone(w.status)
-
-                          return (
-                            <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
-                              {/* header row */}
-                              <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <CloudSun className="h-4 w-4 text-[var(--muted-foreground)] flex-none" />
-                                  <span className="text-[13px] font-medium text-[var(--foreground)] truncate">{location || 'Weather'}</span>
-                                  {w.status && (
-                                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${tone}`}>
-                                      {w.status}
-                                    </span>
-                                  )}
-                                </div>
-                                <a
-                                  href={getOpenWeatherMapUrl()}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
-                                >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                </a>
-                              </div>
-
-                              {/* body */}
-                              <div className="px-3.5 py-3 flex items-center justify-between gap-4">
-                                {/* temperature */}
-                                <div>
-                                  <p className="text-3xl font-semibold tracking-tight text-[var(--foreground)] leading-none">{tempMain}</p>
-                                  <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                                    Feels like {feelsLike}
-                                    {tempLow && tempHigh ? ` · ${tempLow} – ${tempHigh}` : ''}
-                                  </p>
-                                </div>
-
-                                {/* stats */}
-                                <div className="flex gap-4">
-                                  {humidity != null && (
-                                    <div className="flex flex-col items-center gap-1">
-                                      <Droplets className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                      <span className="text-xs font-medium text-[var(--foreground)]">{humidity}%</span>
-                                      <span className="text-[10px] text-[var(--muted-foreground)]">Humidity</span>
-                                    </div>
-                                  )}
-                                  {windSpeed != null && (
-                                    <div className="flex flex-col items-center gap-1">
-                                      <Wind className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                      <span className="text-xs font-medium text-[var(--foreground)]">{windSpeed.toFixed(1)}</span>
-                                      <span className="text-[10px] text-[var(--muted-foreground)]">m/s</span>
-                                    </div>
-                                  )}
-                                  {vis != null && (
-                                    <div className="flex flex-col items-center gap-1">
-                                      <Eye className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                      <span className="text-xs font-medium text-[var(--foreground)]">{(vis / 1000).toFixed(1)}</span>
-                                      <span className="text-[10px] text-[var(--muted-foreground)]">km</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })()}
-
-                        {msg.stock?.data?.symbol && (() => {
-                          const s = msg.stock.data
-                          const price = formatStockPrice(s.currentPrice, s.currency || 'USD')
-                          const delta = formatStockDelta(s.change, s.changePercent)
-                          const deltaTone = getStockDeltaTone(s.change)
-                          const TrendIcon = typeof s.change === 'number' ? (s.change > 0 ? TrendingUp : s.change < 0 ? TrendingDown : Minus) : Minus
-
-                          return (
-                            <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
-                              {/* header row */}
-                              <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <TrendIcon className={`h-4 w-4 flex-none ${deltaTone}`} />
-                                  <span className="text-[13px] font-medium text-[var(--foreground)] truncate">{s.symbol}</span>
-                                  {s.companyName && (
-                                    <span className="text-[11px] text-[var(--muted-foreground)] truncate hidden sm:inline">{s.companyName}</span>
-                                  )}
-                                </div>
-                                <a
-                                  href={getYahooQuoteUrl(s.symbol)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
-                                >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                </a>
-                              </div>
-
-                              {/* body */}
-                              <div className="px-3.5 py-3 flex items-end justify-between gap-4">
-                                <div>
-                                  <p className="text-3xl font-semibold tracking-tight text-[var(--foreground)] leading-none">{price}</p>
-                                  {delta && (
-                                    <p className={`text-xs font-medium mt-1.5 ${deltaTone}`}>{delta}</p>
-                                  )}
-                                </div>
-                                {s.companyName && (
-                                  <p className="text-xs text-[var(--muted-foreground)] text-right truncate max-w-[140px] sm:hidden">{s.companyName}</p>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })()}
-
-                        {sources.length > 0 && (
-                          <details className="px-1 py-1 group">
-                            <summary className="list-none cursor-pointer flex items-center justify-between gap-2">
-                              <span className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-                                <Globe className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                <span>{sources.length} sources total</span>
-                              </span>
-                              <span className="text-xs text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180">⌄</span>
-                            </summary>
-                            <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                              {sources.map((source, sourceIndex) => (
-                                <a
-                                  key={`${source.url}-${sourceIndex}`}
-                                  href={source.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="group/source block py-0.5"
-                                >
-                                  <p className="text-sm text-[var(--foreground)]/90 group-hover/source:text-[var(--foreground)] transition-colors line-clamp-1">
-                                    {sourceIndex + 1}. {source.title}
-                                  </p>
-                                  <p className="text-xs text-[var(--muted-foreground)]/90 line-clamp-1">{getSourceDomain(source.url)}</p>
-                                </a>
-                              ))}
-                            </div>
-                          </details>
-                        )}
-                      </div>
-                    )}
-                    {msg.role === 'user' ? (
-                      <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
-                        {msg.follow_up_content && (
-                          <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
-                            {msg.follow_up_content}
-                          </div>
-                        )}
-                        <div>{msg.content}</div>
+                  >
+                    {msg.role === 'assistant' && msg.content === '...' ? (
+                      <div className="flex flex-col gap-3 w-full py-1 min-w-[240px] sm:min-w-[320px]">
+                        <div className="flex items-center gap-2 text-xs font-medium text-[var(--muted-foreground)] mb-1">
+                          <div className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--muted-foreground)] border-t-transparent animate-spin opacity-70" />
+                          <span className="opacity-80">Thinking Hard...</span>
+                        </div>
+                        <div className="space-y-3 w-full">
+                          <div className="h-3 w-full bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" />
+                          <div className="h-3 w-[85%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                          <div className="h-3 w-[60%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                        </div>
                       </div>
                     ) : (
-                      <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeHighlight]}
-                          components={markdownComponents}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
-                    )}
-                    {msg.role === 'assistant' && (
-                      <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
-                        <button
-                          onClick={() => handleCopy(msg.content)}
-                          className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          title="Copy"
-                        >
-                          <Copy size={14} />
-                        </button>
-                        <button
-                          onClick={handleFeatureComingSoon}
-                          className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          title="Helpful"
-                        >
-                          <ThumbsUp size={14} />
-                        </button>
-                        <button
-                          onClick={handleFeatureComingSoon}
-                          className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          title="Not Helpful"
-                        >
-                          <ThumbsDown size={14} />
-                        </button>
-                        <button
-                          onClick={handleFeatureComingSoon}
-                          className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          title="Share"
-                        >
-                          <Share size={14} />
-                        </button>
+                      <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
+                        {msg.role === 'assistant' && msg.use_search && (
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)] bg-[var(--secondary)]/50 w-fit px-2.5 py-1 rounded-md mb-2 border border-[var(--border-subtle)]/50">
+                            <Globe size={12} className="opacity-70" />
+                            <span>Searched the web</span>
+                          </div>
+                        )}
+                        {msg.role === 'assistant' && ((msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather || (msg.sources?.length ?? 0) > 0) && (
+                          <div className="mb-3 space-y-2">
+                            {(msg.mapPoints?.length ?? 0) > 0 && (
+                              <LightChatMiniMap points={msg.mapPoints || []} />
+                            )}
+
+                            {msg.weather && (() => {
+                              const w = msg.weather
+                              const location = getWeatherLocation(w)
+                              const tempMain = formatTemperature(w.temperature?.temp, useFahrenheit)
+                              const feelsLike = formatTemperature(w.temperature?.feels_like, useFahrenheit)
+                              const tempLow = w.temperature?.temp_min != null ? formatTemperature(w.temperature.temp_min, useFahrenheit) : null
+                              const tempHigh = w.temperature?.temp_max != null ? formatTemperature(w.temperature.temp_max, useFahrenheit) : null
+                              const humidity = typeof w.humidity === 'number' ? w.humidity : null
+                              const windSpeed = typeof w.wind?.speed === 'number' ? w.wind.speed : null
+                              const vis = typeof w.visibility_distance === 'number' ? w.visibility_distance : null
+                              const tone = getWeatherTone(w.status)
+
+                              return (
+                                <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
+                                  {/* header row */}
+                                  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <CloudSun className="h-4 w-4 text-[var(--muted-foreground)] flex-none" />
+                                      <span className="text-[13px] font-medium text-[var(--foreground)] truncate">{location || 'Weather'}</span>
+                                      {w.status && (
+                                        <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-medium ${tone}`}>
+                                          {w.status}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <a
+                                      href={getOpenWeatherMapUrl()}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  </div>
+
+                                  {/* body */}
+                                  <div className="px-3.5 py-3 flex items-center justify-between gap-4">
+                                    {/* temperature */}
+                                    <div>
+                                      <p className="text-3xl font-semibold tracking-tight text-[var(--foreground)] leading-none">{tempMain}</p>
+                                      <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                        Feels like {feelsLike}
+                                        {tempLow && tempHigh ? ` · ${tempLow} – ${tempHigh}` : ''}
+                                      </p>
+                                    </div>
+
+                                    {/* stats */}
+                                    <div className="flex gap-4">
+                                      {humidity != null && (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <Droplets className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                          <span className="text-xs font-medium text-[var(--foreground)]">{humidity}%</span>
+                                          <span className="text-[10px] text-[var(--muted-foreground)]">Humidity</span>
+                                        </div>
+                                      )}
+                                      {windSpeed != null && (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <Wind className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                          <span className="text-xs font-medium text-[var(--foreground)]">{windSpeed.toFixed(1)}</span>
+                                          <span className="text-[10px] text-[var(--muted-foreground)]">m/s</span>
+                                        </div>
+                                      )}
+                                      {vis != null && (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <Eye className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                          <span className="text-xs font-medium text-[var(--foreground)]">{(vis / 1000).toFixed(1)}</span>
+                                          <span className="text-[10px] text-[var(--muted-foreground)]">km</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+
+                            {msg.stock?.data?.symbol && (() => {
+                              const s = msg.stock.data
+                              const price = formatStockPrice(s.currentPrice, s.currency || 'USD')
+                              const delta = formatStockDelta(s.change, s.changePercent)
+                              const deltaTone = getStockDeltaTone(s.change)
+                              const TrendIcon = typeof s.change === 'number' ? (s.change > 0 ? TrendingUp : s.change < 0 ? TrendingDown : Minus) : Minus
+
+                              return (
+                                <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
+                                  {/* header row */}
+                                  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <TrendIcon className={`h-4 w-4 flex-none ${deltaTone}`} />
+                                      <span className="text-[13px] font-medium text-[var(--foreground)] truncate">{s.symbol}</span>
+                                      {s.companyName && (
+                                        <span className="text-[11px] text-[var(--muted-foreground)] truncate hidden sm:inline">{s.companyName}</span>
+                                      )}
+                                    </div>
+                                    <a
+                                      href={getYahooQuoteUrl(s.symbol)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  </div>
+
+                                  {/* body */}
+                                  <div className="px-3.5 py-3 flex items-end justify-between gap-4">
+                                    <div>
+                                      <p className="text-3xl font-semibold tracking-tight text-[var(--foreground)] leading-none">{price}</p>
+                                      {delta && (
+                                        <p className={`text-xs font-medium mt-1.5 ${deltaTone}`}>{delta}</p>
+                                      )}
+                                    </div>
+                                    {s.companyName && (
+                                      <p className="text-xs text-[var(--muted-foreground)] text-right truncate max-w-[140px] sm:hidden">{s.companyName}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })()}
+
+                            {sources.length > 0 && (
+                              <details className="px-1 py-1 group">
+                                <summary className="list-none cursor-pointer flex items-center justify-between gap-2">
+                                  <span className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+                                    <Globe className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                    <span>{sources.length} sources total</span>
+                                  </span>
+                                  <span className="text-xs text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180">⌄</span>
+                                </summary>
+                                <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+                                  {sources.map((source, sourceIndex) => (
+                                    <a
+                                      key={`${source.url}-${sourceIndex}`}
+                                      href={source.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group/source block py-0.5"
+                                    >
+                                      <p className="text-sm text-[var(--foreground)]/90 group-hover/source:text-[var(--foreground)] transition-colors line-clamp-1">
+                                        {sourceIndex + 1}. {source.title}
+                                      </p>
+                                      <p className="text-xs text-[var(--muted-foreground)]/90 line-clamp-1">{getSourceDomain(source.url)}</p>
+                                    </a>
+                                  ))}
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        )}
+                        {msg.role === 'user' ? (
+                          <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
+                            {msg.follow_up_content && (
+                              <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
+                                {msg.follow_up_content}
+                              </div>
+                            )}
+                            <div>{msg.content}</div>
+                          </div>
+                        ) : (
+                          <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[rehypeHighlight]}
+                              components={markdownComponents}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                        {msg.role === 'assistant' && (
+                          <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
+                            <button
+                              onClick={() => handleCopy(msg.content)}
+                              className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                              title="Copy"
+                            >
+                              <Copy size={14} />
+                            </button>
+                            <button
+                              onClick={handleFeatureComingSoon}
+                              className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                              title="Helpful"
+                            >
+                              <ThumbsUp size={14} />
+                            </button>
+                            <button
+                              onClick={handleFeatureComingSoon}
+                              className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                              title="Not Helpful"
+                            >
+                              <ThumbsDown size={14} />
+                            </button>
+                            <button
+                              onClick={handleFeatureComingSoon}
+                              className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                              title="Share"
+                            >
+                              <Share size={14} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
                 )
               })()}
             </div>
@@ -1238,20 +1238,19 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             placeholder="Ask a follow-up"
             disabled={isLoading}
             rows={1}
-            className="w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-28 py-4 min-h-[92px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
+            className="block w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-28 py-4 min-h-[92px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
           />
-          <div className="absolute right-3 bottom-3 flex items-center gap-2">
+          <div className="absolute right-[14px] bottom-[14px] flex items-center gap-2">
             <button
               type="button"
               onClick={handleSst}
               disabled={isLoading || isSstPending}
-              className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
-                isLoading || isSstPending
+              className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${isLoading || isSstPending
                   ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
                   : isRecording
                     ? 'bg-[var(--accent)] text-white'
                     : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-              }`}
+                }`}
               aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
             >
               {isRecording && !isSstPending && (
@@ -1263,11 +1262,10 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
-                !input.trim() || isLoading
+              className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${!input.trim() || isLoading
                   ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
                   : 'bg-[var(--accent)] text-white hover:opacity-90'
-              }`}
+                }`}
             >
               <ArrowUp size={18} />
             </button>

@@ -560,13 +560,14 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       />
 
       {/* Spacer for centering content properly */}
-      <div className="flex-1 w-full flex flex-col items-center justify-center">
+      <div className="flex-1 w-full flex flex-col md:justify-center">
         {/* Content — sits above the glow */}
-        <div className="relative z-10 flex flex-col items-center w-full">
-          {/* Brand */}
-          <div className="animate-fade-up mb-12 text-center">
+
+        {/* Brand */}
+        <div className="flex-1 md:flex-none flex flex-col items-center justify-center relative z-10 w-full md:mb-12">
+          <div className="animate-fade-up text-center">
             <h1 className="text-[2.5rem] sm:text-5xl font-light tracking-tight text-foreground lowercase font-[family-name:var(--font-plex)]">
-              omni
+              omni{" "}
               <span
                 className="font-normal"
                 style={{ color: '#20B2AA' }}
@@ -578,6 +579,26 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
               Research anything. Get answers with sources.
             </p>
           </div>
+        </div>
+
+        {/* Search Input Container */}
+        <div className="w-full flex flex-col items-center relative z-10 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-0 md:mt-0">
+          {/* Sign-in prompt for MOBILE (above search) */}
+          {isSignedIn === false && (
+            <div className="md:hidden w-full max-w-[680px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2 mb-3">
+              <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
+                Unlimited usage and sync chats across devices for a smoother experience.
+              </span>
+              <SignUpButton mode="modal">
+                <button
+                  type="button"
+                  className="h-7 px-3 rounded-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors whitespace-nowrap"
+                >
+                  Sign In
+                </button>
+              </SignUpButton>
+            </div>
+          )}
 
           {/* Search Input */}
           <form
@@ -668,8 +689,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                               </span>
                               <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
                                 {isAutoOptionLocked || isCanvasOptionLocked
-                                    ? 'Daily quota reached — sign in for unlimited'
-                                    : opt.desc}
+                                  ? 'Daily quota reached — sign in for unlimited'
+                                  : opt.desc}
                               </span>
                             </div>
                             <div className="ml-2 w-[78px] flex items-center justify-end gap-2 shrink-0">
@@ -730,8 +751,9 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
             </div>
           </form>
 
+          {/* Sign-in prompt for DESKTOP (below search) */}
           {isSignedIn === false && (
-            <div className="mt-3 w-full max-w-[680px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
+            <div className="hidden md:flex mt-3 w-full max-w-[680px] items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
               <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
                 Unlimited usage and sync chats across devices for a smoother experience.
               </span>
@@ -749,7 +771,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       </div>
 
       {/* Footer Status */}
-      <footer className="w-full py-6 flex flex-col gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: '500ms' }}>
+      <footer className="w-full py-6 hidden md:flex flex-col gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: '500ms' }}>
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-border/50">
           <div className={`w-2 h-2 rounded-full ${backendStatus === 'ready' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' :
             backendStatus === 'not-ready' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' :
