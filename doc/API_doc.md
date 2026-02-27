@@ -164,7 +164,7 @@ Url1, url2, url3 xxx
 ````json
 {
     "type": "tool",
-    "tool": "get_full_text",
+    "tool": "load_web_page",
     "agent": "Sub-agent",
     "content": "Tool Calling",
     "raw": {

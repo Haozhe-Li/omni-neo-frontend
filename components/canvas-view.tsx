@@ -314,7 +314,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   // ── SSE helper ─────────────────────────────────────────────────────
   const KNOWN_TOOLS = new Set([
-    'google_search', 'skimming_web_pages', 'get_full_text', 'verify_claim',
+    'google_search', 'skimming_web_pages', 'load_web_page', 'verify_claim',
     'check_python_compile', 'draw_graph', 'write_file', 'read_file', 'edit_file',
     'run_python_tool', 'get_history_trend', 'get_stock_data'
   ])

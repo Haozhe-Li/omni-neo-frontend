@@ -267,7 +267,7 @@ function ToolContent({ message }: { message: SSEMessage }) {
           detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
       case 'skimming_web_pages':
-      case 'get_full_text':
+      case 'load_web_page':
         const urls = args.urls || args.url
         const count = Array.isArray(urls) ? urls.length : 1
         return {

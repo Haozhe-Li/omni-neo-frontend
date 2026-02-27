@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
         // Step 7: Full text reading
         send({
-          type: 'tool', tool: 'get_full_text', agent: 'Sub-agent', content: 'Tool Calling',
+          type: 'tool', tool: 'load_web_page', agent: 'Sub-agent', content: 'Tool Calling',
           raw: { args: { url: 'https://nature.com/articles/s41586-024-quantum' } },
         })
 
