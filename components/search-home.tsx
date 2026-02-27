@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock, Mic, Loader2 } from 'lucide-react'
+import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock, Mic, Loader2, X } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -662,53 +662,122 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   </button>
 
                   {modelDropdownOpen && (
-                    <div className="absolute top-full right-0 mt-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                      {[
-                        { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
-                        { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
-                        { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
-                      ].map((opt) => {
-                        const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
-                        const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
-                        const isLocked = isAutoOptionLocked || isCanvasOptionLocked
-                        const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => {
-                              onModelChange?.(opt.value)
-                              setModelDropdownOpen(false)
-                            }}
-                            className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
-                          >
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-[13px] font-medium flex items-center gap-1.5">
-                                {opt.label}
-                                {isLocked && <Lock className="h-3 w-3" />}
-                              </span>
-                              <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                                {isAutoOptionLocked || isCanvasOptionLocked
-                                  ? 'Daily quota reached — sign in for unlimited'
-                                  : opt.desc}
-                              </span>
-                            </div>
-                            <div className="ml-2 w-[78px] flex items-center justify-end gap-2 shrink-0">
-                              {showRemaining && (
-                                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
-                                  {remainingQuota} left
+                    <>
+                      {/* Desktop Dropdown */}
+                      <div className="hidden md:block absolute top-full right-0 mt-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                        {[
+                          { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                          { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
+                          { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
+                        ].map((opt) => {
+                          const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
+                          const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
+                          const isLocked = isAutoOptionLocked || isCanvasOptionLocked
+                          const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                onModelChange?.(opt.value)
+                                setModelDropdownOpen(false)
+                              }}
+                              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
+                            >
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-[13px] font-medium flex items-center gap-1.5">
+                                  {opt.label}
+                                  {isLocked && <Lock className="h-3 w-3" />}
                                 </span>
-                              )}
-                              {model === opt.value ? (
-                                <Check className="h-4 w-4 text-[var(--accent)]" />
-                              ) : (
-                                <span className="h-4 w-4" aria-hidden="true" />
-                              )}
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
+                                <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                                  {isAutoOptionLocked || isCanvasOptionLocked
+                                    ? 'Daily quota reached — sign in for unlimited'
+                                    : opt.desc}
+                                </span>
+                              </div>
+                              <div className="ml-2 w-[78px] flex items-center justify-end gap-2 shrink-0">
+                                {showRemaining && (
+                                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
+                                    {remainingQuota} left
+                                  </span>
+                                )}
+                                {model === opt.value ? (
+                                  <Check className="h-4 w-4 text-[var(--accent)]" />
+                                ) : (
+                                  <span className="h-4 w-4" aria-hidden="true" />
+                                )}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Mobile Modal/Drawer */}
+                      <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
+                        <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
+                            <button
+                              type="button"
+                              onClick={() => setModelDropdownOpen(false)}
+                              className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-2.5">
+                            {[
+                              { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                              { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
+                              { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
+                            ].map((opt) => {
+                              const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
+                              const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
+                              const isLocked = isAutoOptionLocked || isCanvasOptionLocked
+                              const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    onModelChange?.(opt.value)
+                                    setModelDropdownOpen(false)
+                                  }}
+                                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${model === opt.value ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}
+                                >
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-[15px] font-medium flex items-center gap-1.5">
+                                      {opt.label}
+                                      {isLocked && <Lock className="h-3.5 w-3.5" />}
+                                    </span>
+                                    <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
+                                      {isAutoOptionLocked || isCanvasOptionLocked
+                                        ? 'Daily quota reached — sign in'
+                                        : opt.desc}
+                                    </span>
+                                  </div>
+                                  <div className="ml-3 shrink-0 flex items-center gap-2">
+                                    {showRemaining && (
+                                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
+                                        {remainingQuota} left
+                                      </span>
+                                    )}
+                                    {model === opt.value ? (
+                                      <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
+                                        <Check className="h-3.5 w-3.5" />
+                                      </div>
+                                    ) : (
+                                      <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
+                                    )}
+                                  </div>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
 
