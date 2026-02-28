@@ -267,15 +267,23 @@ function ToolContent({ message }: { message: SSEMessage }) {
           detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
       case 'skimming_web_pages':
-      case 'load_web_page':
-        const urls = args.urls || args.url
+      case 'load_web_page': {
+        const urls = args.urls || args.url || ''
         const count = Array.isArray(urls) ? urls.length : 1
+        let hostname = String(urls)
+        try {
+          if (!Array.isArray(urls) && typeof urls === 'string' && urls) {
+            hostname = new URL(urls).hostname
+          }
+        } catch (e) {
+          // Fallback to original string if URL parsing fails
+        }
         return {
           label: tool === 'skimming_web_pages' ? 'Reviewing Sources' : 'Reading Content',
           detail: (
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground/80">
-                {Array.isArray(urls) ? `${count} page${count > 1 ? 's' : ''}` : (new URL(urls).hostname)}
+                {Array.isArray(urls) ? `${count} page${count > 1 ? 's' : ''}` : hostname}
               </span>
               <button
                 onClick={() => setUrlVisible(!urlVisible)}
@@ -286,6 +294,7 @@ function ToolContent({ message }: { message: SSEMessage }) {
             </div>
           )
         }
+      }
       case 'verify_claim':
         return {
           label: 'Verifying',
