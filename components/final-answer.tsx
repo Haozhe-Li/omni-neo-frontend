@@ -290,7 +290,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
     } else if (format === 'txt') {
       let plainText = stripMarkdown(initialAnswer)
       if (sources && sources.length > 0) {
-        plainText += '\n\n------\n\n## References\n'
+        plainText += '\n\n------\n\nReferences\n'
         sources.forEach((source, index) => {
           plainText += `${index + 1}. ${source.title} - ${source.url}\n`
         })
