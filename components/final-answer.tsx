@@ -270,7 +270,14 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
   const handleDownload = async (format: 'markdown' | 'txt' | 'pdf') => {
     if (format === 'markdown') {
-      const blob = new Blob([initialAnswer], { type: 'text/markdown' })
+      let contentToDownload = initialAnswer
+      if (sources && sources.length > 0) {
+        contentToDownload += '\n\n------\n\n## References\n'
+        sources.forEach((source, index) => {
+          contentToDownload += `${index + 1}. [${source.title}](${source.url})\n`
+        })
+      }
+      const blob = new Blob([contentToDownload], { type: 'text/markdown' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -281,7 +288,13 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       URL.revokeObjectURL(url)
       toast.success('Downloaded as Markdown')
     } else if (format === 'txt') {
-      const plainText = stripMarkdown(initialAnswer)
+      let plainText = stripMarkdown(initialAnswer)
+      if (sources && sources.length > 0) {
+        plainText += '\n\n------\n\n## References\n'
+        sources.forEach((source, index) => {
+          plainText += `${index + 1}. ${source.title} - ${source.url}\n`
+        })
+      }
       const blob = new Blob([plainText], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
