@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { SourceItem } from '@/components/source-item'
+import { Mermaid } from '@/components/mermaid'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -74,18 +75,26 @@ const markdownComponents: Components = {
       {children}
     </a>
   ),
-  pre: ({ children }) => (
-    <div className="relative group my-4">
-      <pre className="rounded-xl bg-[color-mix(in_srgb,var(--foreground)_10%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_14%,var(--background))] p-4 overflow-x-auto text-sm leading-relaxed border border-[color-mix(in_srgb,var(--foreground)_22%,var(--background))] dark:border-[color-mix(in_srgb,var(--foreground)_26%,var(--background))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_10%,transparent)] dark:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_14%,transparent)]">
-        {children}
-      </pre>
-      <CopyButton getText={() => {
-        return extractNodeText(children)
-      }} />
-    </div>
-  ),
+  pre: ({ children }: any) => {
+    if (children?.props?.className?.includes('language-mermaid')) {
+      return <>{children}</>
+    }
+    return (
+      <div className="relative group my-4">
+        <pre className="rounded-xl bg-[color-mix(in_srgb,var(--foreground)_10%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_14%,var(--background))] p-4 overflow-x-auto text-sm leading-relaxed border border-[color-mix(in_srgb,var(--foreground)_22%,var(--background))] dark:border-[color-mix(in_srgb,var(--foreground)_26%,var(--background))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_10%,transparent)] dark:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_14%,transparent)]">
+          {children}
+        </pre>
+        <CopyButton getText={() => {
+          return extractNodeText(children)
+        }} />
+      </div>
+    )
+  },
   code: ({ className, children, ...props }) => {
     const isInline = !className
+    if (className?.includes('language-mermaid')) {
+      return <Mermaid chart={String(children).replace(/\n$/, '')} />
+    }
     if (isInline) {
       return (
         <code

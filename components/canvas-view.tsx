@@ -396,6 +396,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           return copy
         })
       } else if (parsed.type === 'tool' && KNOWN_TOOLS.has(parsed.tool || '')) {
+        if (parsed.content !== 'Tool Calling') return
         const toolArgs = (data.raw as any)?.args || {}
         if (parsed.tool === 'verify_claim' && !toolArgs.fact) return
         if ((parsed.tool === 'run_python_tool' || parsed.tool === 'check_python_compile' || parsed.tool === 'draw_graph') && !toolArgs.code) return
@@ -1136,8 +1137,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                               startDeepResearch(i)
                                             }}
                                             className={`px-6 py-2.5 rounded-full text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-all shrink-0 ${isQuotaLocked
-                                                ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                                                : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
+                                              ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                                              : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
                                               }`}
                                           >
                                             <Layout size={16} />

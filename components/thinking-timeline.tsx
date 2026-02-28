@@ -78,6 +78,10 @@ export function ThinkingTimeline({
     }
   }
 
+  const displayMessages = messages.filter(
+    (msg) => msg.type !== 'tool' || msg.content === 'Tool Calling'
+  )
+
   return (
     <div className="flex flex-col h-full">
 
@@ -88,7 +92,7 @@ export function ThinkingTimeline({
         onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto custom-scrollbar relative px-1"
       >
-        {messages.length === 0 && isStreaming && (
+        {displayMessages.length === 0 && isStreaming && (
           <div className="animate-fade-up py-2 space-y-3">
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-3">
@@ -98,19 +102,19 @@ export function ThinkingTimeline({
             ))}
           </div>
         )}
-        {messages.length === 0 && isComplete && (
+        {displayMessages.length === 0 && isComplete && (
           <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
             <span>No thinking steps used</span>
           </div>
         )}
 
         <div className="flex flex-col gap-3">
-          {messages.map((msg, idx) => (
+          {displayMessages.map((msg, idx) => (
             <TimelineItem
               key={idx}
               message={msg}
-              isActive={isStreaming && idx === messages.length - 1}
-              isComplete={isComplete || (idx < messages.length - 1)}
+              isActive={isStreaming && idx === displayMessages.length - 1}
+              isComplete={isComplete || (idx < displayMessages.length - 1)}
             />
           ))}
         </div>

@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import type { Components } from 'react-markdown'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
+import { Mermaid } from '@/components/mermaid'
 import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
@@ -369,12 +370,34 @@ function CodeCopyButton({ getText }: { getText: () => string }) {
 }
 
 const markdownComponents: Components = {
-  pre: ({ children }) => (
-    <div className="relative group my-4">
-      <pre>{children}</pre>
-      <CodeCopyButton getText={() => extractNodeText(children)} />
-    </div>
-  ),
+  pre: ({ children }: any) => {
+    if (children?.props?.className?.includes('language-mermaid')) {
+      return <>{children}</>
+    }
+    return (
+      <div className="relative group my-4">
+        <pre>{children}</pre>
+        <CodeCopyButton getText={() => extractNodeText(children)} />
+      </div>
+    )
+  },
+  code: ({ className, children, ...props }) => {
+    const isInline = !className
+    if (className?.includes('language-mermaid')) {
+      return <Mermaid chart={String(children).replace(/\n$/, '')} />
+    }
+    if (isInline) {
+      return (
+        <code
+          className="rounded-md border border-border/60 bg-secondary/60 px-1.5 py-0.5 text-[0.9em] text-foreground"
+          {...props}
+        >
+          {children}
+        </code>
+      )
+    }
+    return <code className={className} {...props}>{children}</code>
+  },
   a: ({ className, ...props }) => (
     <a
       {...props}
@@ -1198,7 +1221,14 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                           {msg.role === 'assistant' && (
                             <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
                               <button
-                                onClick={() => handleCopy(msg.content)}
+                                onClick={() => {
+                                  let textToCopy = msg.content
+                                  if (sources && sources.length > 0) {
+                                    const refs = sources.map((s, i) => `${i + 1}. ${s.title} - ${s.url}`).join('\n')
+                                    textToCopy += `\n\n ------ \n References:\n${refs}`
+                                  }
+                                  handleCopy(textToCopy)
+                                }}
                                 className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
                                 title="Copy"
                               >

@@ -9,6 +9,7 @@ import rehypeHighlight from 'rehype-highlight'
 import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
+import { Mermaid } from '@/components/mermaid'
 
 interface MarkdownBlogViewProps {
   title: string
@@ -81,16 +82,25 @@ const markdownComponents: Components = {
       {children}
     </a>
   ),
-  pre: ({ children }) => (
-    <div className="relative group my-6">
-      <pre className="overflow-x-auto rounded-xl border border-border/70 bg-card px-4 py-4 text-[13px] leading-relaxed shadow-sm">
-        {children}
-      </pre>
-      <CodeCopyButton getText={() => extractNodeText(children)} />
-    </div>
-  ),
+  pre: ({ children }: any) => {
+    if (children?.props?.className?.includes('language-mermaid')) {
+      return <>{children}</>
+    }
+    return (
+      <div className="relative group my-6">
+        <pre className="overflow-x-auto rounded-xl border border-border/70 bg-card px-4 py-4 text-[13px] leading-relaxed shadow-sm">
+          {children}
+        </pre>
+        <CodeCopyButton getText={() => extractNodeText(children)} />
+      </div>
+    )
+  },
   code: ({ className, children, ...props }) => {
     const isInline = !className
+
+    if (className?.includes('language-mermaid')) {
+      return <Mermaid chart={String(children).replace(/\n$/, '')} />
+    }
 
     if (isInline) {
       return (
