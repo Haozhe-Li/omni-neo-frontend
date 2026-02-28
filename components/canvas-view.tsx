@@ -564,9 +564,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
               const firstMessage = remoteMessages[0]
               const remoteCanvasState =
                 firstMessage &&
-                typeof firstMessage === 'object' &&
-                firstMessage.canvas_state &&
-                typeof firstMessage.canvas_state === 'object'
+                  typeof firstMessage === 'object' &&
+                  firstMessage.canvas_state &&
+                  typeof firstMessage.canvas_state === 'object'
                   ? firstMessage.canvas_state
                   : null
 
@@ -1111,10 +1111,63 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                   <div>{msg.content}</div>
                                 </div>
                               ) : (
-                                <div className="max-w-none blog-markdown markdown-body text-[16px] leading-[1.8]">
-                                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                                    {msg.content}
-                                  </ReactMarkdown>
+                                <div className="flex flex-col">
+                                  {msg.read_to_begin_research && researchBlockIdx < 0 && !isChatLoading && !isResearching && (
+                                    <div className="mb-6 pb-6 border-b border-[var(--border-subtle)]/60 flex flex-col items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
+                                      {rewrittenQuery && (
+                                        <div className="w-full bg-[var(--background)] border border-[var(--active-border)]/20 rounded-xl p-4 shadow-sm">
+                                          <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                            <Layout size={14} className="opacity-70" />
+                                            Research Topic
+                                          </div>
+                                          <div className="text-[15px] text-[var(--foreground)] font-medium leading-relaxed">
+                                            {rewrittenQuery}
+                                          </div>
+                                        </div>
+                                      )}
+                                      <div className="flex flex-col gap-2.5 w-full">
+                                        <div className="flex items-center gap-2.5">
+                                          <button
+                                            onClick={() => {
+                                              if (isQuotaLocked) {
+                                                clerk.openSignIn()
+                                                return
+                                              }
+                                              startDeepResearch(i)
+                                            }}
+                                            className={`px-6 py-2.5 rounded-full text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-all shrink-0 ${isQuotaLocked
+                                                ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                                                : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
+                                              }`}
+                                          >
+                                            <Layout size={16} />
+                                            Start Research
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              setFollowUpText(rewrittenQuery)
+                                              setTimeout(() => {
+                                                document.getElementById('chat-input')?.focus()
+                                              }, 100)
+                                            }}
+                                            className="px-6 py-2.5 bg-[var(--secondary)] text-[var(--foreground)] rounded-full text-sm font-medium hover:bg-[var(--secondary)]/80 transition-colors shrink-0 flex items-center justify-center gap-2"
+                                          >
+                                            <FileText size={16} />
+                                            Edit Topic
+                                          </button>
+                                        </div>
+                                        <div className="text-xs text-[var(--muted-foreground)] opacity-70 flex items-center gap-1.5 pl-1">
+                                          <Clock size={12} />
+                                          Takes just a few minutes
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="max-w-none blog-markdown markdown-body text-[16px] leading-[1.8]">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                                      {msg.content}
+                                    </ReactMarkdown>
+                                  </div>
                                 </div>
                               )}
 
@@ -1133,59 +1186,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                 </div>
                               )}
 
-                              {/* "Start Research" CTA for follow-up messages */}
-                              {msg.read_to_begin_research && researchBlockIdx < 0 && !isChatLoading && !isResearching && (
-                                <div className="mt-5 pt-5 border-t border-[var(--border-subtle)]/60 flex flex-col items-start gap-4">
-                                  {rewrittenQuery && (
-                                    <div className="w-full bg-[var(--background)] border border-[var(--active-border)]/20 rounded-xl p-4 shadow-sm">
-                                      <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                        <Layout size={14} className="opacity-70" />
-                                        Research Topic
-                                      </div>
-                                      <div className="text-[15px] text-[var(--foreground)] font-medium leading-relaxed">
-                                        {rewrittenQuery}
-                                      </div>
-                                    </div>
-                                  )}
-                                  <div className="flex flex-col gap-2.5 w-full">
-                                    <div className="flex items-center gap-2.5">
-                                      <button
-                                        onClick={() => {
-                                          if (isQuotaLocked) {
-                                            clerk.openSignIn()
-                                            return
-                                          }
-                                          startDeepResearch(i)
-                                        }}
-                                        className={`px-6 py-2.5 rounded-full text-sm font-medium flex items-center justify-center gap-2 shadow-sm transition-all shrink-0 ${
-                                          isQuotaLocked
-                                            ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                                            : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
-                                        }`}
-                                      >
-                                        <Layout size={16} />
-                                        Start Research
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setFollowUpText(rewrittenQuery)
-                                          setTimeout(() => {
-                                            document.getElementById('chat-input')?.focus()
-                                          }, 100)
-                                        }}
-                                        className="px-6 py-2.5 bg-[var(--secondary)] text-[var(--foreground)] rounded-full text-sm font-medium hover:bg-[var(--secondary)]/80 transition-colors shrink-0 flex items-center justify-center gap-2"
-                                      >
-                                        <FileText size={16} />
-                                        Edit Topic
-                                      </button>
-                                    </div>
-                                    <div className="text-xs text-[var(--muted-foreground)] opacity-70 flex items-center gap-1.5 pl-1">
-                                      <Clock size={12} />
-                                      Takes just a few minutes
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
 
                             </div>
                           )}
@@ -1285,13 +1285,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     type="button"
                     onClick={handleSst}
                     disabled={isQuotaLocked || isChatLoading || isResearching || isSstPending}
-                    className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
-                      isQuotaLocked || isChatLoading || isResearching || isSstPending
-                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                        : isRecording
-                          ? 'bg-[var(--accent)] text-white'
-                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                    }`}
+                    className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${isQuotaLocked || isChatLoading || isResearching || isSstPending
+                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                      : isRecording
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                      }`}
                     aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
                   >
                     {isRecording && !isSstPending && (
@@ -1303,11 +1302,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                   <button
                     onClick={handleChatSend}
                     disabled={isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
-                      isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
-                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                        : 'bg-[var(--accent)] text-white hover:opacity-90'
-                    }`}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
+                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                      : 'bg-[var(--accent)] text-white hover:opacity-90'
+                      }`}
                   >
                     <ArrowUp size={18} />
                   </button>
