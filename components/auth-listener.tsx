@@ -79,7 +79,7 @@ export function AuthListener() {
       console.log('[AuthListener] User signed out. Local chat cache cleared.')
     }
 
-    previousSignedInRef.current = isSignedIn
+    previousSignedInRef.current = isSignedIn ?? null
   }, [isSignedIn])
 
   useEffect(() => {

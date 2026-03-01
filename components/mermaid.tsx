@@ -2,18 +2,47 @@
 
 import { useState, useEffect, useRef } from 'react'
 import mermaid from 'mermaid'
+import { useTheme } from 'next-themes'
 
 export function Mermaid({ chart }: { chart: string }) {
     const [svgStr, setSvgStr] = useState<string>('')
     const idRef = useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`)
     const [error, setError] = useState(false)
+    const { resolvedTheme } = useTheme()
 
     useEffect(() => {
+        const isDark = resolvedTheme === 'dark'
+
         mermaid.initialize({
             startOnLoad: false,
-            theme: 'base',
+            theme: isDark ? 'dark' : 'base',
             securityLevel: 'loose',
-            themeVariables: {
+            themeVariables: isDark ? {
+                fontFamily: 'inherit',
+                fontSize: '14px',
+                // Dark mode colors matching the app UI
+                primaryColor: '#222323',
+                primaryTextColor: '#ffffff',
+                primaryBorderColor: '#4a4b4b',
+                lineColor: '#6b6b6b',
+                secondaryColor: '#2a2b2b',
+                tertiaryColor: '#191a1a',
+                textColor: '#ffffff',
+                // Sequence Diagram Specifics
+                actorBkg: '#222323',
+                actorBorder: '#4a4b4b',
+                actorTextColor: '#ffffff',
+                actorLineColor: '#6b6b6b',
+                signalColor: '#8b8b8b',
+                signalTextColor: '#eaeaef',
+                labelBoxBkgColor: '#2a2b2b',
+                labelBoxBorderColor: '#4a4b4b',
+                labelTextColor: '#ffffff',
+                loopTextColor: '#ffffff',
+                noteBkgColor: '#2a2b2b',
+                noteBorderColor: '#4a4b4b',
+                noteTextColor: '#ffffff',
+            } : {
                 fontFamily: 'inherit',
                 fontSize: '14px',
                 // General Colors (Neutral Base, Muted Cyan)
@@ -60,7 +89,7 @@ export function Mermaid({ chart }: { chart: string }) {
         return () => {
             isMounted = false
         }
-    }, [chart])
+    }, [chart, resolvedTheme])
 
     if (error) {
         return (

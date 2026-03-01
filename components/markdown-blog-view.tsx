@@ -6,10 +6,12 @@ import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
+import type { Source } from '@/lib/types'
+import { SourceItem } from '@/components/source-item'
 
 interface MarkdownBlogViewProps {
   title: string
@@ -21,6 +23,7 @@ interface MarkdownBlogViewProps {
   publishedAt?: string
   readingTime?: string
   tags?: string[]
+  sources?: Source[]
 }
 
 function extractNodeText(node: ReactNode): string {
@@ -137,6 +140,36 @@ const markdownComponents: Components = {
   ),
   td: ({ children }) => <td className="border-b border-border/50 px-4 py-3 align-top">{children}</td>,
   hr: () => <hr className="my-10 border-0 border-t border-border/80" />,
+  img: ({ src, alt, ...props }) => (
+    <figure className="my-6 w-full sm:w-fit sm:max-w-[80%] mx-auto flex flex-col items-center gap-2">
+      <div className="group relative rounded-lg overflow-hidden w-full bg-muted/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src as string}
+          alt={alt || 'Image'}
+          className="w-full h-auto object-contain max-h-[500px]"
+          loading="lazy"
+          {...props}
+        />
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <a
+            href={src as string}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center p-2 bg-black/50 hover:bg-black/70 text-white rounded-md backdrop-blur-sm transition-colors"
+            title="View/Download Image"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+      {alt && (
+        <figcaption className="text-[13px] text-muted-foreground/80 text-center px-4">
+          {alt}
+        </figcaption>
+      )}
+    </figure>
+  ),
 }
 
 export function MarkdownBlogView({
@@ -149,6 +182,7 @@ export function MarkdownBlogView({
   publishedAt,
   readingTime,
   tags = [],
+  sources = [],
 }: MarkdownBlogViewProps) {
   return (
     <div className="blog-shell min-h-screen bg-background">
@@ -212,6 +246,17 @@ export function MarkdownBlogView({
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
               {markdown}
             </ReactMarkdown>
+
+            {sources.length > 0 && (
+              <div className="mt-12 border-t border-border/70 pt-8">
+                <h3 className="mb-6 text-xl font-semibold tracking-tight text-foreground">References</h3>
+                <div className="flex flex-col gap-3">
+                  {sources.map((source, idx) => (
+                    <SourceItem key={idx} source={source} index={idx} />
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         </article>
       </main>
