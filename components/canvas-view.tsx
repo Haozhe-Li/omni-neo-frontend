@@ -33,10 +33,12 @@ interface CanvasViewProps {
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
-  read_to_begin_research?: boolean
+  ready_to_begin_research?: boolean
   follow_up_content?: string
   mode?: 'canvas' | 'light'
   canvas_state?: CanvasPersistState
+  questions_for_user?: { question: string; options: string[] }[]
+  questions_submitted?: boolean
 }
 
 interface CanvasPersistState {
@@ -77,6 +79,73 @@ const inferTitleFromMessages = (messages: Array<{ role?: string; content?: strin
 
 const fetchedTitleThreadSet = new Set<string>()
 const inFlightTitleThreadSet = new Set<string>()
+
+function QuestionSelector({
+  questions,
+  isSubmitted,
+  onSubmit
+}: {
+  questions: { question: string, options: string[] }[],
+  isSubmitted?: boolean,
+  onSubmit: (selections: Record<string, string>) => void
+}) {
+  const [selections, setSelections] = useState<Record<string, string>>({});
+
+  if (isSubmitted) return null;
+
+  const handleSelect = (q: string, opt: string) => {
+    if (isSubmitted) return;
+    setSelections(prev => ({ ...prev, [q]: opt }));
+  };
+
+  const handleSub = () => {
+    onSubmit(selections);
+  };
+
+  const allAnswered = questions.every(q => selections[q.question]);
+
+  return (
+    <div className="mt-5 flex flex-col gap-6 border border-[var(--border-subtle)] bg-[var(--background)]/50 p-5 rounded-xl shadow-sm">
+      {questions.map((q, idx) => (
+        <div key={idx} className="flex flex-col gap-3">
+          <div className="text-[15px] font-medium text-[var(--foreground)] leading-snug">{q.question}</div>
+          <div className="flex flex-wrap gap-2">
+            {q.options.map((opt, oIdx) => {
+              const selected = selections[q.question] === opt;
+              return (
+                <button
+                  key={oIdx}
+                  onClick={() => handleSelect(q.question, opt)}
+                  disabled={isSubmitted}
+                  className={`px-3.5 py-1.5 text-sm rounded-lg border transition-colors duration-200 ${selected
+                    ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm'
+                    : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border-subtle)] hover:border-[var(--accent)]/50'
+                    } ${isSubmitted ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="pt-1">
+        <button
+          onClick={handleSub}
+          disabled={!allAnswered || isSubmitted}
+          className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm ${isSubmitted
+            ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] border border-[var(--border-subtle)]'
+            : !allAnswered
+              ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed border border-[var(--border-subtle)]/50'
+              : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
+            }`}
+        >
+          {isSubmitted ? 'Submitted' : 'Submit Answers'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen }: CanvasViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
@@ -508,7 +577,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         {
           role: 'assistant',
           content: data.response || 'No response.',
-          read_to_begin_research: data.read_to_begin_research
+          ready_to_begin_research: data.ready_to_begin_research,
+          questions_for_user: data.questions_for_user
         }
       ]
       setChatMessages(finalMessages)
@@ -1020,6 +1090,15 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   useEffect(() => { getDurationForTitle() }, [query, threadId, title, getStoredTitle])
 
+  const handleQuestionSubmit = (messageIndex: number, selections: Record<string, string>) => {
+    const copy = [...chatMessages];
+    copy[messageIndex] = { ...copy[messageIndex], questions_submitted: true };
+    setChatMessages(copy);
+
+    const combinedAnswers = Object.entries(selections).map(([q, a]) => `Question: ${q}\nAnswer: ${a}`).join('\n\n');
+    fetchHelper(combinedAnswers, false, copy, '');
+  };
+
   const isResearching = activeResearchIdx >= 0 && !researchBlocks[activeResearchIdx]?.isComplete
   const reportBlock = reportBlockIdx >= 0 ? researchBlocks[reportBlockIdx] : null
 
@@ -1113,7 +1192,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                 </div>
                               ) : (
                                 <div className="flex flex-col">
-                                  {msg.read_to_begin_research && researchBlockIdx < 0 && !isChatLoading && !isResearching && (
+                                  {msg.ready_to_begin_research && researchBlockIdx < 0 && !isChatLoading && !isResearching && (
                                     <div className="mb-6 pb-6 border-b border-[var(--border-subtle)]/60 flex flex-col items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
                                       {rewrittenQuery && (
                                         <div className="w-full bg-[var(--background)] border border-[var(--active-border)]/20 rounded-xl p-4 shadow-sm">
@@ -1174,17 +1253,29 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
                               {/* Action buttons: only on messages without a research block */}
                               {msg.role === 'assistant' && !block && (
-                                <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
-                                  <button onClick={() => handleCopy(msg.content)} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Copy">
-                                    <Copy size={14} />
-                                  </button>
-                                  <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Helpful">
-                                    <ThumbsUp size={14} />
-                                  </button>
-                                  <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
-                                    <ThumbsDown size={14} />
-                                  </button>
-                                </div>
+                                <>
+                                  {msg.questions_for_user && msg.questions_for_user.length > 0 && !msg.ready_to_begin_research && (
+                                    <QuestionSelector
+                                      questions={msg.questions_for_user}
+                                      isSubmitted={
+                                        msg.questions_submitted ||
+                                        chatMessages.slice(i + 1).some(m => m.role === 'user')
+                                      }
+                                      onSubmit={(selections) => handleQuestionSubmit(i, selections)}
+                                    />
+                                  )}
+                                  <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
+                                    <button onClick={() => handleCopy(msg.content)} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Copy">
+                                      <Copy size={14} />
+                                    </button>
+                                    <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Helpful">
+                                      <ThumbsUp size={14} />
+                                    </button>
+                                    <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
+                                      <ThumbsDown size={14} />
+                                    </button>
+                                  </div>
+                                </>
                               )}
 
 

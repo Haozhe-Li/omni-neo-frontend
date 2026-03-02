@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -23,6 +23,11 @@ const LightChatMiniMap = dynamic(
   { ssr: false }
 )
 
+const CurrencyWidget = dynamic(
+  () => import('@/components/currency-widget').then((mod) => mod.CurrencyWidget),
+  { ssr: false }
+)
+
 interface LightChatViewProps {
   query: string
   threadId: string
@@ -39,6 +44,7 @@ interface Message {
   sources?: LightChatSource[]
   stock?: LightChatStock | null
   weather?: LightChatWeather | null
+  currency?: LightChatCurrency | null
   mapPoints?: LightChatMapPoint[]
   steps?: LightChatStep[]
 }
@@ -95,6 +101,13 @@ interface LightChatWeather {
   wind?: LightChatWeatherWind
 }
 
+interface LightChatCurrency {
+  amount?: number
+  base?: string
+  date?: string
+  rates?: Record<string, number>
+}
+
 function normalizeSources(raw: unknown): LightChatSource[] {
   if (!Array.isArray(raw)) return []
   return raw.reduce<LightChatSource[]>((acc, item) => {
@@ -123,6 +136,16 @@ function normalizeStock(raw: unknown): LightChatStock | null {
   }
   if (stock.data && typeof stock.data === 'object') {
     return stock
+  }
+  return null
+}
+
+function normalizeCurrency(raw: unknown): LightChatCurrency | null {
+  if (!raw || typeof raw !== 'object') return null
+  const payload = raw as Record<string, any>
+  const currency = (payload.currency || payload) as LightChatCurrency
+  if (typeof currency.amount === 'number' && typeof currency.base === 'string') {
+    return currency
   }
   return null
 }
@@ -305,6 +328,9 @@ function getWeatherTone(status?: string) {
 function getStepLabel(step: LightChatStep) {
   if (step.tool === 'get_stock_data_light') {
     return `Searching for ${step.args?.symbol || 'stock'} data`
+  }
+  if (step.tool === 'get_realtime_currency_rate_light' || step.tool === 'get_realtime_currency_rate') {
+    return `Checking currency rates for ${step.args?.base || step.args?.from_currency || 'requested currency'}`
   }
   if (step.tool === 'get_weather_light') {
     return `Checking weather in ${step.args?.location || 'requested location'}`
@@ -642,6 +668,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
             const sources = getResponseSources(data)
             const stock = normalizeStock(data.stock)
             const weather = normalizeWeather(data.weather)
+            const currency = normalizeCurrency(data.currency)
             const mapPoints = normalizeMapPoints(data.map)
 
             const assistantMsg: Message = {
@@ -651,6 +678,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
               sources,
               stock,
               weather,
+              currency,
               mapPoints,
               steps: currentSteps
             }
@@ -1048,7 +1076,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                               <span>Searched the web</span>
                             </div>
                           )}
-                          {msg.role === 'assistant' && ((msg.steps?.length ?? 0) > 0 || (msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather) && (
+                          {msg.role === 'assistant' && ((msg.steps?.length ?? 0) > 0 || (msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather || msg.currency) && (
                             <div className="mb-3 space-y-2">
                               {msg.steps && msg.steps.length > 0 && (
                                 <details className="px-1 py-1 group mb-2">
@@ -1191,6 +1219,20 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                                       )}
                                     </div>
                                   </div>
+                                )
+                              })()}
+
+                              {msg.currency && (() => {
+                                const c = msg.currency
+                                if (!c.base || !c.rates || Object.keys(c.rates).length === 0) return null
+
+                                return (
+                                  <CurrencyWidget
+                                    baseCurrency={c.base}
+                                    rates={c.rates}
+                                    initialAmount={c.amount}
+                                    date={c.date}
+                                  />
                                 )
                               })()}
 
