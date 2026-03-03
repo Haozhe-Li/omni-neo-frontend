@@ -11,7 +11,10 @@ export function Mermaid({ chart }: { chart: string }) {
     const idRef = useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`)
 
     const preprocessChart = (code: string) => {
-        let processed = code
+        // Ensure code is a string
+        const textToProcess = typeof code === 'string' ? code : String(code || '')
+
+        let processed = textToProcess
             .replace(/（/g, '(')
             .replace(/）/g, ')')
             .replace(/【/g, '[')
@@ -26,6 +29,7 @@ export function Mermaid({ chart }: { chart: string }) {
 
         return processed
     }
+
 
     useEffect(() => {
         const isDark = resolvedTheme === 'dark'

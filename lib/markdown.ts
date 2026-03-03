@@ -3,10 +3,13 @@
  * Specifically handles display math wrapped in [ ] and inline math in ( ) 
  * by converting them to $$ $$ and $ $ for remark-math.
  */
-export function preprocessMarkdown(content: string): string {
+export function preprocessMarkdown(content: any): string {
     if (!content) return ''
 
-    return content
+    // Ensure content is a string before using .replace
+    const text = typeof content === 'string' ? content : String(content)
+
+    return text
         // 1. Convert block math [ math ] or \[ math \] to $$ math $$
         // We look for [ or \[ at the start of a line (or after a newline) 
         // and wait for the corresponding ] or \].
@@ -21,3 +24,4 @@ export function preprocessMarkdown(content: string): string {
         // 3. Handle leftover bracket math that might be mid-sentence but definitely looks like LaTeX
         .replace(/\[\s*(\\.*|.*(\\text|\\frac|\\sum|\\approx|\\times).*?)\s*\]/g, '$$$1$$')
 }
+
