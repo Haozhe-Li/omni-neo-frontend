@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { AuthListener } from '@/components/auth-listener'
 import { ClerkThemeProvider } from '@/components/clerk-theme-provider'
 import './globals.css'
+import 'katex/dist/katex.min.css'
 
 const _inter = Inter({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });

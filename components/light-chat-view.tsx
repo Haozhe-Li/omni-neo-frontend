@@ -6,12 +6,16 @@ import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Sea
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import rehypeRaw from 'rehype-raw'
 import type { Components } from 'react-markdown'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { Mermaid } from '@/components/mermaid'
 import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
+import { preprocessMarkdown } from '@/lib/markdown'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
@@ -1250,11 +1254,11 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                           ) : (
                             <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">
                               <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                                rehypePlugins={[rehypeHighlight]}
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                                rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]}
                                 components={markdownComponents}
                               >
-                                {msg.content}
+                                {preprocessMarkdown(msg.content)}
                               </ReactMarkdown>
 
                               {/* Removed inline sources expansion */}

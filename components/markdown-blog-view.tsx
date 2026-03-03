@@ -5,13 +5,17 @@ import Link from 'next/link'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import rehypeRaw from 'rehype-raw'
 import { Copy, Check, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
 import type { Source } from '@/lib/types'
 import { SourceItem } from '@/components/source-item'
+import { preprocessMarkdown } from '@/lib/markdown'
 
 interface MarkdownBlogViewProps {
   title: string
@@ -243,8 +247,8 @@ export function MarkdownBlogView({
           </header>
 
           <section className="blog-markdown markdown-body pt-7 text-[16px] leading-[1.8] text-foreground">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
-              {markdown}
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]} components={markdownComponents}>
+              {preprocessMarkdown(markdown)}
             </ReactMarkdown>
 
             {sources.length > 0 && (

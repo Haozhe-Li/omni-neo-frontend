@@ -6,9 +6,26 @@ import { useTheme } from 'next-themes'
 
 export function Mermaid({ chart }: { chart: string }) {
     const [svgStr, setSvgStr] = useState<string>('')
-    const idRef = useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`)
     const [error, setError] = useState(false)
     const { resolvedTheme } = useTheme()
+    const idRef = useRef(`mermaid-${Math.random().toString(36).substr(2, 9)}`)
+
+    const preprocessChart = (code: string) => {
+        let processed = code
+            .replace(/（/g, '(')
+            .replace(/）/g, ')')
+            .replace(/【/g, '[')
+            .replace(/】/g, ']')
+            .replace(/\u2011/g, '-') // Replace Non-Breaking Hyphen with standard hyphen
+
+        // Auto-quote labels that contain parentheses and aren't already quoted
+        // This targets patterns like A[text (brackets)] and turns them into A["text (brackets)"]
+        processed = processed.replace(/([a-zA-Z0-9_-]+)(\[|\(|\{)([^"\]\)\}]*[\(\)][^"\]\)\}]*)(\]|\)|\})/g, (match, id, open, text, close) => {
+            return `${id}${open}"${text}"${close}`
+        })
+
+        return processed
+    }
 
     useEffect(() => {
         const isDark = resolvedTheme === 'dark'
@@ -17,10 +34,11 @@ export function Mermaid({ chart }: { chart: string }) {
             startOnLoad: false,
             theme: isDark ? 'dark' : 'base',
             securityLevel: 'loose',
+            // @ts-ignore - mermaid types might be outdated
+            suppressError: true,
             themeVariables: isDark ? {
                 fontFamily: 'inherit',
                 fontSize: '14px',
-                // Dark mode colors matching the app UI
                 primaryColor: '#222323',
                 primaryTextColor: '#ffffff',
                 primaryBorderColor: '#4a4b4b',
@@ -28,7 +46,6 @@ export function Mermaid({ chart }: { chart: string }) {
                 secondaryColor: '#2a2b2b',
                 tertiaryColor: '#191a1a',
                 textColor: '#ffffff',
-                // Sequence Diagram Specifics
                 actorBkg: '#222323',
                 actorBorder: '#4a4b4b',
                 actorTextColor: '#ffffff',
@@ -45,7 +62,6 @@ export function Mermaid({ chart }: { chart: string }) {
             } : {
                 fontFamily: 'inherit',
                 fontSize: '14px',
-                // General Colors (Neutral Base, Muted Cyan)
                 primaryColor: '#faf9f6',
                 primaryTextColor: '#333',
                 primaryBorderColor: '#c8d6d4',
@@ -53,7 +69,6 @@ export function Mermaid({ chart }: { chart: string }) {
                 secondaryColor: '#ebf2f1',
                 tertiaryColor: '#f2f0ea',
                 textColor: '#333',
-                // Sequence Diagram Specifics
                 actorBkg: '#fdfcfb',
                 actorBorder: '#a9c0bd',
                 actorTextColor: '#2d3332',
@@ -74,7 +89,9 @@ export function Mermaid({ chart }: { chart: string }) {
 
         const renderChart = async () => {
             try {
-                const { svg } = await mermaid.render(idRef.current, chart)
+                const processedChart = preprocessChart(chart)
+                // We use a try-catch both outside and check for parse errors
+                const { svg } = await mermaid.render(idRef.current, processedChart)
                 if (isMounted) {
                     setSvgStr(svg)
                     setError(false)
@@ -82,19 +99,40 @@ export function Mermaid({ chart }: { chart: string }) {
             } catch (e) {
                 console.error('Mermaid render error', e)
                 if (isMounted) setError(true)
+
+                // Clear the element to prevent mermaid from leaving broken state
+                const el = document.getElementById(idRef.current)
+                if (el) el.remove()
             }
         }
         renderChart()
 
         return () => {
-            isMounted = false
+            isMounted = true
+            // Attempt to clean up any global error messages mermaid might have added
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node instanceof HTMLElement && (node.id === 'dmermaid' || node.classList.contains('mermaidTooltip'))) {
+                            node.remove()
+                        }
+                    })
+                })
+            })
+            observer.observe(document.body, { childList: true })
+            setTimeout(() => observer.disconnect(), 1000)
         }
     }, [chart, resolvedTheme])
 
     if (error) {
         return (
-            <div className="p-4 bg-red-100/10 border border-red-500/20 text-red-500 rounded-md text-sm my-4 text-center">
-                Failed to render diagram
+            <div className="my-4 relative group">
+                <pre className="overflow-x-auto rounded-xl bg-[color-mix(in_srgb,var(--foreground)_10%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_14%,var(--background))] p-4 text-sm leading-relaxed border border-[color-mix(in_srgb,var(--foreground)_22%,var(--background))] dark:border-[color-mix(in_srgb,var(--foreground)_26%,var(--background))]">
+                    <code className="text-muted-foreground">{chart}</code>
+                </pre>
+                <div className="absolute top-2 right-2 px-2 py-1 rounded bg-red-500/10 text-[10px] text-red-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                    Render Error
+                </div>
             </div>
         )
     }

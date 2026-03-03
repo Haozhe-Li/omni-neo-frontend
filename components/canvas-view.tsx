@@ -11,6 +11,7 @@ import { parseSSEMessage } from '@/lib/sse-parser'
 import type { SSEMessage, TodoItem } from '@/lib/types'
 import { getUserLocation } from '@/lib/location'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
+import { preprocessMarkdown } from '@/lib/markdown'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
@@ -18,7 +19,10 @@ import { SignUpButton, useAuth, useClerk } from '@clerk/nextjs'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import rehypeRaw from 'rehype-raw'
 
 interface CanvasViewProps {
   query: string
@@ -47,6 +51,11 @@ interface CanvasPersistState {
   researchTriggerIndex: number[]
 }
 
+interface Asset {
+  title: string
+  url: string
+}
+
 // A single deep-research session embedded inline
 interface ResearchBlock {
   id: string
@@ -62,7 +71,7 @@ interface ResearchBlock {
   finalAnswer: {
     answer: string
     sources: Array<{ title: string; url: string }>
-    assets?: string[]
+    assets?: Asset[]
   } | null
   title: string
 }
@@ -1244,8 +1253,8 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                     </div>
                                   )}
                                   <div className="max-w-none blog-markdown markdown-body text-[16px] leading-[1.8]">
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                                      {msg.content}
+                                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]}>
+                                      {preprocessMarkdown(msg.content)}
                                     </ReactMarkdown>
                                   </div>
                                 </div>

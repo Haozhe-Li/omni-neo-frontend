@@ -31,15 +31,24 @@ import { SourceItem } from '@/components/source-item'
 import { Mermaid } from '@/components/mermaid'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
+import rehypeRaw from 'rehype-raw'
 import { useClerk } from '@clerk/nextjs'
+import { preprocessMarkdown } from '@/lib/markdown'
 import type { Components } from 'react-markdown'
 import type { Source, PublishDuration } from '@/lib/types'
+
+interface Asset {
+  title: string
+  url: string
+}
 
 interface FinalAnswerProps {
   answer: string
   sources: Source[]
-  assets?: string[]
+  assets?: Asset[]
   title?: string
   onBack?: () => void
   onFollowUp?: (text: string) => void
@@ -49,8 +58,8 @@ interface FinalAnswerProps {
 }
 
 /* ── Stable plugin arrays at module scope — never recreated ── */
-const remarkPlugins = [remarkGfm]
-const rehypePlugins = [rehypeHighlight]
+const remarkPlugins = [remarkGfm, remarkMath]
+const rehypePlugins = [rehypeHighlight, rehypeKatex, rehypeRaw]
 
 function extractNodeText(node: ReactNode): string {
   if (node == null) return ''
@@ -622,7 +631,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
             rehypePlugins={rehypePlugins}
             components={markdownComponents}
           >
-            {initialAnswer}
+            {preprocessMarkdown(initialAnswer)}
           </ReactMarkdown>
         </div>
       </div>
@@ -662,14 +671,14 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                           <div className="relative rounded-lg overflow-hidden w-full bg-muted/10 border border-border">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={asset}
-                              alt={`Asset ${idx + 1}`}
+                              src={asset.url}
+                              alt={asset.title || `Asset ${idx + 1}`}
                               className="w-full h-auto object-contain max-h-[400px]"
                               loading="lazy"
                             />
                             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                               <a
-                                href={asset}
+                                href={asset.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center justify-center p-2 bg-black/50 hover:bg-black/70 text-white rounded-md backdrop-blur-sm transition-colors"
@@ -679,6 +688,11 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                               </a>
                             </div>
                           </div>
+                          {asset.title && (
+                            <figcaption className="text-[11px] text-muted-foreground/60 text-center font-medium truncate max-w-full px-2">
+                              {asset.title}
+                            </figcaption>
+                          )}
                         </figure>
                       ))}
                     </div>
