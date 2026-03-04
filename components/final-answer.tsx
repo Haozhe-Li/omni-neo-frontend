@@ -262,6 +262,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
   const [isPublishExpanded, setIsPublishExpanded] = useState(false)
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [publishToPages, setPublishToPages] = useState(true)
   const clerk = useClerk()
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -498,7 +499,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                       className={`cursor-pointer transition-colors duration-200 ${isPublishExpanded ? 'bg-secondary' : ''}`}
                     >
                       <Globe className="mr-2 h-4 w-4 text-foreground/70" />
-                      <span className="font-medium">{shareUrl ? 'Manage Share' : 'Publish to Pages'}</span>
+                      <span className="font-medium">{shareUrl ? 'Manage Share' : 'Share Report'}</span>
                       {!shareUrl && <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-foreground text-background tracking-wide uppercase">New</span>}
                       <ChevronDown className={`ml-auto h-3.5 w-3.5 opacity-50 transition-transform duration-300 ${isPublishExpanded ? 'rotate-180' : ''}`} />
                     </DropdownMenuItem>
@@ -518,9 +519,26 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                               </span>
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold text-foreground">Permanent link</p>
-                                <p className="text-[11px] text-muted-foreground truncate">Visible publicly in Omni Pages.</p>
+                                <p className="text-[11px] text-muted-foreground truncate">Visible publicly if published.</p>
                               </div>
                             </div>
+
+                            <label className="flex items-center gap-2.5 cursor-pointer group py-1">
+                              <div className="relative flex items-center justify-center">
+                                <input
+                                  type="checkbox"
+                                  checked={publishToPages}
+                                  onChange={(e) => setPublishToPages(e.target.checked)}
+                                  className="peer sr-only"
+                                />
+                                <div className="w-4 h-4 rounded border border-border bg-background peer-checked:bg-accent peer-checked:border-accent transition-colors"></div>
+                                <Check className="w-3 h-3 text-white absolute inset-0 m-auto opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
+                              </div>
+                              <span className="text-[12px] font-medium text-foreground group-hover:text-foreground/80 transition-colors">
+                                Publish to Pages Home
+                              </span>
+                            </label>
+
                             <Button
                               size="sm"
                               className="h-8 text-[11px] w-full rounded-lg bg-accent text-white hover:bg-accent/90"
@@ -528,11 +546,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                 e.stopPropagation()
                                 setIsPublishing(true)
                                 try {
-                                  // Share using the same logic, but we can't easily collect the second option cleanly in this dropdown menu.
-                                  // Since this is a different "Publish to Pages" mechanism right inside the chat header.
-                                  // As per requirements: "如果取消勾选需要给redis存储的value带一个false（这样兼容现在的所有分享）。在pages home，只展示勾选了publish pages的帖子。"
-                                  // Default is yes.
-                                  const url = await onPublish('permanent', true)
+                                  const url = await onPublish('permanent', publishToPages)
                                   if (url) {
                                     setShareUrl(url)
                                   }
@@ -541,7 +555,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                 }
                               }}
                             >
-                              Publish to Pages
+                              Generate Link
                             </Button>
                           </div>
                         ) : (
@@ -614,7 +628,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                       className="cursor-pointer opacity-50"
                     >
                       <Globe className="mr-2 h-4 w-4 text-foreground/70" />
-                      <span className="font-medium">Publish to Pages</span>
+                      <span className="font-medium">Share Report</span>
                       <Lock className="ml-auto h-3.5 w-3.5 opacity-50" />
                     </DropdownMenuItem>
                   </div>
