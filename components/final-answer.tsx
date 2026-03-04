@@ -467,9 +467,33 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 {onPublish ? (
                   <div className="flex flex-col mb-1.5">
                     <DropdownMenuItem
-                      onSelect={(e) => {
+                      onSelect={async (e) => {
                         e.preventDefault()
-                        setIsPublishExpanded(!isPublishExpanded)
+                        if (isPublishExpanded) {
+                          setIsPublishExpanded(false)
+                          return
+                        }
+                        setIsPublishExpanded(true)
+                        if (!shareUrl) {
+                          setIsPublishing(true)
+                          try {
+                            const res = await fetch('/api/publish', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ title, checkOnly: true }),
+                            })
+                            if (res.ok) {
+                              const { id, exists } = await res.json()
+                              if (exists) {
+                                setShareUrl(`${window.location.origin}/pages/${id}`)
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Check publish status failed', error)
+                          } finally {
+                            setIsPublishing(false)
+                          }
+                        }
                       }}
                       className={`cursor-pointer transition-colors duration-200 ${isPublishExpanded ? 'bg-secondary' : ''}`}
                     >

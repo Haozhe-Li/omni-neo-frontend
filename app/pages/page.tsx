@@ -89,13 +89,13 @@ export default async function OmniPagesList() {
                                 Introducing Omni Pages
                             </h1>
                             <p className="text-[var(--muted-foreground)] text-base leading-relaxed">
-                                Explore insights, reports, and deep dives published by the Omni Knows community. Be the first to share your research from the Omni Canvas.
+                                Omni Pages is a new feature that allows you to publish your research from the Omni Canvas.
                             </p>
                             <Link
-                                href="/"
+                                href="https://haozhe.li/blog/omniknows-pages"
                                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--foreground)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--foreground)] hover:text-[var(--background)] transition-colors"
                             >
-                                Start Researching
+                                Learn More
                                 <ArrowRight className="w-4 h-4" />
                             </Link>
                         </div>
@@ -116,7 +116,7 @@ export default async function OmniPagesList() {
                         </span>
                     </div>
 
-                    {rest.length === 0 && !featured ? (
+                    {rest.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center">
                             <BookOpen className="h-12 w-12 text-[var(--muted-foreground)]/20 mb-5" />
                             <h3 className="text-lg font-medium text-[var(--foreground)]">No pages published yet</h3>

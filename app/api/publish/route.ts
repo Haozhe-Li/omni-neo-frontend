@@ -90,7 +90,28 @@ export async function POST(request: Request) {
         const user = await client.users.getUser(userId)
 
         const rawData = await request.json()
-        const { duration, forceUpdate } = rawData
+        const { duration, forceUpdate, checkOnly } = rawData
+
+        // 2 (Moved). Generate a deterministic hash for the ID based on user and title
+        const idSource = `${userId}:${rawData.title || 'Untitled'}`
+        const encoder = new TextEncoder()
+        const contentData = encoder.encode(idSource)
+        const hashBuffer = await crypto.subtle.digest('SHA-256', contentData)
+        const hashArray = Array.from(new Uint8Array(hashBuffer))
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+        const id = hashHex.slice(0, 12)
+
+        const publishKey = `publish:${id}`
+
+        // 3. Check for existence to prevent accidental overwrite or just check status
+        const exists = await redis.exists(publishKey)
+        if (checkOnly) {
+            return NextResponse.json({ id, exists: exists === 1 })
+        }
+
+        if (exists && !forceUpdate) {
+            return NextResponse.json({ id, exists: true })
+        }
 
         // Calculate TTL in seconds
         let ttlSeconds: number | null = null
@@ -108,23 +129,6 @@ export async function POST(request: Request) {
 
         // 1. Migrate images that are about to expire
         const data = await migrateImages(rawData, expiresDate)
-
-        // 2. Generate a deterministic hash for the ID based on user and title
-        const idSource = `${userId}:${data.title || 'Untitled'}`
-        const encoder = new TextEncoder()
-        const contentData = encoder.encode(idSource)
-        const hashBuffer = await crypto.subtle.digest('SHA-256', contentData)
-        const hashArray = Array.from(new Uint8Array(hashBuffer))
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-        const id = hashHex.slice(0, 12)
-
-        const publishKey = `publish:${id}`
-
-        // 3. Check for existence to prevent accidental overwrite
-        const exists = await redis.exists(publishKey)
-        if (exists && !forceUpdate) {
-            return NextResponse.json({ id, exists: true })
-        }
 
         // 4. Enrich data with user info and timestamps
         const now = Date.now()
