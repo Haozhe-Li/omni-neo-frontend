@@ -6,8 +6,20 @@ import { ArrowRight, ExternalLink } from 'lucide-react'
 import { PagesClient } from './pages-client'
 
 export const metadata: Metadata = {
-    title: 'Explore Pages',
-    description: 'Explore research and answers published by Omni Knows.',
+    title: 'Explore Pages | Omni Knows',
+    description: 'Explore research, insights, and comprehensive answers published by the Omni Knows community.',
+    openGraph: {
+        title: 'Explore Pages | Omni Knows',
+        description: 'Explore research, insights, and comprehensive answers published by the Omni Knows community.',
+        images: ['/omniknows_pages_home.png'],
+        type: 'website',
+    },
+    twitter: {
+        card: 'summary_large_image',
+        title: 'Explore Pages | Omni Knows',
+        description: 'Explore research, insights, and comprehensive answers published by the Omni Knows community.',
+        images: ['/omniknows_pages_home.png'],
+    }
 }
 
 export const revalidate = 60 // Revalidate every minute
