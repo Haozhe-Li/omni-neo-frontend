@@ -2,11 +2,12 @@ import { redis } from '@/lib/redis'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Metadata } from 'next'
-import { BookOpen, Clock, ArrowRight, ExternalLink } from 'lucide-react'
+import { ArrowRight, ExternalLink } from 'lucide-react'
+import { PagesClient } from './pages-client'
 
 export const metadata: Metadata = {
-    title: 'Omni Pages | Community Research',
-    description: 'Explore research and answers published by the Omni Knows community.',
+    title: 'Explore Pages',
+    description: 'Explore research and answers published by Omni Knows.',
 }
 
 export const revalidate = 60 // Revalidate every minute
@@ -106,32 +107,7 @@ export default async function OmniPagesList() {
                 <div className="border-t border-[var(--border-subtle)]/40" />
 
                 {/* ─── Articles Grid ─── */}
-                <section className="py-12 sm:py-16">
-                    <div className="flex items-center justify-between mb-8">
-                        <h2 className="text-xl font-semibold text-[var(--foreground)]">
-                            All Articles
-                        </h2>
-                        <span className="text-sm text-[var(--muted-foreground)]">
-                            {pages.length} {pages.length === 1 ? 'article' : 'articles'}
-                        </span>
-                    </div>
-
-                    {rest.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-center">
-                            <BookOpen className="h-12 w-12 text-[var(--muted-foreground)]/20 mb-5" />
-                            <h3 className="text-lg font-medium text-[var(--foreground)]">No pages published yet</h3>
-                            <p className="text-[var(--muted-foreground)] mt-2 max-w-md">
-                                Be the first to share your research from the Omni Canvas. Published articles will appear here.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {rest.map((page) => (
-                                <ArticleCard key={page.id} page={page} />
-                            ))}
-                        </div>
-                    )}
-                </section>
+                <PagesClient initialPages={rest} />
 
                 {/* ─── Footer ─── */}
                 <footer className="border-t border-[var(--border-subtle)]/30 py-10 flex items-center justify-between">
@@ -152,66 +128,5 @@ export default async function OmniPagesList() {
                 </footer>
             </main>
         </div>
-    )
-}
-
-/* ─── Helper ─── */
-
-function formatDate(dateStr: string | number | undefined | null) {
-    if (!dateStr) return 'Unknown Date'
-    const d = new Date(dateStr)
-    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(d)
-}
-
-/* ─── Article Card ─── */
-
-function ArticleCard({ page }: { page: any }) {
-    const description = page.answer
-        ? String(page.answer).replace(/<[^>]+>/g, '').replace(/[#*_`~]/g, '').slice(0, 120).trimEnd() + '...'
-        : 'No description available.'
-
-    return (
-        <Link
-            href={`/pages/${page.id}`}
-            className="group flex flex-col rounded-2xl border border-[var(--border-subtle)]/50 bg-[var(--card)] hover:shadow-md hover:border-[var(--border-subtle)] transition-all duration-300 overflow-hidden"
-        >
-            <div className="p-6 flex flex-col flex-1 gap-4">
-                <div className="space-y-3 flex-1">
-                    <h3 className="text-[17px] font-semibold text-[var(--foreground)] leading-snug line-clamp-2 group-hover:text-[var(--accent)] transition-colors">
-                        {page.title || 'Untitled Research'}
-                    </h3>
-                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed line-clamp-3">
-                        {description}
-                    </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t border-[var(--border-subtle)]/30">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                        {page.authorImage ? (
-                            <Image
-                                src={page.authorImage}
-                                alt={page.authorName || 'User'}
-                                width={22}
-                                height={22}
-                                className="rounded-full shrink-0"
-                            />
-                        ) : (
-                            <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center shrink-0">
-                                <span className="text-[10px] font-bold">
-                                    {(page.authorName || 'A')[0].toUpperCase()}
-                                </span>
-                            </div>
-                        )}
-                        <span className="text-xs font-medium text-[var(--foreground)] truncate">
-                            {page.authorName || 'Anonymous User'}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] shrink-0">
-                        <Clock className="w-3 h-3" />
-                        <span>{formatDate(page.publishedAt || page.created_at)}</span>
-                    </div>
-                </div>
-            </div>
-        </Link>
     )
 }

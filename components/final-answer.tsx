@@ -52,7 +52,7 @@ interface FinalAnswerProps {
   title?: string
   onBack?: () => void
   onFollowUp?: (text: string) => void
-  onPublish?: (duration: PublishDuration) => Promise<string | null>
+  onPublish?: (duration: PublishDuration, publishToPages: boolean) => Promise<string | null>
   isReadOnly?: boolean
   isSignedIn?: boolean
 }
@@ -528,7 +528,11 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                 e.stopPropagation()
                                 setIsPublishing(true)
                                 try {
-                                  const url = await onPublish('permanent')
+                                  // Share using the same logic, but we can't easily collect the second option cleanly in this dropdown menu.
+                                  // Since this is a different "Publish to Pages" mechanism right inside the chat header.
+                                  // As per requirements: "如果取消勾选需要给redis存储的value带一个false（这样兼容现在的所有分享）。在pages home，只展示勾选了publish pages的帖子。"
+                                  // Default is yes.
+                                  const url = await onPublish('permanent', true)
                                   if (url) {
                                     setShareUrl(url)
                                   }

@@ -9,12 +9,13 @@ export type PublishDuration = '7d' | '30d' | 'permanent'
 interface PublishDialogProps {
     isOpen: boolean
     onClose: () => void
-    onConfirm: (duration: PublishDuration) => void
+    onConfirm: (duration: PublishDuration, publishToPages: boolean) => void
     title?: string
 }
 
 export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDialogProps) {
     const [selected, setSelected] = useState<PublishDuration>('7d')
+    const [publishToPages, setPublishToPages] = useState(true)
 
     if (!isOpen) return null
 
@@ -57,8 +58,8 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                             <Globe className="w-4 h-4 text-accent" />
                         </div>
                         <div>
-                            <h3 className="text-[15px] font-semibold text-foreground leading-tight">Publish to Pages</h3>
-                            <p className="text-[12px] text-muted-foreground">Share your research publicly</p>
+                            <h3 className="text-[15px] font-semibold text-foreground leading-tight">Share Report</h3>
+                            <p className="text-[12px] text-muted-foreground">Share your research</p>
                         </div>
                     </div>
                     <button
@@ -117,9 +118,25 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 pb-5">
+                <div className="px-5 pb-5 space-y-4">
+                    <label className="flex items-center gap-2.5 cursor-pointer group">
+                        <div className="relative flex items-center justify-center">
+                            <input
+                                type="checkbox"
+                                checked={publishToPages}
+                                onChange={(e) => setPublishToPages(e.target.checked)}
+                                className="peer sr-only"
+                            />
+                            <div className="w-4 h-4 rounded border border-border bg-background peer-checked:bg-accent peer-checked:border-accent transition-colors"></div>
+                            <Check className="w-3 h-3 text-white absolute inset-0 m-auto opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
+                        </div>
+                        <span className="text-[13px] font-medium text-foreground group-hover:text-foreground/80 transition-colors">
+                            Publish to Pages Home
+                        </span>
+                    </label>
+
                     <Button
-                        onClick={() => onConfirm(selected)}
+                        onClick={() => onConfirm(selected, publishToPages)}
                         className="w-full h-10 rounded-lg bg-accent text-white font-semibold text-sm hover:bg-accent/90 transition-colors"
                     >
                         Generate Link

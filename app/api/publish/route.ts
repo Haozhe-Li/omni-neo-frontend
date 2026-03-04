@@ -90,7 +90,7 @@ export async function POST(request: Request) {
         const user = await client.users.getUser(userId)
 
         const rawData = await request.json()
-        const { duration, forceUpdate, checkOnly } = rawData
+        const { duration, forceUpdate, checkOnly, publishToPages } = rawData
 
         // 2 (Moved). Generate a deterministic hash for the ID based on user and title
         const idSource = `${userId}:${rawData.title || 'Untitled'}`
@@ -136,6 +136,12 @@ export async function POST(request: Request) {
         data.authorName = user.fullName || user.firstName || 'Anonymous'
         data.authorImage = user.imageUrl || ''
         data.publishedAt = exists ? (data.publishedAt || new Date().toISOString()) : new Date().toISOString()
+
+        if (publishToPages === false) {
+            data.publishToPages = false
+        } else {
+            delete data.publishToPages
+        }
 
         const contentStr = JSON.stringify(data)
 

@@ -332,7 +332,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     }, 100)
   }
 
-  const handleShare = async (blockIdx: number, duration: string) => {
+  const handleShare = async (blockIdx: number, duration: string, publishToPages: boolean) => {
     const block = researchBlocks[blockIdx]
     if (!block || !block.finalAnswer) return null
 
@@ -346,6 +346,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           assets: block.finalAnswer.assets,
           title: block.title,
           duration,
+          publishToPages,
         }),
       })
 
@@ -1468,7 +1469,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       title={reportBlock.title}
                       onBack={closeReport}
                       onFollowUp={handleAskOmni}
-                      onPublish={isSignedIn ? (duration) => handleShare(reportBlockIdx, duration) : undefined}
+                      onPublish={isSignedIn ? (duration, publishToPages) => handleShare(reportBlockIdx, duration, publishToPages) : undefined}
                       onUnpublish={() => handleUnpublish(reportBlockIdx)}
                       isSignedIn={!!isSignedIn}
                     />
