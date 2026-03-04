@@ -84,8 +84,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
+        // Use clerk client to get current user details
+        const { clerkClient } = await import('@clerk/nextjs/server')
+        const client = await clerkClient()
+        const user = await client.users.getUser(userId)
+
         const rawData = await request.json()
-        const { duration } = rawData
+        const { duration, forceUpdate } = rawData
 
         // Calculate TTL in seconds
         let ttlSeconds: number | null = null
@@ -104,21 +109,46 @@ export async function POST(request: Request) {
         // 1. Migrate images that are about to expire
         const data = await migrateImages(rawData, expiresDate)
 
-        // 2. Generate a deterministic hash for the ID
-        const contentStr = JSON.stringify(data)
+        // 2. Generate a deterministic hash for the ID based on user and title
+        const idSource = `${userId}:${data.title || 'Untitled'}`
         const encoder = new TextEncoder()
-        const contentData = encoder.encode(contentStr)
+        const contentData = encoder.encode(idSource)
         const hashBuffer = await crypto.subtle.digest('SHA-256', contentData)
         const hashArray = Array.from(new Uint8Array(hashBuffer))
         const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
         const id = hashHex.slice(0, 12)
 
-        // 3. Store in Redis with TTL if set
-        if (ttlSeconds) {
-            await redis.set(`publish:${id}`, contentStr, { ex: ttlSeconds })
-        } else {
-            await redis.set(`publish:${id}`, contentStr)
+        const publishKey = `publish:${id}`
+
+        // 3. Check for existence to prevent accidental overwrite
+        const exists = await redis.exists(publishKey)
+        if (exists && !forceUpdate) {
+            return NextResponse.json({ id, exists: true })
         }
+
+        // 4. Enrich data with user info and timestamps
+        const now = Date.now()
+        data.userId = userId
+        data.authorName = user.fullName || user.firstName || 'Anonymous'
+        data.authorImage = user.imageUrl || ''
+        data.publishedAt = exists ? (data.publishedAt || new Date().toISOString()) : new Date().toISOString()
+
+        const contentStr = JSON.stringify(data)
+
+        // 5. Store in Redis with TTL if set, and add to sorted sets
+        const pipeline = redis.pipeline()
+
+        if (ttlSeconds) {
+            pipeline.set(publishKey, contentStr, { ex: ttlSeconds })
+        } else {
+            pipeline.set(publishKey, contentStr)
+        }
+
+        // Add to sorted sets using timestamp as score
+        pipeline.zadd('omni_pages:all', { score: now, member: id })
+        pipeline.zadd(`omni_pages:user:${userId}`, { score: now, member: id })
+
+        await pipeline.exec()
 
         return NextResponse.json({ id })
     } catch (error) {

@@ -350,10 +350,11 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       })
 
       if (!res.ok) throw new Error('Failed to publish')
-      const { id } = await res.json()
+      const { id, exists } = await res.json()
       const url = `${window.location.origin}/pages/${id}`
 
-      if (typeof navigator !== 'undefined') {
+      if (typeof navigator !== 'undefined' && !exists) {
+        // Only automatically copy and toast if it's a NEW publish
         await navigator.clipboard.writeText(url)
         toast.success('Share link copied!')
       }
@@ -362,6 +363,42 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       console.error('Share failed:', error)
       toast.error('Failed to create share link')
       return null
+    }
+  }
+
+  const handleUnpublish = async (blockIdx: number) => {
+    const block = researchBlocks[blockIdx]
+    if (!block || !block.finalAnswer) return false
+
+    // We need to re-generate the ID to tell the backend what to unpublish,
+    // but the backend takes care of this or we can fetch it again.
+    // However, the easiest way is to let the backend `unpublish` by ID.
+    // To get the ID, we can do a dummy publish without `forceUpdate` to get the ID back,
+    // or just calculate the ID on the frontend?
+    // Better yet: just pass the URL we already have in FinalAnswer state, OR fetch the ID via a dedicated endpoint, OR...
+    // Let's just do a dummy call to /api/publish without forceUpdate, which will return the ID and exists:true quickly.
+
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: block.title }), // Minimal payload just to get the hash id
+      })
+      if (!res.ok) return false;
+      const { id } = await res.json()
+
+      const unpublishRes = await fetch('/api/unpublish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+
+      if (!unpublishRes.ok) throw new Error('Failed to unpublish')
+      return true
+    } catch (error) {
+      console.error('Unpublish failed:', error)
+      toast.error('Failed to stop sharing')
+      return false
     }
   }
 
@@ -1432,6 +1469,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       onBack={closeReport}
                       onFollowUp={handleAskOmni}
                       onPublish={isSignedIn ? (duration) => handleShare(reportBlockIdx, duration) : undefined}
+                      onUnpublish={() => handleUnpublish(reportBlockIdx)}
                       isSignedIn={!!isSignedIn}
                     />
                   </div>

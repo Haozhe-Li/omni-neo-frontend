@@ -255,7 +255,7 @@ function stripMarkdown(md: string): string {
     .trim()
 }
 
-export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp, onPublish, isReadOnly = false, isSignedIn = true }: FinalAnswerProps) {
+export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, sources, assets = [], title, onBack, onFollowUp, onPublish, onUnpublish, isReadOnly = false, isSignedIn = true }: FinalAnswerProps & { onUnpublish?: () => Promise<boolean> }) {
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
@@ -279,8 +279,10 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href)
-      toast.success('Sharing link copied')
+      if (shareUrl) {
+        await navigator.clipboard.writeText(shareUrl)
+        toast.success('Sharing link copied')
+      }
     } catch {
       toast.error('Failed to copy link')
     }
@@ -472,8 +474,8 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                       className={`cursor-pointer transition-colors duration-200 ${isPublishExpanded ? 'bg-secondary' : ''}`}
                     >
                       <Globe className="mr-2 h-4 w-4 text-foreground/70" />
-                      <span className="font-medium">Publish to Pages</span>
-                      <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-foreground text-background tracking-wide uppercase">New</span>
+                      <span className="font-medium">{shareUrl ? 'Manage Share' : 'Publish to Pages'}</span>
+                      {!shareUrl && <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-foreground text-background tracking-wide uppercase">New</span>}
                       <ChevronDown className={`ml-auto h-3.5 w-3.5 opacity-50 transition-transform duration-300 ${isPublishExpanded ? 'rotate-180' : ''}`} />
                     </DropdownMenuItem>
 
@@ -482,7 +484,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                         {isPublishing ? (
                           <div className="flex flex-col items-center justify-center p-6 space-y-3 animate-in fade-in duration-300">
                             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/60" />
-                            <span className="text-[11px] font-medium text-muted-foreground/80 tracking-wide">Generating secure link...</span>
+                            <span className="text-[11px] font-medium text-muted-foreground/80 tracking-wide">Processing...</span>
                           </div>
                         ) : !shareUrl ? (
                           <div className="p-3.5 space-y-3 animate-in fade-in duration-200">
@@ -492,7 +494,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                               </span>
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold text-foreground">Permanent link</p>
-                                <p className="text-[11px] text-muted-foreground truncate">Once published, this page will not expire.</p>
+                                <p className="text-[11px] text-muted-foreground truncate">Visible publicly in Omni Pages.</p>
                               </div>
                             </div>
                             <Button
@@ -503,19 +505,21 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                 setIsPublishing(true)
                                 try {
                                   const url = await onPublish('permanent')
-                                  if (url) setShareUrl(url)
+                                  if (url) {
+                                    setShareUrl(url)
+                                  }
                                 } finally {
                                   setIsPublishing(false)
                                 }
                               }}
                             >
-                              Generate Link
+                              Publish to Pages
                             </Button>
                           </div>
                         ) : (
                           <div className="p-3.5 space-y-3.5 bg-secondary/10 animate-in zoom-in-95 duration-300 border-t border-border/40">
                             <div className="text-[10px] font-bold text-accent uppercase tracking-widest flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Link Generated
+                              <span className="w-1.5 h-1.5 rounded-full bg-accent" /> Published
                             </div>
                             <div className="bg-background border border-border rounded-md px-2.5 py-2 text-[11px] font-mono break-all leading-tight">
                               {shareUrl}
@@ -545,6 +549,28 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                 <ExternalLink size={13} className="mr-2 opacity-70" /> Open
                               </Button>
                             </div>
+                            {onUnpublish && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-[11px] w-full text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  setIsPublishing(true)
+                                  try {
+                                    const success = await onUnpublish()
+                                    if (success) {
+                                      setShareUrl(null)
+                                      toast.success('Sharing stopped')
+                                    }
+                                  } finally {
+                                    setIsPublishing(false)
+                                  }
+                                }}
+                              >
+                                Stop Sharing
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>

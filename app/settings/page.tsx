@@ -35,8 +35,12 @@ import {
     Shield,
     Settings,
     ChevronRight,
-    Lock
+    Lock,
+    Copy,
+    BookOpen,
+    Loader2
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { getUserLocation, LocationData } from '@/lib/location'
 import { getMemories, type Memories } from '@/lib/memories'
 import { useGuestQuota } from '@/hooks/useGuestQuota'
@@ -574,9 +578,6 @@ export default function SettingsPage() {
                                         className="w-full p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex items-center justify-between hover:bg-[var(--secondary)]/30 transition-colors group"
                                     >
                                         <div className="flex items-center gap-3">
-                                            {/* <div className="w-8 h-8 rounded-lg bg-[var(--secondary)] flex items-center justify-center shrink-0">
-                                                <Settings size={14} className="text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors" />
-                                            </div> */}
                                             <div className="text-left">
                                                 <span className="block text-sm font-medium text-[var(--foreground)]">Manage Account</span>
                                                 <span className="block text-xs text-[var(--muted-foreground)]">Profile, email, security, and connected accounts</span>
@@ -584,6 +585,9 @@ export default function SettingsPage() {
                                         </div>
                                         <ChevronRight size={16} className="text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors shrink-0" />
                                     </button>
+
+                                    {/* My Shared Pages */}
+                                    <MyPagesList />
                                 </>
                             ) : (
                                 <div className="p-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] text-center space-y-4">
@@ -869,5 +873,136 @@ function AboutLink({ href, label }: { href: string; label: string }) {
             {label}
             <ExternalLink size={12} />
         </a>
+    )
+}
+
+function MyPagesList() {
+    const [pages, setPages] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [isUnpublishingId, setIsUnpublishingId] = useState<string | null>(null)
+
+    const fetchPages = useCallback(async () => {
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/my-pages')
+            if (!res.ok) throw new Error('Failed to fetch pages')
+            const data = await res.json()
+            setPages(data.pages || [])
+        } catch (error) {
+            console.error('Error fetching my pages:', error)
+            toast.error('Failed to load your pages')
+        } finally {
+            setIsLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchPages()
+    }, [fetchPages])
+
+    const handleUnpublish = async (id: string) => {
+        if (!confirm('Are you sure you want to stop sharing this page? The public link will no longer work.')) {
+            return
+        }
+
+        setIsUnpublishingId(id)
+        try {
+            const res = await fetch('/api/unpublish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            })
+            if (!res.ok) throw new Error('Failed to unpublish')
+
+            setPages(prev => prev.filter(p => p.id !== id))
+            toast.success('Sharing stopped')
+        } catch (error) {
+            console.error('Failed to unpublish:', error)
+            toast.error('Failed to stop sharing')
+        } finally {
+            setIsUnpublishingId(null)
+        }
+    }
+
+    const copyLink = (id: string) => {
+        const url = `${window.location.origin}/pages/${id}`
+        navigator.clipboard.writeText(url)
+        toast.success('Link copied')
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)]/50 space-y-3">
+                <div className="w-5 h-5 rounded-full border-2 border-[var(--muted-foreground)] border-t-transparent animate-spin" />
+                <span className="text-xs text-[var(--muted-foreground)]">Loading your pages...</span>
+            </div>
+        )
+    }
+
+    if (pages.length === 0) {
+        return null // Don't show the section if they haven't shared anything
+    }
+
+    return (
+        <div className="space-y-3 pt-2">
+            <Label text="My Shared Pages" />
+            <div className="space-y-3">
+                {pages.map((page) => {
+                    const dateStr = page.publishedAt || page.created_at
+                    const dateObj = dateStr ? new Date(dateStr) : null
+                    const formattedDate = dateObj
+                        ? new Intl.DateTimeFormat('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                        }).format(dateObj)
+                        : 'Unknown Date'
+                    const url = `${window.location.origin}/pages/${page.id}`
+
+                    return (
+                        <div key={page.id} className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] flex flex-col gap-3 group">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                    <h4 className="text-sm font-semibold text-[var(--foreground)] truncate group-hover:text-[var(--accent)] transition-colors">
+                                        {page.title || 'Untitled Research'}
+                                    </h4>
+                                    <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                                        Published on {formattedDate}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                        onClick={() => window.open(url, '_blank')}
+                                        className="p-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-md transition-colors"
+                                        title="Open page"
+                                    >
+                                        <ExternalLink size={14} />
+                                    </button>
+                                    <button
+                                        onClick={() => copyLink(page.id)}
+                                        className="p-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-md transition-colors"
+                                        title="Copy link"
+                                    >
+                                        <Copy size={14} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleUnpublish(page.id)}
+                                        disabled={isUnpublishingId === page.id}
+                                        className="p-1.5 text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
+                                        title="Stop sharing"
+                                    >
+                                        {isUnpublishingId === page.id ? (
+                                            <div className="w-3.5 h-3.5 rounded-full border border-current border-t-transparent animate-spin" />
+                                        ) : (
+                                            <Trash2 size={14} />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
     )
 }
