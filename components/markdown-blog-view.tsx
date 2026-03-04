@@ -190,29 +190,40 @@ export function MarkdownBlogView({
 }: MarkdownBlogViewProps) {
   return (
     <div className="blog-shell min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-[var(--border-subtle)] bg-[var(--background)]/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 w-full max-w-[1200px] items-center justify-between px-4 sm:px-6">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2.5 transition-opacity duration-200 hover:opacity-90"
-          >
-            <Image src="/favicon-32x32.png" alt="Omni Knows" width={18} height={18} className="rounded-[4px]" />
-            <span className="text-[15px] font-medium tracking-tight">
-              <span className="text-foreground">omni</span>{' '}
-              <span className="text-accent">knows</span>
+      {/* ─── Navbar ─── */}
+      <header className="sticky top-0 z-50 bg-[var(--background)]/80 backdrop-blur-xl border-b border-[var(--border-subtle)]/30">
+        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <Image
+              src="/android-chrome-512x512.png"
+              alt="Omni Knows Logo"
+              width={28}
+              height={28}
+              className="rounded-xl shadow-sm"
+            />
+            <span className="font-[family-name:var(--font-plex)] text-[20px] font-light tracking-tight text-[var(--foreground)] lowercase group-hover:opacity-70 transition-opacity">
+              omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
             </span>
           </Link>
 
-          <nav className="flex items-center">
-            <a
-              href="https://omniknows.xyz"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 items-center rounded-lg border border-border/80 bg-secondary/45 px-3.5 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-secondary/75"
-            >
-              Try Omni
-            </a>
-          </nav>
+          {/* <nav className="hidden sm:flex items-center gap-8">
+            <Link href="/pages" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+              Pages
+            </Link>
+            <Link href="/" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+              Search
+            </Link>
+            <Link href="/settings" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+              Settings
+            </Link>
+          </nav> */}
+
+          <Link
+            href="/"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity shadow-sm"
+          >
+            Ask anything
+          </Link>
         </div>
       </header>
 

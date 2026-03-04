@@ -32,8 +32,9 @@ export default async function OmniPagesList() {
             .filter(Boolean)
     }
 
-    const featured = pages.length > 0 ? pages[0] : null
-    const rest = pages.length > 1 ? pages.slice(1) : []
+    // ─── No more dynamic "featured" split. ───
+    // All fetched pages go to the grid below.
+    const rest = pages
 
     return (
         <div className="min-h-screen bg-[var(--background)]">
@@ -52,18 +53,6 @@ export default async function OmniPagesList() {
                             omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
                         </span>
                     </Link>
-
-                    {/* <nav className="hidden sm:flex items-center gap-8">
-                        <Link href="/pages" className="text-sm font-medium text-[var(--foreground)] border-b-2 border-[var(--accent)] pb-0.5">
-                            Pages
-                        </Link>
-                        <Link href="/" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-                            Search
-                        </Link>
-                        <Link href="/settings" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-                            Settings
-                        </Link>
-                    </nav> */}
 
                     <Link
                         href="/"
@@ -92,71 +81,23 @@ export default async function OmniPagesList() {
                         </div>
 
                         <div className="flex-1 space-y-5">
-                            {featured ? (
-                                <>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent)]">Latest</span>
-                                        <span className="w-8 h-px bg-[var(--accent)]" />
-                                    </div>
-                                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)] leading-[1.15]">
-                                        {featured.title || 'Untitled Research'}
-                                    </h1>
-                                    <p className="text-[var(--muted-foreground)] text-base leading-relaxed line-clamp-3">
-                                        {featured.answer
-                                            ? String(featured.answer).replace(/<[^>]+>/g, '').replace(/[#*_`~]/g, '').slice(0, 200).trimEnd() + '...'
-                                            : 'Explore this research published by the community.'}
-                                    </p>
-                                    <div className="flex items-center gap-3 pt-1">
-                                        {featured.authorImage ? (
-                                            <Image
-                                                src={featured.authorImage}
-                                                alt={featured.authorName || 'Author'}
-                                                width={28}
-                                                height={28}
-                                                className="rounded-full"
-                                            />
-                                        ) : (
-                                            <div className="w-7 h-7 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center text-xs font-bold">
-                                                {(featured.authorName || 'A')[0].toUpperCase()}
-                                            </div>
-                                        )}
-                                        <span className="text-sm font-medium text-[var(--foreground)]">
-                                            {featured.authorName || 'Anonymous'}
-                                        </span>
-                                        <span className="text-[var(--muted-foreground)] text-xs">·</span>
-                                        <span className="text-xs text-[var(--muted-foreground)]">
-                                            {formatDate(featured.publishedAt || featured.created_at)}
-                                        </span>
-                                    </div>
-                                    <Link
-                                        href={`/pages/${featured.id}`}
-                                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--foreground)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--foreground)] hover:text-[var(--background)] transition-colors mt-2"
-                                    >
-                                        Read more
-                                        <ArrowRight className="w-4 h-4" />
-                                    </Link>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent)]">Community</span>
-                                        <span className="w-8 h-px bg-[var(--accent)]" />
-                                    </div>
-                                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)] leading-[1.15]">
-                                        Introducing Omni Pages
-                                    </h1>
-                                    <p className="text-[var(--muted-foreground)] text-base leading-relaxed">
-                                        Share your research with the world.
-                                    </p>
-                                    <Link
-                                        href="/"
-                                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--foreground)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--foreground)] hover:text-[var(--background)] transition-colors"
-                                    >
-                                        Learn More
-                                        <ArrowRight className="w-4 h-4" />
-                                    </Link>
-                                </>
-                            )}
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent)]">Welcome</span>
+                                <span className="w-8 h-px bg-[var(--accent)]" />
+                            </div>
+                            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)] leading-[1.15]">
+                                Introducing Omni Pages
+                            </h1>
+                            <p className="text-[var(--muted-foreground)] text-base leading-relaxed">
+                                Explore insights, reports, and deep dives published by the Omni Knows community. Be the first to share your research from the Omni Canvas.
+                            </p>
+                            <Link
+                                href="/"
+                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--foreground)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--foreground)] hover:text-[var(--background)] transition-colors"
+                            >
+                                Start Researching
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
                         </div>
                     </div>
                 </section>
