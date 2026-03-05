@@ -211,7 +211,7 @@ export function MarkdownBlogView({
       {/* ─── Navbar ─── */}
       <header className="sticky top-0 z-50 bg-[var(--background)]/80 backdrop-blur-xl border-b border-[var(--border-subtle)]/30">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
-          <Link href="/" className="flex items-center gap-2.5 group">
+          <Link href="/pages" className="flex items-center gap-2.5 group">
             <Image
               src="/android-chrome-512x512.png"
               alt="Omni Knows Logo"
