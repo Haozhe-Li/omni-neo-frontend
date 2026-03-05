@@ -6,7 +6,7 @@ import { ArrowRight, ExternalLink } from 'lucide-react'
 import { PagesClient } from './pages-client'
 
 export const metadata: Metadata = {
-    title: 'Explore Pages | Omni Knows',
+    title: 'Explore Pages',
     description: 'Explore research, insights, and comprehensive answers published by the Omni Knows community.',
     openGraph: {
         title: 'Explore Pages | Omni Knows',
