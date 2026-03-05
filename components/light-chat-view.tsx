@@ -1025,348 +1025,349 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 data-message-index={i}
                 data-ai-message-index={msg.role === 'assistant' ? i : undefined}
                 data-selection-scope={msg.role === 'assistant' ? 'assistant-message' : undefined}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
               >
                 {(() => {
                   const sources = msg.sources ?? []
+                  // Parse follow-up page context for user messages
+                  const isUser = msg.role === 'user'
+                  const contentStr = isUser ? msg.content : ''
+                  const followUpMatch = isUser ? contentStr.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/) : null
+                  let followUpPage: { title: string; url: string } | null = null
+                  let userQuery = msg.content
+                  if (followUpMatch) {
+                    try {
+                      const parsed = JSON.parse(followUpMatch[1])
+                      if (parsed?.title && parsed?.url) {
+                        followUpPage = parsed
+                        userQuery = followUpMatch[2]
+                      }
+                    } catch { /* fallback */ }
+                  }
+
                   return (
-                    <div
-                      className={`
-                            rounded-2xl px-5 py-3 flex flex-col gap-2
-                            ${msg.role === 'user'
-                          ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]'
-                          : 'w-full bg-transparent text-[var(--foreground)]'
-                        }
-                        `}
-                    >
-                      {msg.role === 'assistant' && msg.content === '...' ? (
-                        <div className="flex flex-col gap-4 w-full py-1 min-w-[240px] sm:min-w-[320px]">
-                          {msg.steps && msg.steps.length > 0 && (
-                            <div className="flex flex-col gap-3 mb-1 pl-1">
-                              {msg.steps.map((step, idx) => {
-                                const isLast = idx === msg.steps!.length - 1
-                                return (
-                                  <div key={idx} className="flex items-center gap-3 text-[13px] font-normal text-[var(--muted-foreground)] animate-in fade-in slide-in-from-left-2 duration-500">
-                                    <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${isLast ? '' : 'bg-[var(--foreground)]/5'} mt-0.5`}>
-                                      {isLast ? (
-                                        <MoreHorizontal className="h-3.5 w-3.5 animate-pulse text-[var(--foreground)]/60" />
-                                      ) : (
-                                        <Check className="h-2.5 w-2.5 text-[var(--muted-foreground)]" strokeWidth={3} />
-                                      )}
-                                    </div>
-                                    <span className="opacity-80 font-normal">{getStepLabel(step)}</span>
-                                  </div>
-                                )
-                              })}
+                    <>
+                      {/* Follow-up page card — rendered outside/above the user bubble */}
+                      {isUser && followUpPage && (
+                        <a
+                          href={followUpPage.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full max-w-md mb-3 block rounded-xl overflow-hidden border border-[var(--border-subtle)]/60 bg-[var(--background)] shadow-[0_1px_6px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all group no-underline"
+                        >
+                          <div className="h-1 w-full bg-gradient-to-r from-[var(--accent)] to-teal-400" />
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            <div className="h-9 w-9 flex items-center justify-center rounded-lg bg-[var(--accent)]/10 shrink-0 group-hover:bg-[var(--accent)]/15 transition-colors">
+                              <Sparkles className="h-4 w-4 text-[var(--accent)]" />
                             </div>
-                          )}
-                          <div className="flex items-center gap-3 text-sm font-normal text-[var(--muted-foreground)] px-1">
-                            <div className="h-4 w-4 flex items-center justify-center">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--muted-foreground)]/60" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[11px] font-medium text-[var(--muted-foreground)] tracking-wide mb-0.5">Following up on</p>
+                              <p className="text-sm font-semibold text-[var(--foreground)] truncate leading-snug">{followUpPage.title}</p>
                             </div>
-                            <span className="opacity-70 font-normal tracking-tight">Thinking Hard...</span>
+                            <ExternalLink className="h-3.5 w-3.5 text-[var(--muted-foreground)] opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
                           </div>
-                          <div className="space-y-4 w-full opacity-40 px-1 mt-1">
-                            <div className="h-2 w-full bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" />
-                            <div className="h-2 w-[85%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                            <div className="h-2 w-[60%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                        </a>
+                      )}
+
+                      <div
+                        className={`
+                              rounded-2xl px-5 py-3 flex flex-col gap-2
+                              ${isUser
+                            ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]'
+                            : 'w-full bg-transparent text-[var(--foreground)]'
+                          }
+                          `}
+                      >
+                        {msg.role === 'assistant' && msg.content === '...' ? (
+                          <div className="flex flex-col gap-4 w-full py-1 min-w-[240px] sm:min-w-[320px]">
+                            {msg.steps && msg.steps.length > 0 && (
+                              <div className="flex flex-col gap-3 mb-1 pl-1">
+                                {msg.steps.map((step, idx) => {
+                                  const isLast = idx === msg.steps!.length - 1
+                                  return (
+                                    <div key={idx} className="flex items-center gap-3 text-[13px] font-normal text-[var(--muted-foreground)] animate-in fade-in slide-in-from-left-2 duration-500">
+                                      <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${isLast ? '' : 'bg-[var(--foreground)]/5'} mt-0.5`}>
+                                        {isLast ? (
+                                          <MoreHorizontal className="h-3.5 w-3.5 animate-pulse text-[var(--foreground)]/60" />
+                                        ) : (
+                                          <Check className="h-2.5 w-2.5 text-[var(--muted-foreground)]" strokeWidth={3} />
+                                        )}
+                                      </div>
+                                      <span className="opacity-80 font-normal">{getStepLabel(step)}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-3 text-sm font-normal text-[var(--muted-foreground)] px-1">
+                              <div className="h-4 w-4 flex items-center justify-center">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--muted-foreground)]/60" />
+                              </div>
+                              <span className="opacity-70 font-normal tracking-tight">Thinking Hard...</span>
+                            </div>
+                            <div className="space-y-4 w-full opacity-40 px-1 mt-1">
+                              <div className="h-2 w-full bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" />
+                              <div className="h-2 w-[85%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                              <div className="h-2 w-[60%] bg-[var(--muted-foreground)]/10 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
-                          {msg.role === 'assistant' && msg.use_search && (
-                            <div className="flex items-center gap-1.5 text-xs font-normal text-[var(--muted-foreground)] bg-[var(--secondary)]/25 w-fit px-2.5 py-1 rounded-md mb-3">
-                              <Globe size={12} className="opacity-60" />
-                              <span>Searched the web</span>
-                            </div>
-                          )}
-                          {msg.role === 'assistant' && ((msg.steps?.length ?? 0) > 0 || (msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather || msg.currency) && (
-                            <div className="mb-3 space-y-2">
-                              {msg.steps && msg.steps.length > 0 && (
-                                <details className="px-1 py-1 group mb-2">
-                                  <summary className="list-none cursor-pointer flex items-center justify-between gap-2">
-                                    <span className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-                                      <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--foreground)]/5">
-                                        <Check className="h-2 w-2" strokeWidth={4} />
-                                      </div>
-                                      <span className="font-normal">{msg.steps.length} steps completed</span>
-                                    </span>
-                                    <span className="text-xs text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180">⌄</span>
-                                  </summary>
-                                  <div className="mt-2.5 pl-1.5 border-l border-[var(--border-subtle)]/40 ml-[7px] space-y-2.5">
-                                    {msg.steps.map((step, idx) => (
-                                      <div key={idx} className="flex items-center gap-2.5 text-xs font-normal text-[var(--muted-foreground)]/70">
-                                        <div className="h-1 w-1 rounded-full bg-[var(--muted-foreground)]/30" />
-                                        <span>{getStepLabel(step)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </details>
-                              )}
-                              {(msg.mapPoints?.length ?? 0) > 0 && (
-                                <LightChatMiniMap points={msg.mapPoints || []} />
-                              )}
-
-                              {msg.weather && (() => {
-                                const w = msg.weather
-                                const location = getWeatherLocation(w)
-                                const tempMain = formatTemperature(w.temperature?.temp, useFahrenheit)
-                                const feelsLike = formatTemperature(w.temperature?.feels_like, useFahrenheit)
-                                const tempLow = w.temperature?.temp_min != null ? formatTemperature(w.temperature.temp_min, useFahrenheit) : null
-                                const tempHigh = w.temperature?.temp_max != null ? formatTemperature(w.temperature.temp_max, useFahrenheit) : null
-                                const humidity = typeof w.humidity === 'number' ? w.humidity : null
-                                const windSpeed = typeof w.wind?.speed === 'number' ? w.wind.speed : null
-                                const vis = typeof w.visibility_distance === 'number' ? w.visibility_distance : null
-                                const tone = getWeatherTone(w.status)
-
-                                return (
-                                  <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)]/40 bg-[var(--background)] shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
-                                    {/* header row */}
-                                    <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]/40">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <CloudSun className="h-4 w-4 text-[var(--muted-foreground)] flex-none" />
-                                        <span className="text-[13px] font-normal text-[var(--foreground)] truncate">{location || 'Weather'}</span>
-                                        {w.status && (
-                                          <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-normal ${tone}`}>
-                                            {w.status}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <a
-                                        href={getOpenWeatherMapUrl()}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                      </a>
-                                    </div>
-
-                                    {/* body */}
-                                    <div className="px-3.5 py-3 flex items-center justify-between gap-4">
-                                      {/* temperature */}
-                                      <div>
-                                        <p className="text-3xl font-normal tracking-tight text-[var(--foreground)] leading-none">{tempMain}</p>
-                                        <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                                          Feels like {feelsLike}
-                                          {tempLow && tempHigh ? ` · ${tempLow} – ${tempHigh}` : ''}
-                                        </p>
-                                      </div>
-
-                                      {/* stats */}
-                                      <div className="flex gap-4">
-                                        {humidity != null && (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <Droplets className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                            <span className="text-xs font-normal text-[var(--foreground)]">{humidity}%</span>
-                                            <span className="text-[10px] text-[var(--muted-foreground)]">Humidity</span>
-                                          </div>
-                                        )}
-                                        {windSpeed != null && (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <Wind className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                            <span className="text-xs font-normal text-[var(--foreground)]">{windSpeed.toFixed(1)}</span>
-                                            <span className="text-[10px] text-[var(--muted-foreground)]">m/s</span>
-                                          </div>
-                                        )}
-                                        {vis != null && (
-                                          <div className="flex flex-col items-center gap-1">
-                                            <Eye className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                                            <span className="text-xs font-normal text-[var(--foreground)]">{(vis / 1000).toFixed(1)}</span>
-                                            <span className="text-[10px] text-[var(--muted-foreground)]">km</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )
-                              })()}
-
-                              {msg.stock?.data?.symbol && (() => {
-                                const s = msg.stock.data
-                                const price = formatStockPrice(s.currentPrice, s.currency || 'USD')
-                                const delta = formatStockDelta(s.change, s.changePercent)
-                                const deltaTone = getStockDeltaTone(s.change)
-                                const TrendIcon = typeof s.change === 'number' ? (s.change > 0 ? TrendingUp : s.change < 0 ? TrendingDown : Minus) : Minus
-
-                                return (
-                                  <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)]/40 bg-[var(--background)] shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
-                                    {/* header row */}
-                                    <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]/40">
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <TrendIcon className={`h-4 w-4 flex-none ${deltaTone}`} />
-                                        <span className="text-[13px] font-normal text-[var(--foreground)] truncate">{s.symbol}</span>
-                                        {s.companyName && (
-                                          <span className="text-[11px] text-[var(--muted-foreground)] truncate hidden sm:inline">{s.companyName}</span>
-                                        )}
-                                      </div>
-                                      <a
-                                        href={getYahooQuoteUrl(s.symbol)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                      </a>
-                                    </div>
-
-                                    {/* body */}
-                                    <div className="px-3.5 py-3 flex items-end justify-between gap-4">
-                                      <div>
-                                        <p className="text-3xl font-normal tracking-tight text-[var(--foreground)] leading-none">{price}</p>
-                                        {delta && (
-                                          <p className={`text-xs font-normal mt-1.5 ${deltaTone}`}>{delta}</p>
-                                        )}
-                                      </div>
-                                      {s.companyName && (
-                                        <p className="text-xs text-[var(--muted-foreground)] text-right truncate max-w-[140px] sm:hidden">{s.companyName}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              })()}
-
-                              {msg.currency && (() => {
-                                const c = msg.currency
-                                if (!c.base || !c.rates || Object.keys(c.rates).length === 0) return null
-
-                                return (
-                                  <CurrencyWidget
-                                    baseCurrency={c.base}
-                                    rates={c.rates}
-                                    initialAmount={c.amount}
-                                    date={c.date}
-                                  />
-                                )
-                              })()}
-
-                            </div>
-                          )}
-                          {msg.role === 'user' ? (
-                            <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
-                              {msg.follow_up_content && (
-                                <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
-                                  {msg.follow_up_content}
-                                </div>
-                              )}
-                              {(() => {
-                                const contentStr = msg.content;
-                                const match = contentStr.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/);
-                                if (match) {
-                                  try {
-                                    const parsedJson = JSON.parse(match[1]);
-                                    if (parsedJson && parsedJson.title && parsedJson.url) {
-                                      return (
-                                        <div className="flex flex-col gap-3">
-                                          <a
-                                            href={parsedJson.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--background)] hover:bg-[var(--secondary)]/60 transition-colors group no-underline shadow-sm max-w-[400px]"
-                                          >
-                                            <div className="flex items-center gap-3">
-                                              <div className="h-10 w-10 flex flex-col items-center justify-center rounded-lg bg-[var(--secondary)] border border-[var(--border-subtle)]/40 shrink-0 text-[var(--accent)] group-hover:scale-105 transition-transform">
-                                                <ExternalLink className="h-4 w-4" />
-                                              </div>
-                                              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                <div className="text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                                                  <Sparkles className="w-3 h-3 text-[var(--accent)]" />
-                                                  Following up on
-                                                </div>
-                                                <div className="text-sm font-medium text-[var(--foreground)] truncate">
-                                                  {parsedJson.title}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </a>
-                                          <div>{match[2]}</div>
+                        ) : (
+                          <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
+                            {msg.role === 'assistant' && msg.use_search && (
+                              <div className="flex items-center gap-1.5 text-xs font-normal text-[var(--muted-foreground)] bg-[var(--secondary)]/25 w-fit px-2.5 py-1 rounded-md mb-3">
+                                <Globe size={12} className="opacity-60" />
+                                <span>Searched the web</span>
+                              </div>
+                            )}
+                            {msg.role === 'assistant' && ((msg.steps?.length ?? 0) > 0 || (msg.mapPoints?.length ?? 0) > 0 || msg.stock?.data?.symbol || msg.weather || msg.currency) && (
+                              <div className="mb-3 space-y-2">
+                                {msg.steps && msg.steps.length > 0 && (
+                                  <details className="px-1 py-1 group mb-2">
+                                    <summary className="list-none cursor-pointer flex items-center justify-between gap-2">
+                                      <span className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+                                        <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--foreground)]/5">
+                                          <Check className="h-2 w-2" strokeWidth={4} />
                                         </div>
-                                      );
-                                    }
-                                  } catch (e) {
-                                    // Fallback to normal rendering if JSON is invalid
-                                  }
-                                }
-                                return <div>{msg.content}</div>;
-                              })()}
-                            </div>
-                          ) : (
-                            <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkMath]}
-                                rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]}
-                                components={markdownComponents}
-                              >
-                                {preprocessMarkdown(msg.content)}
-                              </ReactMarkdown>
-
-                              {/* Removed inline sources expansion */}
-                            </div>
-                          )}
-                          {msg.role === 'assistant' && (
-                            <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
-                              <button
-                                onClick={() => {
-                                  let textToCopy = msg.content
-                                  if (sources && sources.length > 0) {
-                                    const refs = sources.map((s, i) => `${i + 1}. ${s.title} - ${s.url}`).join('\n')
-                                    textToCopy += `\n\n ------ \n References:\n${refs}`
-                                  }
-                                  handleCopy(textToCopy)
-                                }}
-                                className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                title="Copy"
-                              >
-                                <Copy size={14} />
-                              </button>
-                              <button
-                                onClick={handleFeatureComingSoon}
-                                className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                title="Helpful"
-                              >
-                                <ThumbsUp size={14} />
-                              </button>
-                              <button
-                                onClick={handleFeatureComingSoon}
-                                className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                title="Not Helpful"
-                              >
-                                <ThumbsDown size={14} />
-                              </button>
-                              <button
-                                onClick={handleFeatureComingSoon}
-                                className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                title="Share"
-                              >
-                                <Share size={14} />
-                              </button>
-
-                              {sources.length > 0 && (
-                                <button
-                                  onClick={() => handleOpenSidebar(sources)}
-                                  className="flex items-center gap-2 px-2 py-1 relative left-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all animate-in fade-in slide-in-from-left-2 duration-300"
-                                >
-                                  {sources.length > 0 && (
-                                    <div className="flex -space-x-1.5 mr-0.5">
-                                      {sources.slice(0, 2).map((s, si) => (
-                                        <div key={si} className="w-4 h-4 rounded-full border border-[var(--background)] bg-white dark:bg-zinc-800 overflow-hidden shrink-0">
-                                          <img
-                                            src={`https://www.google.com/s2/favicons?domain=${getSourceDomain(s.url)}&sz=64`}
-                                            className="w-full h-full object-cover"
-                                            alt=""
-                                          />
+                                        <span className="font-normal">{msg.steps.length} steps completed</span>
+                                      </span>
+                                      <span className="text-xs text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180">⌄</span>
+                                    </summary>
+                                    <div className="mt-2.5 pl-1.5 border-l border-[var(--border-subtle)]/40 ml-[7px] space-y-2.5">
+                                      {msg.steps.map((step, idx) => (
+                                        <div key={idx} className="flex items-center gap-2.5 text-xs font-normal text-[var(--muted-foreground)]/70">
+                                          <div className="h-1 w-1 rounded-full bg-[var(--muted-foreground)]/30" />
+                                          <span>{getStepLabel(step)}</span>
                                         </div>
                                       ))}
                                     </div>
-                                  )}
-                                  <span className="text-[13px] font-normal">Sources</span>
+                                  </details>
+                                )}
+                                {(msg.mapPoints?.length ?? 0) > 0 && (
+                                  <LightChatMiniMap points={msg.mapPoints || []} />
+                                )}
+
+                                {msg.weather && (() => {
+                                  const w = msg.weather
+                                  const location = getWeatherLocation(w)
+                                  const tempMain = formatTemperature(w.temperature?.temp, useFahrenheit)
+                                  const feelsLike = formatTemperature(w.temperature?.feels_like, useFahrenheit)
+                                  const tempLow = w.temperature?.temp_min != null ? formatTemperature(w.temperature.temp_min, useFahrenheit) : null
+                                  const tempHigh = w.temperature?.temp_max != null ? formatTemperature(w.temperature.temp_max, useFahrenheit) : null
+                                  const humidity = typeof w.humidity === 'number' ? w.humidity : null
+                                  const windSpeed = typeof w.wind?.speed === 'number' ? w.wind.speed : null
+                                  const vis = typeof w.visibility_distance === 'number' ? w.visibility_distance : null
+                                  const tone = getWeatherTone(w.status)
+
+                                  return (
+                                    <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)]/40 bg-[var(--background)] shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+                                      {/* header row */}
+                                      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]/40">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <CloudSun className="h-4 w-4 text-[var(--muted-foreground)] flex-none" />
+                                          <span className="text-[13px] font-normal text-[var(--foreground)] truncate">{location || 'Weather'}</span>
+                                          {w.status && (
+                                            <span className={`text-[11px] px-1.5 py-0.5 rounded-full font-normal ${tone}`}>
+                                              {w.status}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <a
+                                          href={getOpenWeatherMapUrl()}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
+                                        >
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        </a>
+                                      </div>
+
+                                      {/* body */}
+                                      <div className="px-3.5 py-3 flex items-center justify-between gap-4">
+                                        {/* temperature */}
+                                        <div>
+                                          <p className="text-3xl font-normal tracking-tight text-[var(--foreground)] leading-none">{tempMain}</p>
+                                          <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                                            Feels like {feelsLike}
+                                            {tempLow && tempHigh ? ` · ${tempLow} – ${tempHigh}` : ''}
+                                          </p>
+                                        </div>
+
+                                        {/* stats */}
+                                        <div className="flex gap-4">
+                                          {humidity != null && (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <Droplets className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                              <span className="text-xs font-normal text-[var(--foreground)]">{humidity}%</span>
+                                              <span className="text-[10px] text-[var(--muted-foreground)]">Humidity</span>
+                                            </div>
+                                          )}
+                                          {windSpeed != null && (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <Wind className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                              <span className="text-xs font-normal text-[var(--foreground)]">{windSpeed.toFixed(1)}</span>
+                                              <span className="text-[10px] text-[var(--muted-foreground)]">m/s</span>
+                                            </div>
+                                          )}
+                                          {vis != null && (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <Eye className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                                              <span className="text-xs font-normal text-[var(--foreground)]">{(vis / 1000).toFixed(1)}</span>
+                                              <span className="text-[10px] text-[var(--muted-foreground)]">km</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
+
+                                {msg.stock?.data?.symbol && (() => {
+                                  const s = msg.stock.data
+                                  const price = formatStockPrice(s.currentPrice, s.currency || 'USD')
+                                  const delta = formatStockDelta(s.change, s.changePercent)
+                                  const deltaTone = getStockDeltaTone(s.change)
+                                  const TrendIcon = typeof s.change === 'number' ? (s.change > 0 ? TrendingUp : s.change < 0 ? TrendingDown : Minus) : Minus
+
+                                  return (
+                                    <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)]/40 bg-[var(--background)] shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+                                      {/* header row */}
+                                      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-[var(--border-subtle)]/40">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <TrendIcon className={`h-4 w-4 flex-none ${deltaTone}`} />
+                                          <span className="text-[13px] font-normal text-[var(--foreground)] truncate">{s.symbol}</span>
+                                          {s.companyName && (
+                                            <span className="text-[11px] text-[var(--muted-foreground)] truncate hidden sm:inline">{s.companyName}</span>
+                                          )}
+                                        </div>
+                                        <a
+                                          href={getYahooQuoteUrl(s.symbol)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none"
+                                        >
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        </a>
+                                      </div>
+
+                                      {/* body */}
+                                      <div className="px-3.5 py-3 flex items-end justify-between gap-4">
+                                        <div>
+                                          <p className="text-3xl font-normal tracking-tight text-[var(--foreground)] leading-none">{price}</p>
+                                          {delta && (
+                                            <p className={`text-xs font-normal mt-1.5 ${deltaTone}`}>{delta}</p>
+                                          )}
+                                        </div>
+                                        {s.companyName && (
+                                          <p className="text-xs text-[var(--muted-foreground)] text-right truncate max-w-[140px] sm:hidden">{s.companyName}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
+
+                                {msg.currency && (() => {
+                                  const c = msg.currency
+                                  if (!c.base || !c.rates || Object.keys(c.rates).length === 0) return null
+
+                                  return (
+                                    <CurrencyWidget
+                                      baseCurrency={c.base}
+                                      rates={c.rates}
+                                      initialAmount={c.amount}
+                                      date={c.date}
+                                    />
+                                  )
+                                })()}
+
+                              </div>
+                            )}
+                            {msg.role === 'user' ? (
+                              <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
+                                {msg.follow_up_content && (
+                                  <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
+                                    {msg.follow_up_content}
+                                  </div>
+                                )}
+                                <div>{userQuery}</div>
+                              </div>
+                            ) : (
+                              <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm, remarkMath]}
+                                  rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]}
+                                  components={markdownComponents}
+                                >
+                                  {preprocessMarkdown(msg.content)}
+                                </ReactMarkdown>
+
+                                {/* Removed inline sources expansion */}
+                              </div>
+                            )}
+                            {msg.role === 'assistant' && (
+                              <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
+                                <button
+                                  onClick={() => {
+                                    let textToCopy = msg.content
+                                    if (sources && sources.length > 0) {
+                                      const refs = sources.map((s, i) => `${i + 1}. ${s.title} - ${s.url}`).join('\n')
+                                      textToCopy += `\n\n ------ \n References:\n${refs}`
+                                    }
+                                    handleCopy(textToCopy)
+                                  }}
+                                  className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                  title="Copy"
+                                >
+                                  <Copy size={14} />
                                 </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                                <button
+                                  onClick={handleFeatureComingSoon}
+                                  className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                  title="Helpful"
+                                >
+                                  <ThumbsUp size={14} />
+                                </button>
+                                <button
+                                  onClick={handleFeatureComingSoon}
+                                  className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                  title="Not Helpful"
+                                >
+                                  <ThumbsDown size={14} />
+                                </button>
+                                <button
+                                  onClick={handleFeatureComingSoon}
+                                  className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                  title="Share"
+                                >
+                                  <Share size={14} />
+                                </button>
+
+                                {sources.length > 0 && (
+                                  <button
+                                    onClick={() => handleOpenSidebar(sources)}
+                                    className="flex items-center gap-2 px-2 py-1 relative left-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all animate-in fade-in slide-in-from-left-2 duration-300"
+                                  >
+                                    {sources.length > 0 && (
+                                      <div className="flex -space-x-1.5 mr-0.5">
+                                        {sources.slice(0, 2).map((s, si) => (
+                                          <div key={si} className="w-4 h-4 rounded-full border border-[var(--background)] bg-white dark:bg-zinc-800 overflow-hidden shrink-0">
+                                            <img
+                                              src={`https://www.google.com/s2/favicons?domain=${getSourceDomain(s.url)}&sz=64`}
+                                              className="w-full h-full object-cover"
+                                              alt=""
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <span className="text-[13px] font-normal">Sources</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )
                 })()}
               </div>
