@@ -237,6 +237,49 @@ export default function Home() {
     }
   }, [handleSelectThread])
 
+  // Check for initial query from URL
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const q = urlParams.get('q')
+      const m = urlParams.get('model') as ModelType
+
+      if (q) {
+        // Clear params from URL
+        window.history.replaceState({}, '', '/')
+
+        const initFromUrl = async () => {
+          let newThreadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+          if (process.env.NEXT_PUBLIC_USE_MOCK !== 'true') {
+            try {
+              const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+              const res = await fetchWithAuth(`${backendUrl}/get_thread_id`)
+              if (res.ok) {
+                const data = await res.json()
+                if (data && typeof data === 'string') newThreadId = data
+                else if (data && data.thread_id) newThreadId = data.thread_id
+              }
+            } catch (e) { }
+          }
+
+          setCurrentThreadId(newThreadId)
+          setCurrentQuery(q)
+          if (m === 'light' || m === 'canvas') {
+            setModel(m)
+            setView(m)
+          } else if (m === 'auto') {
+            setModel(m)
+            setView('light') // Fallback to light view when auto is selected from URL
+          } else {
+            setView('light')
+          }
+        }
+
+        initFromUrl()
+      }
+    }
+  }, [fetchWithAuth])
+
   const toggleSidebar = useCallback(() => {
     setSidebarOpen(prev => !prev)
   }, [])

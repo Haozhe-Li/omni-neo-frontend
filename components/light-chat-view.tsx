@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -1249,7 +1249,46 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                                   {msg.follow_up_content}
                                 </div>
                               )}
-                              <div>{msg.content}</div>
+                              {(() => {
+                                const contentStr = msg.content;
+                                const match = contentStr.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/);
+                                if (match) {
+                                  try {
+                                    const parsedJson = JSON.parse(match[1]);
+                                    if (parsedJson && parsedJson.title && parsedJson.url) {
+                                      return (
+                                        <div className="flex flex-col gap-3">
+                                          <a
+                                            href={parsedJson.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--background)] hover:bg-[var(--secondary)]/60 transition-colors group no-underline shadow-sm max-w-[400px]"
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <div className="h-10 w-10 flex flex-col items-center justify-center rounded-lg bg-[var(--secondary)] border border-[var(--border-subtle)]/40 shrink-0 text-[var(--accent)] group-hover:scale-105 transition-transform">
+                                                <ExternalLink className="h-4 w-4" />
+                                              </div>
+                                              <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                <div className="text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                                                  <Sparkles className="w-3 h-3 text-[var(--accent)]" />
+                                                  Following up on
+                                                </div>
+                                                <div className="text-sm font-medium text-[var(--foreground)] truncate">
+                                                  {parsedJson.title}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </a>
+                                          <div>{match[2]}</div>
+                                        </div>
+                                      );
+                                    }
+                                  } catch (e) {
+                                    // Fallback to normal rendering if JSON is invalid
+                                  }
+                                }
+                                return <div>{msg.content}</div>;
+                              })()}
                             </div>
                           ) : (
                             <div className="max-w-none blog-markdown light-chat-markdown markdown-body text-[16px] leading-[1.8]">

@@ -9,7 +9,7 @@ import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download } from 'lucide-react'
+import { Copy, Check, Download, Sparkles, ArrowUp } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
@@ -188,6 +188,24 @@ export function MarkdownBlogView({
   tags = [],
   sources = [],
 }: MarkdownBlogViewProps) {
+  const [input, setInput] = useState('')
+  const [isComposing, setIsComposing] = useState(false)
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const handleSend = () => {
+    if (!input.trim()) return
+    const pageUrl = `https://omniknows.xyz${window.location.pathname}`
+    const query = `User want to follow up this pages:\n\n${JSON.stringify({ title, url: pageUrl }, null, 2)}\n\n${input.trim()}`
+    window.open(`/?q=${encodeURIComponent(query)}&model=light`, '_blank')
+    setInput('')
+  }
+
   return (
     <div className="blog-shell min-h-screen bg-background">
       {/* ─── Navbar ─── */}
@@ -218,12 +236,14 @@ export function MarkdownBlogView({
             </Link>
           </nav> */}
 
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity shadow-sm"
-          >
-            Ask anything
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity shadow-sm"
+            >
+              Ask anything
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -272,6 +292,35 @@ export function MarkdownBlogView({
                 </div>
               </div>
             )}
+
+            <div className="mt-14 pb-4 flex flex-col items-center justify-center border-t border-border/70 pt-10">
+              <h3 className="mb-6 text-lg font-medium text-foreground tracking-tight">Have more questions about this page?</h3>
+              <div className="w-full max-w-2xl mx-auto relative">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleInputKeyDown}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
+                  placeholder="Ask a follow-up"
+                  rows={1}
+                  className="block w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-14 py-4 min-h-[56px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
+                  style={{ minHeight: '56px' }}
+                />
+                <div className="absolute right-[10px] bottom-[10px] flex items-center">
+                  <button
+                    onClick={handleSend}
+                    disabled={!input.trim()}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${!input.trim()
+                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                      : 'bg-[var(--accent)] text-white hover:opacity-90'
+                      }`}
+                  >
+                    <ArrowUp size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
           </section>
         </article>
       </main>
