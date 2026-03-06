@@ -1082,6 +1082,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     try {
       if (!threadId) return
       if (isUntitledTitle(query)) return
+      if (!isInitializedRef.current) return
       if (!isUntitledTitle(title)) {
         fetchedTitleThreadSet.add(threadId)
         return
@@ -1110,20 +1111,20 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       })
       if (!response.ok) throw new Error('Failed to fetch title')
       const data = await response.json()
-      const newTitle = (typeof data === 'string' ? data : data?.title) || title
-      setTitle(newTitle)
-      if (!isUntitledTitle(newTitle)) {
+      const newTitle = typeof data === 'string' ? data : data?.title
+      if (newTitle && !isUntitledTitle(newTitle)) {
+        setTitle(newTitle)
         fetchedTitleThreadSet.add(threadId)
-      }
-      if (typeof window !== 'undefined' && threadId) {
-        const stored = localStorage.getItem(threadId)
-        if (stored) {
-          try {
-            const chatData = JSON.parse(stored)
-            chatData.title = newTitle
-            localStorage.setItem(threadId, JSON.stringify(chatData))
-            syncToBackend(chatData.chatMessages || [], newTitle)
-          } catch { }
+        if (typeof window !== 'undefined' && threadId) {
+          const stored = localStorage.getItem(threadId)
+          if (stored) {
+            try {
+              const chatData = JSON.parse(stored)
+              chatData.title = newTitle
+              localStorage.setItem(threadId, JSON.stringify(chatData))
+              syncToBackend(chatData.chatMessages || [], newTitle)
+            } catch { }
+          }
         }
       }
     } catch {

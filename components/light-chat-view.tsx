@@ -473,6 +473,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   const containerRef = useRef<HTMLDivElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
+  const isInitializedRef = useRef(false)
 
   const [title, setTitle] = useState(query)
   const [useFahrenheit, setUseFahrenheit] = useState(false)
@@ -551,6 +552,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
       try {
         if (!threadId) return
         if (isUntitledTitle(query)) return
+        if (!isInitializedRef.current) return
         if (!isUntitledTitle(title)) {
           fetchedTitleThreadSet.add(threadId)
           return
@@ -584,33 +586,18 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         if (!response.ok) throw new Error('Failed to fetch title')
 
         const data = await response.json()
-        if (data && typeof data === 'string') {
-          setTitle(data)
+        const newTitle = typeof data === 'string' ? data : data?.title
+        if (newTitle && !isUntitledTitle(newTitle)) {
+          setTitle(newTitle)
           fetchedTitleThreadSet.add(threadId)
-          // Persist to local storage immediately
           if (typeof window !== 'undefined' && threadId) {
             const stored = localStorage.getItem(threadId)
             if (stored) {
               try {
                 const chatData = JSON.parse(stored)
-                chatData.title = data
+                chatData.title = newTitle
                 localStorage.setItem(threadId, JSON.stringify(chatData))
-                syncToBackend(Array.isArray(chatData.chat_history) ? chatData.chat_history : [], data)
-              } catch (e) { }
-            }
-          }
-        } else if (data && data.title) {
-          setTitle(data.title)
-          fetchedTitleThreadSet.add(threadId)
-          // Persist to local storage immediately
-          if (typeof window !== 'undefined' && threadId) {
-            const stored = localStorage.getItem(threadId)
-            if (stored) {
-              try {
-                const chatData = JSON.parse(stored)
-                chatData.title = data.title
-                localStorage.setItem(threadId, JSON.stringify(chatData))
-                syncToBackend(Array.isArray(chatData.chat_history) ? chatData.chat_history : [], data.title)
+                syncToBackend(Array.isArray(chatData.chat_history) ? chatData.chat_history : [], newTitle)
               } catch (e) { }
             }
           }
@@ -748,6 +735,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
               if (isUntitledTitle(remoteRawTitle) && !isUntitledTitle(resolvedTitle)) {
                 syncToBackend(remoteMessages, resolvedTitle)
               }
+              isInitializedRef.current = true
               return
             }
           }
@@ -766,6 +754,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 if (!isUntitledTitle(data.title)) fetchedTitleThreadSet.add(threadId)
               }
               setIsLoading(false)
+              isInitializedRef.current = true
               return
             }
           } catch (e) { }
@@ -815,6 +804,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         })
         setIsLoading(false)
       }
+      isInitializedRef.current = true
     }
     initChat()
   }, [threadId, query, fetchWithAuth, isMockMode, isSignedIn, handleStreamResponse, syncToBackend])
