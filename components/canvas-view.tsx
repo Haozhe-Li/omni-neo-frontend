@@ -1083,13 +1083,13 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       if (!threadId) return
       if (isUntitledTitle(query)) return
       if (!isInitializedRef.current) return
-      if (!isUntitledTitle(title)) {
+      if (!isUntitledTitle(title) && title !== query) {
         fetchedTitleThreadSet.add(threadId)
         return
       }
 
       const storedTitle = getStoredTitle()
-      if (!isUntitledTitle(storedTitle)) {
+      if (!isUntitledTitle(storedTitle) && storedTitle !== query) {
         setTitle(storedTitle)
         fetchedTitleThreadSet.add(threadId)
         return
