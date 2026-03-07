@@ -442,6 +442,26 @@ const markdownComponents: Components = {
   h1: ({ children }) => <span className="block text-xl font-normal my-4">{children}</span>,
   h2: ({ children }) => <span className="block text-lg font-normal my-3">{children}</span>,
   h3: ({ children }) => <span className="block text-md font-normal my-2">{children}</span>,
+  table: ({ children }) => (
+    <div className="w-full overflow-x-auto my-4 rounded-xl border border-[var(--border-subtle)]/60 bg-[var(--background)]">
+      <table className="w-full text-sm text-left border-collapse">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-[var(--secondary)]/30 text-[var(--muted-foreground)] text-xs uppercase tracking-wider">{children}</thead>
+  ),
+  tbody: ({ children }) => (
+    <tbody className="divide-y divide-[var(--border-subtle)]/40">{children}</tbody>
+  ),
+  tr: ({ children }) => (
+    <tr className="hover:bg-[var(--secondary)]/20 transition-colors">{children}</tr>
+  ),
+  th: ({ children }) => (
+    <th className="px-4 py-3 font-medium whitespace-nowrap">{children}</th>
+  ),
+  td: ({ children }) => (
+    <td className="px-4 py-3 text-[var(--foreground)]">{children}</td>
+  ),
 }
 
 const isUntitledTitle = (value?: string) => {
