@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign, Sparkles, Paperclip, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -19,7 +19,9 @@ import { preprocessMarkdown } from '@/lib/markdown'
 import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth, useClerk } from '@clerk/nextjs'
+import { useFileUpload } from '@/hooks/useFileUpload'
+import { FileUploadArea } from '@/components/file-upload-area'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
 
 const LightChatMiniMap = dynamic(
@@ -38,6 +40,8 @@ interface LightChatViewProps {
   onNewSearch: () => void
   onToggleSidebar?: () => void
   isMobile?: boolean
+  initialAttachedFileIds?: string[]
+  initialAttachedFileMeta?: { id: string; name: string; type: string }[]
 }
 
 interface Message {
@@ -45,6 +49,7 @@ interface Message {
   content: string
   use_search?: boolean
   follow_up_content?: string
+  attachedFiles?: { id: string; name: string; type: string }[]
   sources?: LightChatSource[]
   stock?: LightChatStock | null
   weather?: LightChatWeather | null
@@ -348,6 +353,9 @@ function getStepLabel(step: LightChatStep) {
   if (step.tool === 'load_web_page_light') {
     return `Visiting web page "${step.args?.url || '...'}"`
   }
+  if (step.tool === 'search_in_document') {
+    return `Reading attached files...`
+  }
   return `Using ${step.tool}`
 }
 
@@ -477,9 +485,13 @@ const inferTitleFromMessages = (messages: Message[], fallback: string) => {
 const fetchedTitleThreadSet = new Set<string>()
 const inFlightTitleThreadSet = new Set<string>()
 
-export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false }: LightChatViewProps) {
+export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, initialAttachedFileIds, initialAttachedFileMeta }: LightChatViewProps) {
+  const { attachedFiles, setAttachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const initialFilesSentRef = useRef(false)
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
+  const clerk = useClerk()
   const [messages, setMessages] = useState<Message[]>([
     { role: 'user', content: query },
     { role: 'assistant', content: '...' } // Loading placeholder
@@ -494,6 +506,22 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
   const isInitializedRef = useRef(false)
+
+  // Pre-populate file chips in bottom input from home page uploads
+  useEffect(() => {
+    if (initialAttachedFileMeta && initialAttachedFileMeta.length > 0) {
+      setAttachedFiles(initialAttachedFileMeta.map(f => ({
+        id: f.id,
+        file: new File([], f.name), // placeholder File object
+        name: f.name,
+        size: 0,
+        type: f.type,
+        status: 'ready' as const,
+        progress: 100
+      })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [title, setTitle] = useState(query)
   const [useFahrenheit, setUseFahrenheit] = useState(false)
@@ -800,6 +828,14 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         if (locData?.value) personalization.user_location = locData.value
 
         const payload: any = { query, thread_id: threadId }
+        if (initialAttachedFileMeta && initialAttachedFileMeta.length > 0 && !initialFilesSentRef.current) {
+          payload.attached_file_ids = initialAttachedFileMeta.map(m => ({ [m.id]: m.name }))
+          initialFilesSentRef.current = true
+        } else if (initialAttachedFileIds && initialAttachedFileIds.length > 0 && !initialFilesSentRef.current) {
+          payload.attached_file_ids = initialAttachedFileIds.map(id => ({ [id]: 'unknown_file' }))
+          initialFilesSentRef.current = true
+        }
+
         if (Object.keys(personalization).length > 0) payload.personalization = personalization
 
         appendQueryToMemoryQueue(query)
@@ -813,7 +849,19 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
           toast.error(message)
           throw new Error(message)
         }
-        await handleStreamResponse(res, [{ role: 'user', content: query }])
+        const initialFileMeta = initialAttachedFileMeta && initialAttachedFileMeta.length > 0
+          ? initialAttachedFileMeta
+          : attachedFiles.filter(f => f.status === 'ready').map(f => ({
+            id: f.id!,
+            name: f.name,
+            type: f.type
+          }))
+
+        await handleStreamResponse(res, [{
+          role: 'user',
+          content: query,
+          ...(initialFileMeta.length > 0 && { attachedFiles: initialFileMeta })
+        }])
       } catch (e) {
         console.error(e)
         const errorMessage = e instanceof Error ? e.message : '请求失败，请稍后重试。'
@@ -830,10 +878,24 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
   }, [threadId, query, fetchWithAuth, isMockMode, isSignedIn, handleStreamResponse, syncToBackend])
 
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return
+    const hasReadyFiles = attachedFiles.filter((f: any) => f.status === 'ready').length > 0
+    if ((!input.trim() && !hasReadyFiles) || isLoading) return
 
     const currentFollowUpText = followUpText
-    const userMsg: Message = { role: 'user', content: input, follow_up_content: currentFollowUpText || undefined }
+
+    const activeFiles = attachedFiles.filter((f: any) => f.status === 'ready').map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      type: f.type
+    }))
+
+    const userMsg: Message = {
+      role: 'user',
+      content: input,
+      follow_up_content: currentFollowUpText || undefined,
+      ...(activeFiles.length > 0 && { attachedFiles: activeFiles })
+    }
+
     const newHistory = [...messages, userMsg]
     setMessages([...newHistory, { role: 'assistant', content: '...' }])
     setInput('')
@@ -879,6 +941,21 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
         thread_id: threadId,
         ...(currentFollowUpText ? { follow_up_content: currentFollowUpText } : {})
       }
+
+      const readyFilePayloads = attachedFiles.filter((f: any) => f.status === 'ready').map((f: any) => ({ [f.id]: f.name }))
+      const allFilesToSend = [...readyFilePayloads]
+      if (initialAttachedFileMeta && initialAttachedFileMeta.length > 0 && !initialFilesSentRef.current) {
+        allFilesToSend.push(...initialAttachedFileMeta.map(m => ({ [m.id]: m.name })))
+        initialFilesSentRef.current = true
+      } else if (initialAttachedFileIds && initialAttachedFileIds.length > 0 && !initialFilesSentRef.current) {
+        allFilesToSend.push(...initialAttachedFileIds.map(id => ({ [id]: 'unknown_file' })))
+        initialFilesSentRef.current = true
+      }
+      if (allFilesToSend.length > 0) {
+        payload.attached_file_ids = allFilesToSend
+      }
+      // Don't clear files - they persist in the input until user removes them
+
       if (Object.keys(personalization).length > 0) payload.personalization = personalization
 
       appendQueryToMemoryQueue(input)
@@ -1376,6 +1453,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                             )}
                           </div>
                         )}
+
                       </div>
                     </>
                   )
@@ -1387,9 +1465,9 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
         {/* Input Area */}
         <div className="flex-shrink-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-[var(--background)] border-t border-[var(--border-subtle)]/40">
-          <div className="max-w-2xl mx-auto relative">
+          <div className="max-w-2xl mx-auto">
             {followUpText && (
-              <div className="absolute bottom-[calc(100%+1rem)] left-0 right-0 flex items-center gap-3 mb-2 px-4 py-3 bg-[var(--secondary)] rounded-xl text-sm border border-[var(--border-subtle)] backdrop-blur-sm max-h-24 overflow-y-auto w-full shadow-sm z-10 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="flex items-center gap-3 mb-2 px-4 py-3 bg-[var(--secondary)] rounded-xl text-sm border border-[var(--border-subtle)] backdrop-blur-sm max-h-24 overflow-y-auto w-full shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="w-[3px] self-stretch bg-[var(--accent)] rounded-full shrink-0" />
                 <p className="text-[var(--foreground)] truncate overflow-hidden whitespace-nowrap" title={followUpText}>
                   {followUpText}
@@ -1403,107 +1481,150 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                 </button>
               </div>
             )}
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleInputKeyDown}
-              placeholder="Ask a follow-up"
-              disabled={isLoading}
-              rows={1}
-              className="block w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-28 py-4 min-h-[92px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)]"
-            />
-            <div className="absolute right-[14px] bottom-[14px] flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSst}
-                disabled={isLoading || isSstPending}
-                className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${isLoading || isSstPending
-                  ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                  : isRecording
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                  }`}
-                aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
-              >
-                {isRecording && !isSstPending && (
-                  <span className="absolute inset-0 rounded-full border border-white/45 animate-ping" aria-hidden="true" />
-                )}
-                {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
-              </button>
 
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-                className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${!input.trim() || isLoading
-                  ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                  : 'bg-[var(--accent)] text-white hover:opacity-90'
-                  }`}
-              >
-                <ArrowUp size={18} />
-              </button>
+            {/* Unified input card */}
+            <div className="flex flex-col bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-[var(--border-subtle)] focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
+              {/* File chips at the top of the card */}
+              {attachedFiles.length > 0 && (
+                <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 border-b border-[var(--border-subtle)]/40">
+                  {attachedFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className={`flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg border text-sm transition-colors ${file.status === 'error'
+                        ? 'border-destructive/50 bg-destructive/10 text-destructive'
+                        : file.status === 'ready'
+                          ? 'border-[var(--border-subtle)] bg-[var(--secondary)] text-[var(--foreground)]'
+                          : 'border-[var(--accent)]/30 bg-[var(--accent)]/5 text-[var(--foreground)]'
+                        }`}
+                    >
+                      <div className="shrink-0 flex items-center justify-center relative w-7 h-7 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] overflow-hidden">
+                        {file.status === 'uploading' && (
+                          <div className="absolute inset-0 flex flex-col justify-end overflow-hidden opacity-20">
+                            <div className="bg-[var(--accent)] w-full transition-all duration-300" style={{ height: `${file.progress}%` }} />
+                          </div>
+                        )}
+                        <FileText className="h-3.5 w-3.5 text-[var(--muted-foreground)] z-10" />
+                      </div>
+                      <span className="truncate text-[13px] font-medium min-w-0 max-w-[160px]">{file.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(file.id)}
+                        className="p-1 rounded-md hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors ml-1 shrink-0"
+                        title="Remove file"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Textarea */}
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleInputKeyDown}
+                placeholder="Ask a follow-up"
+                disabled={isLoading}
+                rows={1}
+                className="block w-full resize-none bg-transparent text-[var(--foreground)] px-5 pt-4 pb-2 min-h-[60px] max-h-40 overflow-y-auto focus:outline-none text-[15px] placeholder:text-[var(--muted-foreground)]/60"
+              />
+
+              {/* Action row */}
+              <div className="flex items-center justify-end px-3 pb-3 pt-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSst}
+                    disabled={isLoading || isSstPending}
+                    className={`relative flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${isLoading || isSstPending
+                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                      : isRecording
+                        ? 'bg-[var(--accent)] text-white'
+                        : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                      }`}
+                    aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+                  >
+                    {isRecording && !isSstPending && (
+                      <span className="absolute inset-0 rounded-full border border-white/45 animate-ping" aria-hidden="true" />
+                    )}
+                    {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
+                  </button>
+                  <button
+                    onClick={handleSend}
+                    disabled={!input.trim() || isLoading}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${!input.trim() || isLoading
+                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                      : 'bg-[var(--accent)] text-white hover:opacity-90'
+                      }`}
+                  >
+                    <ArrowUp size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="text-center mt-2 text-xs text-[var(--muted-foreground)] opacity-60">
+              Answers generated by AI. Check important info.
             </div>
           </div>
-          <div className="text-center mt-2 text-xs text-[var(--muted-foreground)] opacity-60">
-            Answers generated by AI. Check important info.
-          </div>
         </div>
-      </div>
 
-      {/* Sources Sidebar */}
-      <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-80 z-[60] transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] shadow-[-8px_0_32px_rgba(0,0,0,0.08)]
+        {/* Sources Sidebar */}
+        <div
+          className={`fixed top-0 right-0 h-full w-full sm:w-80 z-[60] transform transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] shadow-[-8px_0_32px_rgba(0,0,0,0.08)]
           bg-[var(--background)] border-l border-[var(--border-subtle)]/60
           ${isSourceSidebarOpen ? 'translate-x-0' : 'translate-x-full'}
         `}
-      >
-        <div className="flex flex-col h-full bg-[var(--background)]">
-          <div className="flex items-center justify-between h-16 px-6 border-b border-[var(--border-subtle)]/40">
-            <span className="text-[13px] font-bold text-[var(--foreground)] uppercase tracking-wider">{sidebarSources.length} Sources</span>
-            <button
-              onClick={() => setIsSourceSidebarOpen(false)}
-              className="p-1.5 hover:bg-[var(--secondary)] rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar px-2 py-2">
-            {sidebarSources.map((source, index) => (
-              <a
-                key={`${source.url}-${index}`}
-                href={source.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex items-start gap-3 p-2 rounded-lg hover:bg-[var(--secondary)] transition-all duration-200"
+        >
+          <div className="flex flex-col h-full bg-[var(--background)]">
+            <div className="flex items-center justify-between h-16 px-6 border-b border-[var(--border-subtle)]/40">
+              <span className="text-[13px] font-bold text-[var(--foreground)] uppercase tracking-wider">{sidebarSources.length} Sources</span>
+              <button
+                onClick={() => setIsSourceSidebarOpen(false)}
+                className="p-1.5 hover:bg-[var(--secondary)] rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all"
               >
-                <div className="mt-1 w-4 h-4 rounded-sm border border-[var(--border-subtle)]/40 overflow-hidden shrink-0 bg-white flex-none">
-                  <img
-                    src={`https://www.google.com/s2/favicons?domain=${getSourceDomain(source.url)}&sz=64`}
-                    className="w-full h-full object-cover"
-                    alt=""
-                    onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.google.com/favicon.ico' }}
-                  />
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar px-2 py-2">
+              {sidebarSources.map((source, index) => (
+                <a
+                  key={`${source.url}-${index}`}
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-3 p-2 rounded-lg hover:bg-[var(--secondary)] transition-all duration-200"
+                >
+                  <div className="mt-1 w-4 h-4 rounded-sm border border-[var(--border-subtle)]/40 overflow-hidden shrink-0 bg-white flex-none">
+                    <img
+                      src={`https://www.google.com/s2/favicons?domain=${getSourceDomain(source.url)}&sz=64`}
+                      className="w-full h-full object-cover"
+                      alt=""
+                      onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.google.com/favicon.ico' }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col pt-0.5">
+                    <p className="text-[13px] text-[var(--foreground)] font-normal leading-snug line-clamp-2 mb-0.5">
+                      {source.title}
+                    </p>
+                    <p className="text-[11px] text-[var(--muted-foreground)] opacity-60 truncate">
+                      {getSourceDomain(source.url)}
+                    </p>
+                  </div>
+                  <ExternalLink size={12} className="shrink-0 opacity-0 group-hover:opacity-40 self-center" />
+                </a>
+              ))}
+              {sidebarSources.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[var(--muted-foreground)]/40">
+                  <Globe size={32} className="mb-4 stroke-[1]" />
+                  <p className="text-sm font-normal">No sources found.</p>
                 </div>
-                <div className="flex-1 min-w-0 flex flex-col pt-0.5">
-                  <p className="text-[13px] text-[var(--foreground)] font-normal leading-snug line-clamp-2 mb-0.5">
-                    {source.title}
-                  </p>
-                  <p className="text-[11px] text-[var(--muted-foreground)] opacity-60 truncate">
-                    {getSourceDomain(source.url)}
-                  </p>
-                </div>
-                <ExternalLink size={12} className="shrink-0 opacity-0 group-hover:opacity-40 self-center" />
-              </a>
-            ))}
-            {sidebarSources.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[var(--muted-foreground)]/40">
-                <Globe size={32} className="mb-4 stroke-[1]" />
-                <p className="text-sm font-normal">No sources found.</p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="mt-auto p-4 text-[10px] text-[var(--muted-foreground)]/40 leading-relaxed border-t border-[var(--border-subtle)]/30">
-            Citations are automatically generated. Verify important information with primary sources.
+            <div className="mt-auto p-4 text-[10px] text-[var(--muted-foreground)]/40 leading-relaxed border-t border-[var(--border-subtle)]/30">
+              Citations are automatically generated. Verify important information with primary sources.
+            </div>
           </div>
         </div>
       </div>

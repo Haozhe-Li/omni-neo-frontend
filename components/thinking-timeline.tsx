@@ -299,6 +299,11 @@ function ToolContent({ message }: { message: SSEMessage }) {
           )
         }
       }
+      case 'search_in_document':
+        return {
+          label: 'Reading User Documents',
+          detail: null
+        }
       case 'verify_claim':
         return {
           label: 'Verifying',

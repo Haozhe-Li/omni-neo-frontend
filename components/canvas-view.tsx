@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2 } from 'lucide-react'
+import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
@@ -16,6 +16,8 @@ import { appendQueryToMemoryQueue, getMemories } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk } from '@clerk/nextjs'
+import { useFileUpload } from '@/hooks/useFileUpload'
+import { FileUploadArea } from '@/components/file-upload-area'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -32,6 +34,8 @@ interface CanvasViewProps {
   isMobile?: boolean
   sidebarOpen?: boolean
   setSidebarOpen?: (open: boolean) => void
+  initialAttachedFileIds?: string[]
+  initialAttachedFileMeta?: { id: string; name: string; type: string }[]
 }
 
 interface ChatMessage {
@@ -40,6 +44,7 @@ interface ChatMessage {
   ready_to_begin_research?: boolean
   follow_up_content?: string
   mode?: 'canvas' | 'light'
+  attachedFiles?: { id: string; name: string; type: string }[]
   canvas_state?: CanvasPersistState
   questions_for_user?: { question: string; options: string[] }[]
   questions_submitted?: boolean
@@ -156,12 +161,32 @@ function QuestionSelector({
   );
 }
 
-export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen }: CanvasViewProps) {
+export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMobile = false, sidebarOpen, setSidebarOpen, initialAttachedFileIds, initialAttachedFileMeta }: CanvasViewProps) {
   const isMockMode = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
   const [title, setTitle] = useState(query)
   const [isFading, setIsFading] = useState(false)
+
+  const { attachedFiles, setAttachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const initialFilesSentRef = useRef(false)
+
+  // Pre-populate file chips in bottom input from home page uploads
+  useEffect(() => {
+    if (initialAttachedFileMeta && initialAttachedFileMeta.length > 0) {
+      setAttachedFiles(initialAttachedFileMeta.map(f => ({
+        id: f.id,
+        file: new File([], f.name),
+        name: f.name,
+        size: 0,
+        type: f.type,
+        status: 'ready' as const,
+        progress: 100
+      })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Which research block's report is shown in right panel (-1 = none)
   const [reportBlockIdx, setReportBlockIdx] = useState(-1)
@@ -569,10 +594,25 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
     setIsChatLoading(true)
 
     let updatedMessages = [...prevMessages]
+    const fileMeta = (isInitial && initialAttachedFileMeta && initialAttachedFileMeta.length > 0)
+      ? initialAttachedFileMeta
+      : attachedFiles.filter(f => f.status === 'ready').map(f => ({
+        id: f.id!,
+        name: f.name,
+        type: f.type
+      }))
+
+    const newMessage: ChatMessage = {
+      role: 'user',
+      content: userQuery,
+      follow_up_content: currentFollowUpText,
+      ...(fileMeta.length > 0 && { attachedFiles: fileMeta })
+    }
+
     if (isInitial) {
-      updatedMessages = [{ role: 'user', content: userQuery, follow_up_content: currentFollowUpText }]
+      updatedMessages = [newMessage]
     } else {
-      updatedMessages.push({ role: 'user', content: userQuery, follow_up_content: currentFollowUpText })
+      updatedMessages.push(newMessage)
     }
 
     setChatMessages([...updatedMessages, { role: 'assistant', content: '...' }])
@@ -583,6 +623,20 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
       const payload: any = { query: userQuery, thread_id: threadId }
       if (currentFollowUpText) payload.follow_up_content = currentFollowUpText
+
+      const readyFilePayloads = attachedFiles.filter(f => f.status === 'ready').map(f => ({ [f.id!]: f.name }))
+      const allFilesToSend = [...readyFilePayloads]
+      if (initialAttachedFileMeta && initialAttachedFileMeta.length > 0 && !initialFilesSentRef.current) {
+        allFilesToSend.push(...initialAttachedFileMeta.map(m => ({ [m.id]: m.name })))
+        initialFilesSentRef.current = true
+      } else if (initialAttachedFileIds && initialAttachedFileIds.length > 0 && !initialFilesSentRef.current) {
+        allFilesToSend.push(...initialAttachedFileIds.map(id => ({ [id]: 'unknown_file' })))
+        initialFilesSentRef.current = true
+      }
+      if (allFilesToSend.length > 0) {
+        payload.attached_file_ids = allFilesToSend
+      }
+      // Don't clear files - they persist in the input until user removes them
 
       const personalization: any = {}
       if (typeof window !== 'undefined') {
@@ -1395,9 +1449,9 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
             {/* Chat input */}
             <div className="flex-shrink-0 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-[var(--background)] border-t border-[var(--border-subtle)]">
-              <div className="max-w-2xl mx-auto relative">
+              <div className="max-w-2xl mx-auto">
                 {followUpText && (
-                  <div className="absolute bottom-[calc(100%+1rem)] left-0 right-0 flex items-center gap-3 mb-2 px-4 py-3 bg-[var(--secondary)] rounded-xl text-sm border border-[var(--border-subtle)] backdrop-blur-sm max-h-24 overflow-y-auto w-full shadow-sm z-10 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex items-center gap-3 mb-2 px-4 py-3 bg-[var(--secondary)] rounded-xl text-sm border border-[var(--border-subtle)] backdrop-blur-sm max-h-24 overflow-y-auto w-full shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="w-[3px] self-stretch bg-[var(--accent)] rounded-full shrink-0" />
                     <p className="text-[var(--foreground)] truncate overflow-hidden whitespace-nowrap" title={followUpText}>
                       {followUpText}
@@ -1410,45 +1464,88 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                     </button>
                   </div>
                 )}
-                <textarea
-                  id="chat-input"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={handleChatInputKeyDown}
-                  placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan'}
-                  disabled={isQuotaLocked || isChatLoading || isResearching}
-                  rows={1}
-                  className="w-full resize-none bg-white dark:bg-[#121212] text-[var(--foreground)] rounded-2xl pl-5 pr-28 py-4 min-h-[92px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-sm border border-[var(--border-subtle)] disabled:opacity-60 disabled:cursor-not-allowed"
-                />
-                <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSst}
-                    disabled={isQuotaLocked || isChatLoading || isResearching || isSstPending}
-                    className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${isQuotaLocked || isChatLoading || isResearching || isSstPending
-                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                      : isRecording
-                        ? 'bg-[var(--accent)] text-white'
-                        : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                      }`}
-                    aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
-                  >
-                    {isRecording && !isSstPending && (
-                      <span className="absolute inset-0 rounded-full border border-white/45 animate-ping" aria-hidden="true" />
-                    )}
-                    {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
-                  </button>
 
-                  <button
-                    onClick={handleChatSend}
-                    disabled={isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
-                      ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                      : 'bg-[var(--accent)] text-white hover:opacity-90'
-                      }`}
-                  >
-                    <ArrowUp size={18} />
-                  </button>
+                {/* Unified input card */}
+                <div className="flex flex-col bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-[var(--border-subtle)] focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
+                  {/* File chips at top */}
+                  {attachedFiles.length > 0 && (
+                    <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 border-b border-[var(--border-subtle)]/40">
+                      {attachedFiles.map((file) => (
+                        <div
+                          key={file.id}
+                          className={`flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg border text-sm transition-colors ${file.status === 'error'
+                            ? 'border-destructive/50 bg-destructive/10 text-destructive'
+                            : file.status === 'ready'
+                              ? 'border-[var(--border-subtle)] bg-[var(--secondary)] text-[var(--foreground)]'
+                              : 'border-[var(--accent)]/30 bg-[var(--accent)]/5 text-[var(--foreground)]'
+                            }`}
+                        >
+                          <div className="shrink-0 flex items-center justify-center relative w-7 h-7 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] overflow-hidden">
+                            {file.status === 'uploading' && (
+                              <div className="absolute inset-0 flex flex-col justify-end overflow-hidden opacity-20">
+                                <div className="bg-[var(--accent)] w-full transition-all duration-300" style={{ height: `${file.progress}%` }} />
+                              </div>
+                            )}
+                            <FileText className="h-3.5 w-3.5 text-[var(--muted-foreground)] z-10" />
+                          </div>
+                          <span className="truncate text-[13px] font-medium min-w-0 max-w-[160px]">{file.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(file.id)}
+                            className="p-1 rounded-md hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors ml-1 shrink-0"
+                            title="Remove file"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Textarea */}
+                  <textarea
+                    id="chat-input"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={handleChatInputKeyDown}
+                    placeholder={isQuotaLocked ? 'Quota reached. Sign in to continue in Canvas mode.' : isResearching ? 'Researching... please wait' : 'Discuss the research plan'}
+                    disabled={isQuotaLocked || isChatLoading || isResearching}
+                    rows={1}
+                    className="w-full resize-none bg-transparent text-[var(--foreground)] px-5 pt-4 pb-2 min-h-[60px] max-h-40 overflow-y-auto focus:outline-none text-[15px] placeholder:text-[var(--muted-foreground)]/60 disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+
+                  {/* Action row */}
+                  <div className="flex items-center justify-end px-3 pb-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSst}
+                        disabled={isQuotaLocked || isChatLoading || isResearching || isSstPending}
+                        className={`relative flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${isQuotaLocked || isChatLoading || isResearching || isSstPending
+                          ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                          : isRecording
+                            ? 'bg-[var(--accent)] text-white'
+                            : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                          }`}
+                        aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+                      >
+                        {isRecording && !isSstPending && (
+                          <span className="absolute inset-0 rounded-full border border-white/45 animate-ping" aria-hidden="true" />
+                        )}
+                        {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
+                      </button>
+                      <button
+                        onClick={handleChatSend}
+                        disabled={isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching}
+                        className={`flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 ${isQuotaLocked || !chatInput.trim() || isChatLoading || isResearching
+                          ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
+                          : 'bg-[var(--accent)] text-white hover:opacity-90'
+                          }`}
+                      >
+                        <ArrowUp size={18} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="mt-2 text-center text-[11px] sm:text-xs text-[var(--muted-foreground)]/70 px-4 select-none">

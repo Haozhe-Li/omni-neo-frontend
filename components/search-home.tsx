@@ -1,13 +1,17 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock, Mic, Loader2, X } from 'lucide-react'
+import { ArrowRight, Sparkles, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
-import { SignUpButton, useAuth } from '@clerk/nextjs'
+import { SignUpButton, useAuth, useClerk } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
+import { useFileUpload } from '@/hooks/useFileUpload'
+import { FileUploadArea } from '@/components/file-upload-area'
+
+import { toast } from 'sonner'
 
 interface SearchHomeProps {
-  onSearch: (query: string, threadId: string) => void
+  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[]) => void
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   isMobile?: boolean
@@ -20,12 +24,21 @@ interface SearchHomeProps {
 export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange, quotaExceeded = false, remainingQuota = null }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const [threadId, setThreadId] = useState<string>('')
+  // Mirror in a ref so async handlers & closures always read the latest value
+  // without depending on React state flush timing
+  const threadIdRef = useRef<string>('')
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [isSstPending, setIsSstPending] = useState(false)
   const [sstPrompt, setSstPrompt] = useState('')
   const { isSignedIn } = useAuth()
+  const clerk = useClerk()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { attachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
+
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -83,7 +96,27 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   useEffect(() => {
     const timer = setTimeout(() => inputRef.current?.focus(), 600)
-    return () => clearTimeout(timer)
+
+    // Prevent default browser behavior for drag and drop globally
+    // so if user drops file outside the box, it doesn't open the file in the current tab
+    const preventDefault = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    // Attach to document to ensure we catch everything during any HMR states
+    document.addEventListener('dragenter', preventDefault, false)
+    document.addEventListener('dragover', preventDefault, false)
+    document.addEventListener('dragleave', preventDefault, false)
+    document.addEventListener('drop', preventDefault, false)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('dragenter', preventDefault, false)
+      document.removeEventListener('dragover', preventDefault, false)
+      document.removeEventListener('dragleave', preventDefault, false)
+      document.removeEventListener('drop', preventDefault, false)
+    }
   }, [])
 
   // Close dropdown on outside click
@@ -103,16 +136,22 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const [isCheckPending, setIsCheckPending] = useState(true)
   const { fetchWithAuth } = useApi()
 
+  // Always write both state (for re-render) and ref (for sync closure access)
+  const applyThreadId = useCallback((id: string) => {
+    threadIdRef.current = id
+    setThreadId(id)
+  }, [])
+
   const createLocalFallbackThreadId = useCallback(() => {
     const fallbackId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    setThreadId(fallbackId)
+    applyThreadId(fallbackId)
     return fallbackId
-  }, [])
+  }, [applyThreadId])
 
   const fetchThreadId = useCallback(async () => {
     if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
       const mockId = 'mock-thread-id-' + Date.now()
-      setThreadId(mockId)
+      applyThreadId(mockId)
       return mockId
     }
 
@@ -124,11 +163,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       if (res.ok) {
         const data = await res.json()
         if (data && typeof data === 'string') {
-          setThreadId(data)
+          applyThreadId(data)
           return data as string
         }
         if (data && data.thread_id) {
-          setThreadId(data.thread_id)
+          applyThreadId(data.thread_id)
           return data.thread_id as string
         }
       }
@@ -136,7 +175,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       console.error('Failed to fetch thread ID', e)
     }
     return null
-  }, [fetchWithAuth])
+  }, [fetchWithAuth, applyThreadId])
 
   // Use refs for the interval ID to keep it accessible in cleanup
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
@@ -215,6 +254,14 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }, [fetchThreadId])
 
+  // Pre-fetch thread_id as soon as the backend is ready so that the first
+  // uploadFile() and handleSubmit() always share the exact same ID.
+  useEffect(() => {
+    if (backendStatus === 'ready' && !threadIdRef.current) {
+      fetchThreadId().catch(() => { })
+    }
+  }, [backendStatus, fetchThreadId])
+
 
   // Auto-resize textarea
   useEffect(() => {
@@ -234,12 +281,22 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     e.preventDefault()
     if (backendStatus !== 'ready') return
 
-    // Ensure threadId is present
-    const activeThreadId = threadId || await fetchThreadId() || createLocalFallbackThreadId()
+    // Read from ref first (always the latest, avoids stale-closure reads from state)
+    const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
     if (!activeThreadId) return
 
-    if (query.trim()) {
-      onSearch(query.trim(), activeThreadId)
+    console.log('[SearchHome] handleSubmit — thread_id being sent to chat:', activeThreadId)
+
+    if (query.trim() || attachedFiles.length > 0) {
+      // Filter out files that are not ready
+      const readyFileIds = attachedFiles.filter((f) => f.status === 'ready').map((f) => f.id)
+      const readyFileMeta = attachedFiles.filter((f) => f.status === 'ready').map((f) => ({ id: f.id, name: f.name, type: f.type }))
+      if (readyFileIds.length > 0) {
+        console.log('[SearchHome] handleSubmit — attached_file_ids:', readyFileIds)
+      }
+      onSearch(query.trim(), activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined)
+      clearFiles()
+      setQuery('')
     }
   }
 
@@ -516,8 +573,126 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isSignedIn) {
+      clerk.openSignIn()
+      return
+    }
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    if (attachedFiles.length + files.length > 5) {
+      toast.error('You can only attach up to 5 files per message.')
+      return
+    }
+
+    // We only support uploading one file at a time or we can loop through them
+    const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+
+    Array.from(files).forEach(file => {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`${file.name} is too large. Maximum size is 20MB.`)
+        return
+      }
+      const allowedTypes = [
+        'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
+        'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml'
+      ]
+      const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh']
+
+      const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+      const isAllowedType = allowedTypes.includes(file.type)
+      const isAllowedExt = allowedExtensions.includes(fileExt)
+
+      if (!isAllowedType && !isAllowedExt) {
+        toast.error(`${file.name} is not a supported file type.`)
+        return
+      }
+      console.log(`[SearchHome] handleFileSelect — uploading ${file.name} to thread_id:`, activeThreadId)
+      uploadFile(file, activeThreadId).catch((err) => {
+        console.error('Failed to upload file in UI', err)
+      })
+    })
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const onUploadClick = () => {
+    if (!isSignedIn) {
+      clerk.openSignIn()
+      return
+    }
+    fileInputRef.current?.click()
+  }
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }, [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (!isSignedIn) {
+      clerk.openSignIn()
+      return
+    }
+    const files = e.dataTransfer.files
+    if (!files || files.length === 0) return
+
+    if (attachedFiles.length + files.length > 5) {
+      toast.error('You can only attach up to 5 files per message.')
+      return
+    }
+
+    // Wrapping async in a separate fn since useCallback expected sync/void but await requires async
+    const processDrops = async () => {
+      const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+      Array.from(files).forEach(file => {
+        if (file.size > 20 * 1024 * 1024) {
+          toast.error(`${file.name} is too large. Maximum size is 20MB.`)
+          return
+        }
+        const allowedTypes = [
+          'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
+          'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml'
+        ]
+        const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh']
+
+        const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+        const isAllowedType = allowedTypes.includes(file.type)
+        const isAllowedExt = allowedExtensions.includes(fileExt)
+
+        if (!isAllowedType && !isAllowedExt) {
+          toast.error(`${file.name} is not a supported file type.`)
+          return
+        }
+        console.log(`[SearchHome] onDrop — uploading ${file.name} to thread_id:`, activeThreadId)
+        uploadFile(file, activeThreadId).catch(err => console.error("Drop upload failed", err))
+      })
+    }
+    processDrops()
+  }, [isSignedIn, clerk, uploadFile, threadId, fetchThreadId, createLocalFallbackThreadId, attachedFiles.length])
+
   return (
     <main className="relative h-full flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
+      {/* Hidden file input */}
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        className="hidden"
+        accept=".pdf,.txt,.md,.py,.js,.jsx,.ts,.tsx,.html,.json,.xml,.yaml,.yml,.java,.c,.cpp,.h,.hpp,.sh,application/pdf,text/plain,text/markdown,text/html,application/json,application/xml,application/yaml"
+      />
 
       {/* Mobile Header */}
       <header className="fixed top-0 left-0 right-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-center z-40 md:hidden">
@@ -607,14 +782,23 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
             style={{ animationDelay: '150ms' }}
           >
             <div
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
               className={`
-                rounded-2xl bg-card transition-all duration-300 flex flex-col
-                ${isFocused
-                  ? 'shadow-[0_0_0_1px_var(--accent),0_4px_24px_rgba(32,178,170,0.08)]'
-                  : 'shadow-[0_0_0_1px_var(--border),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_var(--border),0_4px_16px_rgba(0,0,0,0.06)]'
+                relative rounded-2xl transition-all duration-300 flex flex-col
+                ${isFocused || isDragging
+                  ? 'shadow-[0_0_0_1px_var(--accent),0_4px_24px_rgba(32,178,170,0.08)] bg-[var(--card)]'
+                  : 'shadow-[0_0_0_1px_var(--border),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_var(--border),0_4px_16px_rgba(0,0,0,0.06)] bg-card'
                 }
+                ${isDragging ? 'ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--background)]' : ''}
               `}
             >
+              {attachedFiles.length > 0 && (
+                <div className="px-5 pt-4 pb-0">
+                  <FileUploadArea files={attachedFiles} onRemove={removeFile} />
+                </div>
+              )}
               <textarea
                 ref={inputRef}
                 rows={1}
@@ -623,7 +807,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
-                disabled={backendStatus !== 'ready'}
+                disabled={backendStatus !== 'ready' || isCheckPending}
                 placeholder={
                   (isRecording || !!sstPrompt)
                     ? (sstPrompt || 'listening...')
@@ -633,189 +817,210 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         ? "Connecting to brain..."
                         : "Backend is not ready, please wait..."
                 }
-                className={`w-full resize-none bg-transparent px-6 pt-5 pb-2 text-base text-foreground placeholder:text-muted-foreground/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
+                className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
                 style={{ minHeight: '52px' }}
               />
 
               {/* Bottom bar — separate row, never overlaps text */}
-              <div className="flex items-center justify-end gap-1.5 px-3 pb-3 pt-1">
-                {/* Mode dropdown */}
-                <div className="relative" ref={dropdownRef}>
+              <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                {/* Left side: Upload Button */}
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setModelDropdownOpen(prev => !prev)}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
+                    onClick={onUploadClick}
+                    disabled={backendStatus !== 'ready' || isCheckPending}
+                    className={`
+                      flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      ${backendStatus === 'ready' && !isCheckPending
+                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      }
+                    `}
+                    aria-label="Upload files"
                   >
-                    <span>{selectedModelLabel}</span>
-                    {showCanvasRemaining && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
-                        {remainingQuota} left
-                      </span>
-                    )}
-                    {showSelectedLock && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
-                        Sign in
-                      </span>
-                    )}
-                    {showSelectedLock && <Lock className="h-3 w-3" />}
-                    <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+                    <Plus className="h-4 w-4" />
                   </button>
-
-                  {modelDropdownOpen && (
-                    <>
-                      {/* Desktop Dropdown */}
-                      <div className="hidden md:block absolute top-full right-0 mt-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                        {[
-                          { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
-                          { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
-                          { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
-                        ].map((opt) => {
-                          const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
-                          const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
-                          const isLocked = isAutoOptionLocked || isCanvasOptionLocked
-                          const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => {
-                                onModelChange?.(opt.value)
-                                setModelDropdownOpen(false)
-                              }}
-                              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
-                            >
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-[13px] font-medium flex items-center gap-1.5">
-                                  {opt.label}
-                                  {isLocked && <Lock className="h-3 w-3" />}
-                                </span>
-                                <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
-                                  {isAutoOptionLocked || isCanvasOptionLocked
-                                    ? 'Daily quota reached — sign in for unlimited'
-                                    : opt.desc}
-                                </span>
-                              </div>
-                              <div className="ml-2 w-[78px] flex items-center justify-end gap-2 shrink-0">
-                                {showRemaining && (
-                                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
-                                    {remainingQuota} left
-                                  </span>
-                                )}
-                                {model === opt.value ? (
-                                  <Check className="h-4 w-4 text-[var(--accent)]" />
-                                ) : (
-                                  <span className="h-4 w-4" aria-hidden="true" />
-                                )}
-                              </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-
-                      {/* Mobile Modal/Drawer */}
-                      <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
-                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
-                        <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
-                          <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
-                            <button
-                              type="button"
-                              onClick={() => setModelDropdownOpen(false)}
-                              className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <div className="flex flex-col gap-2.5">
-                            {[
-                              { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
-                              { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
-                              { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
-                            ].map((opt) => {
-                              const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
-                              const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
-                              const isLocked = isAutoOptionLocked || isCanvasOptionLocked
-                              const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
-                              return (
-                                <button
-                                  key={opt.value}
-                                  type="button"
-                                  onClick={() => {
-                                    onModelChange?.(opt.value)
-                                    setModelDropdownOpen(false)
-                                  }}
-                                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${model === opt.value ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}
-                                >
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-[15px] font-medium flex items-center gap-1.5">
-                                      {opt.label}
-                                      {isLocked && <Lock className="h-3.5 w-3.5" />}
-                                    </span>
-                                    <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
-                                      {isAutoOptionLocked || isCanvasOptionLocked
-                                        ? 'Daily quota reached — sign in'
-                                        : opt.desc}
-                                    </span>
-                                  </div>
-                                  <div className="ml-3 shrink-0 flex items-center gap-2">
-                                    {showRemaining && (
-                                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
-                                        {remainingQuota} left
-                                      </span>
-                                    )}
-                                    {model === opt.value ? (
-                                      <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
-                                        <Check className="h-3.5 w-3.5" />
-                                      </div>
-                                    ) : (
-                                      <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
-                                    )}
-                                  </div>
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleSst}
-                  disabled={backendStatus !== 'ready' || isSstPending}
-                  className={`
-                    relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                    ${backendStatus === 'ready' && !isSstPending
-                      ? isRecording
-                        ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
-                        : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                      : 'bg-muted text-muted-foreground cursor-not-allowed'
-                    }
-                  `}
-                  aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
-                >
-                  {isRecording && !isSstPending && (
-                    <span className="absolute inset-0 rounded-full border border-[var(--accent-foreground)]/35 animate-ping" aria-hidden="true" />
-                  )}
-                  {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Mode dropdown */}
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setModelDropdownOpen(prev => !prev)}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
+                    >
+                      <span>{selectedModelLabel}</span>
+                      {showCanvasRemaining && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
+                          {remainingQuota} left
+                        </span>
+                      )}
+                      {showSelectedLock && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
+                          Sign in
+                        </span>
+                      )}
+                      {showSelectedLock && <Lock className="h-3 w-3" />}
+                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
 
-                <button
-                  type="submit"
-                  disabled={!query.trim() || backendStatus !== 'ready'}
-                  className={`
+                    {modelDropdownOpen && (
+                      <>
+                        {/* Desktop Dropdown */}
+                        <div className="hidden md:block absolute top-full right-0 mt-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-lg py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                          {[
+                            { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                            { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
+                            { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
+                          ].map((opt) => {
+                            const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
+                            const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
+                            const isLocked = isAutoOptionLocked || isCanvasOptionLocked
+                            const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  onModelChange?.(opt.value)
+                                  setModelDropdownOpen(false)
+                                }}
+                                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
+                              >
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[13px] font-medium flex items-center gap-1.5">
+                                    {opt.label}
+                                    {isLocked && <Lock className="h-3 w-3" />}
+                                  </span>
+                                  <span className="text-[11px] text-[var(--muted-foreground)] mt-0.5">
+                                    {isAutoOptionLocked || isCanvasOptionLocked
+                                      ? 'Daily quota reached — sign in for unlimited'
+                                      : opt.desc}
+                                  </span>
+                                </div>
+                                <div className="ml-2 w-[78px] flex items-center justify-end gap-2 shrink-0">
+                                  {showRemaining && (
+                                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
+                                      {remainingQuota} left
+                                    </span>
+                                  )}
+                                  {model === opt.value ? (
+                                    <Check className="h-4 w-4 text-[var(--accent)]" />
+                                  ) : (
+                                    <span className="h-4 w-4" aria-hidden="true" />
+                                  )}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {/* Mobile Modal/Drawer */}
+                        <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
+                          <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
+                              <button
+                                type="button"
+                                onClick={() => setModelDropdownOpen(false)}
+                                className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <div className="flex flex-col gap-2.5">
+                              {[
+                                { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                                { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
+                                { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
+                              ].map((opt) => {
+                                const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
+                                const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
+                                const isLocked = isAutoOptionLocked || isCanvasOptionLocked
+                                const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => {
+                                      onModelChange?.(opt.value)
+                                      setModelDropdownOpen(false)
+                                    }}
+                                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${model === opt.value ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}
+                                  >
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="text-[15px] font-medium flex items-center gap-1.5">
+                                        {opt.label}
+                                        {isLocked && <Lock className="h-3.5 w-3.5" />}
+                                      </span>
+                                      <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
+                                        {isAutoOptionLocked || isCanvasOptionLocked
+                                          ? 'Daily quota reached — sign in'
+                                          : opt.desc}
+                                      </span>
+                                    </div>
+                                    <div className="ml-3 shrink-0 flex items-center gap-2">
+                                      {showRemaining && (
+                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
+                                          {remainingQuota} left
+                                        </span>
+                                      )}
+                                      {model === opt.value ? (
+                                        <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
+                                          <Check className="h-3.5 w-3.5" />
+                                        </div>
+                                      ) : (
+                                        <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
+                                      )}
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSst}
+                    disabled={backendStatus !== 'ready' || isSstPending || isCheckPending}
+                    className={`
+                      relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      ${backendStatus === 'ready' && !isSstPending
+                        ? isRecording
+                          ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
+                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      }
+                    `}
+                    aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+                  >
+                    {isRecording && !isSstPending && (
+                      <span className="absolute inset-0 rounded-full border border-[var(--accent-foreground)]/35 animate-ping" aria-hidden="true" />
+                    )}
+                    {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={!query.trim() || backendStatus !== 'ready'}
+                    className={`
                     flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
                     ${query.trim() && backendStatus === 'ready'
-                      ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                      : 'bg-muted text-muted-foreground cursor-not-allowed'
-                    }
+                        ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      }
                   `}
-                  aria-label="Submit search"
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </button>
+                    aria-label="Submit search"
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </form>

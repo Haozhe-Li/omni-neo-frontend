@@ -21,6 +21,8 @@ export default function Home() {
   const [currentThreadId, setCurrentThreadId] = useState('')
   const [model, setModel] = useState<ModelType>('auto')
   const [isAutoDetecting, setIsAutoDetecting] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState<string[]>([])
+  const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
@@ -77,9 +79,19 @@ export default function Home() {
     localStorage.setItem('omni_model_preference', newModel)
   }
 
-  const handleSearch = useCallback(async (query: string, threadId: string) => {
+  const handleSearch = useCallback(async (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[]) => {
     setCurrentQuery(query)
     setCurrentThreadId(threadId)
+    if (attachedFileIds && attachedFileIds.length > 0) {
+      setPendingAttachments(attachedFileIds)
+    } else {
+      setPendingAttachments([])
+    }
+    if (attachedFileMeta && attachedFileMeta.length > 0) {
+      setPendingAttachmentMeta(attachedFileMeta)
+    } else {
+      setPendingAttachmentMeta([])
+    }
 
     if (model === 'auto') {
       // If guest quota exceeded, selecting/using Auto should prompt sign-in
@@ -307,6 +319,8 @@ export default function Home() {
             isMobile={isMobile}
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}
+            initialAttachedFileIds={pendingAttachments}
+            initialAttachedFileMeta={pendingAttachmentMeta}
           />
         ) : view === 'light' ? (
           <LightChatView
@@ -316,6 +330,8 @@ export default function Home() {
             onNewSearch={handleNewSearch}
             onToggleSidebar={toggleSidebar}
             isMobile={isMobile}
+            initialAttachedFileIds={pendingAttachments}
+            initialAttachedFileMeta={pendingAttachmentMeta}
           />
         ) : (
           <SearchHome
