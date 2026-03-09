@@ -96,13 +96,13 @@ const getSourceDomain = (url: string) => {
 
 const inferTitleFromMessages = (messages: Array<{ role?: string; content?: string }>, fallback: string) => {
   let defaultTitle = fallback || ''
-  const mFallback = defaultTitle.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+  const mFallback = defaultTitle.match(/^User want to follow up this pages, please use load webpage tool first to read the page before answering questions: \s*\n(\{[\s\S]*?\})\n\n(?:User Query:\s*)?([\s\S]*)$/)
   if (mFallback) defaultTitle = mFallback[2] || defaultTitle
 
   const firstUserMessage = messages.find((message) => message?.role === 'user' && typeof message?.content === 'string' && message.content.trim())
   if (!firstUserMessage || !firstUserMessage.content) return defaultTitle
   let content = firstUserMessage.content.trim()
-  const followUpMatch = content.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+  const followUpMatch = content.match(/^User want to follow up this pages, please use load webpage tool first to read the page before answering questions: \s*\n(\{[\s\S]*?\})\n\n(?:User Query:\s*)?([\s\S]*)$/)
   if (followUpMatch) {
     content = followUpMatch[2] || content
   }
@@ -1251,7 +1251,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
             <span className="block text-sm font-medium tracking-tight text-[var(--foreground)]/90 truncate pointer-events-auto">
               {(() => {
                 let displayTitle = title || query || ''
-                const m = displayTitle.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+                const m = displayTitle.match(/^User want to follow up this pages, please use load webpage tool first to read the page before answering questions: \s*\n(\{[\s\S]*?\})\n\n(?:User Query:\s*)?([\s\S]*)$/)
                 if (m) displayTitle = m[2] || displayTitle
                 return displayTitle
               })()}
@@ -1335,16 +1335,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                               <p className="text-[15px] font-medium text-[var(--foreground)] leading-relaxed line-clamp-2 pr-2">
                                                 {followUpPageObj.title}
                                               </p>
-                                            </div>
-                                            <div className="p-4 pl-0 flex items-center justify-center shrink-0">
-                                              <div className="w-[84px] h-[84px] rounded-xl overflow-hidden bg-[var(--secondary)] border border-[var(--border-subtle)]/50">
-                                                <img
-                                                  src={followUpPageObj.image || `https://www.google.com/s2/favicons?domain=${getSourceDomain(followUpPageObj.url)}&sz=128`}
-                                                  className="h-full w-full object-cover"
-                                                  alt=""
-                                                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.google.com/favicon.ico' }}
-                                                />
-                                              </div>
                                             </div>
                                           </a>
                                         </div>

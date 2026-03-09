@@ -201,7 +201,7 @@ export function MarkdownBlogView({
   const handleSend = () => {
     if (!input.trim()) return
     const pageUrl = `https://omniknows.xyz${window.location.pathname}`
-    const query = `User want to follow up this pages:\n\n${JSON.stringify({ title, url: pageUrl }, null, 2)}\n\n${input.trim()}`
+    const query = `User want to follow up this pages, please use load webpage tool first to read the page before answering questions: \n\n${JSON.stringify({ title, url: pageUrl }, null, 2)}\n\nUser Query: ${input.trim()}`
     window.open(`/?q=${encodeURIComponent(query)}&model=light`, '_blank')
     setInput('')
   }
