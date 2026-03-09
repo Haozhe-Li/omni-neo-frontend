@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip } from 'lucide-react'
+import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip, GitBranch, Sparkles, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
@@ -86,9 +86,27 @@ const isUntitledTitle = (value?: string) => {
   return !normalized || normalized === 'untitled' || normalized === 'untitled chat'
 }
 
+const getSourceDomain = (url: string) => {
+  try {
+    return new URL(url).hostname
+  } catch (e) {
+    return ''
+  }
+}
+
 const inferTitleFromMessages = (messages: Array<{ role?: string; content?: string }>, fallback: string) => {
+  let defaultTitle = fallback || ''
+  const mFallback = defaultTitle.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+  if (mFallback) defaultTitle = mFallback[2] || defaultTitle
+
   const firstUserMessage = messages.find((message) => message?.role === 'user' && typeof message?.content === 'string' && message.content.trim())
-  return firstUserMessage?.content?.trim() || fallback
+  if (!firstUserMessage || !firstUserMessage.content) return defaultTitle
+  let content = firstUserMessage.content.trim()
+  const followUpMatch = content.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+  if (followUpMatch) {
+    content = followUpMatch[2] || content
+  }
+  return content || defaultTitle
 }
 
 const fetchedTitleThreadSet = new Set<string>()
@@ -1231,7 +1249,12 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
           </div>
           <div className="absolute left-1/2 -translate-x-1/2 max-w-[50%] sm:max-w-[60%] text-center pointer-events-none">
             <span className="block text-sm font-medium tracking-tight text-[var(--foreground)]/90 truncate pointer-events-auto">
-              {title}
+              {(() => {
+                let displayTitle = title || query || ''
+                const m = displayTitle.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+                if (m) displayTitle = m[2] || displayTitle
+                return displayTitle
+              })()}
             </span>
           </div>
           <div className="w-24 flex-shrink-0 flex justify-end" />
@@ -1284,14 +1307,59 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                           ) : (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
                               {msg.role === 'user' ? (
-                                <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
-                                  {msg.follow_up_content && (
-                                    <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
-                                      {msg.follow_up_content}
-                                    </div>
-                                  )}
-                                  <div>{msg.content}</div>
-                                </div>
+                                <>
+                                  {msg.follow_up_content && (() => {
+                                    let followUpPageText = msg.follow_up_content
+                                    let followUpPageObj = null
+                                    try {
+                                      const parsed = JSON.parse(followUpPageText)
+                                      if (parsed && parsed.title && parsed.url) {
+                                        followUpPageObj = parsed
+                                      }
+                                    } catch { /* not json */ }
+
+                                    if (followUpPageObj) {
+                                      return (
+                                        <div className="w-full flex justify-end mb-6">
+                                          <a
+                                            href={followUpPageObj.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="w-full sm:w-[500px] flex items-stretch overflow-hidden rounded-2xl border border-[var(--border-subtle)]/80 bg-[var(--background)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md transition-all group no-underline"
+                                          >
+                                            <div className="flex flex-col flex-1 p-5 justify-center">
+                                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--muted-foreground)] mb-2.5 uppercase tracking-wide">
+                                                <GitBranch className="h-3.5 w-3.5" />
+                                                <span>Follow up to</span>
+                                              </div>
+                                              <p className="text-[15px] font-medium text-[var(--foreground)] leading-relaxed line-clamp-2 pr-2">
+                                                {followUpPageObj.title}
+                                              </p>
+                                            </div>
+                                            <div className="p-4 pl-0 flex items-center justify-center shrink-0">
+                                              <div className="w-[84px] h-[84px] rounded-xl overflow-hidden bg-[var(--secondary)] border border-[var(--border-subtle)]/50">
+                                                <img
+                                                  src={followUpPageObj.image || `https://www.google.com/s2/favicons?domain=${getSourceDomain(followUpPageObj.url)}&sz=128`}
+                                                  className="h-full w-full object-cover"
+                                                  alt=""
+                                                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.google.com/favicon.ico' }}
+                                                />
+                                              </div>
+                                            </div>
+                                          </a>
+                                        </div>
+                                      )
+                                    }
+                                    return (
+                                      <div className="mb-2 pl-3 py-1.5 border-l-[3px] border-[var(--foreground)]/30 text-[var(--foreground)]/80 text-sm line-clamp-3">
+                                        {msg.follow_up_content}
+                                      </div>
+                                    )
+                                  })()}
+                                  <div className="max-w-none whitespace-pre-wrap break-words text-[15px] leading-7 text-[var(--foreground)]">
+                                    <div>{msg.content}</div>
+                                  </div>
+                                </>
                               ) : (
                                 <div className="flex flex-col">
                                   {msg.ready_to_begin_research && researchBlockIdx < 0 && !isChatLoading && !isResearching && (
@@ -1386,61 +1454,80 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                         </div>
                       </div>
 
+                      {/* Attached files — below bubble, flat neutral style */}
+                      {
+                        msg.role === 'user' && msg.attachedFiles && msg.attachedFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 justify-end mt-1.5">
+                            {msg.attachedFiles.map(file => (
+                              <div
+                                key={file.id}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--secondary)]/50 text-[var(--muted-foreground)] text-[12px] border border-[var(--border-subtle)]/40"
+                              >
+                                <FileText className="h-3 w-3 shrink-0 opacity-60" />
+                                <span className="truncate max-w-[160px]">{file.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      }
+
                       {/* Inline research block (right below its triggering message) */}
-                      {block && (
-                        <>
-                          <div className="mt-6">
-                            <InlineResearchBlock
-                              block={block}
-                              duration={getDurationForBlock(block)}
-                              isActiveReport={reportBlockIdx === researchBlockIdx}
-                              onToggleProgress={() => {
-                                setResearchBlocks(prev => {
-                                  const copy = [...prev]
-                                  copy[researchBlockIdx] = { ...copy[researchBlockIdx], showProgress: !copy[researchBlockIdx].showProgress }
-                                  return copy
-                                })
-                              }}
-                              onViewReport={() => {
-                                if (reportBlockIdx === researchBlockIdx) {
-                                  closeReport()
-                                } else {
-                                  openReport(researchBlockIdx)
-                                }
-                              }}
-                            />
-                            {isQuotaLocked && quotaLockedBlockId === block.id && (
-                              <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
-                                <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
-                                  Your daily quota is used up. Please sign in to continue in Canvas mode.
-                                </span>
-                                <SignUpButton mode="modal">
-                                  <button
-                                    type="button"
-                                    className="h-7 px-3 rounded-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors whitespace-nowrap"
-                                  >
-                                    Sign In
-                                  </button>
-                                </SignUpButton>
+                      {
+                        block && (
+                          <>
+                            <div className="mt-6">
+                              <InlineResearchBlock
+                                block={block}
+                                duration={getDurationForBlock(block)}
+                                isActiveReport={reportBlockIdx === researchBlockIdx}
+                                onToggleProgress={() => {
+                                  setResearchBlocks(prev => {
+                                    const copy = [...prev]
+                                    copy[researchBlockIdx] = { ...copy[researchBlockIdx], showProgress: !copy[researchBlockIdx].showProgress }
+                                    return copy
+                                  })
+                                }}
+                                onViewReport={() => {
+                                  if (reportBlockIdx === researchBlockIdx) {
+                                    closeReport()
+                                  } else {
+                                    openReport(researchBlockIdx)
+                                  }
+                                }}
+                              />
+                              {isQuotaLocked && quotaLockedBlockId === block.id && (
+                                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
+                                  <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
+                                    Your daily quota is used up. Please sign in to continue in Canvas mode.
+                                  </span>
+                                  <SignUpButton mode="modal">
+                                    <button
+                                      type="button"
+                                      className="h-7 px-3 rounded-md border border-[var(--border-subtle)] text-[11px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors whitespace-nowrap"
+                                    >
+                                      Sign In
+                                    </button>
+                                  </SignUpButton>
+                                </div>
+                              )}
+                            </div>
+                            {/* Action buttons below the research block */}
+                            {block.isComplete && (
+                              <div className="flex items-center gap-2 mt-2 ml-1 border-t border-[var(--border-subtle)] pt-2">
+                                <button onClick={() => handleCopy(msg.content)} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Copy response">
+                                  <Copy size={14} />
+                                </button>
+                                <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Helpful">
+                                  <ThumbsUp size={14} />
+                                </button>
+                                <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
+                                  <ThumbsDown size={14} />
+                                </button>
                               </div>
                             )}
-                          </div>
-                          {/* Action buttons below the research block */}
-                          {block.isComplete && (
-                            <div className="flex items-center gap-2 mt-2 ml-1 border-t border-[var(--border-subtle)] pt-2">
-                              <button onClick={() => handleCopy(msg.content)} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Copy response">
-                                <Copy size={14} />
-                              </button>
-                              <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Helpful">
-                                <ThumbsUp size={14} />
-                              </button>
-                              <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
-                                <ThumbsDown size={14} />
-                              </button>
-                            </div>
-                          )}
-                        </>
-                      )}
+                          </>
+                        )
+                      }
                     </div>
                   )
                 })}
@@ -1467,40 +1554,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
                 {/* Unified input card */}
                 <div className="flex flex-col bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-[var(--border-subtle)] focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
-                  {/* File chips at top */}
-                  {attachedFiles.length > 0 && (
-                    <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 border-b border-[var(--border-subtle)]/40">
-                      {attachedFiles.map((file) => (
-                        <div
-                          key={file.id}
-                          className={`flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg border text-sm transition-colors ${file.status === 'error'
-                            ? 'border-destructive/50 bg-destructive/10 text-destructive'
-                            : file.status === 'ready'
-                              ? 'border-[var(--border-subtle)] bg-[var(--secondary)] text-[var(--foreground)]'
-                              : 'border-[var(--accent)]/30 bg-[var(--accent)]/5 text-[var(--foreground)]'
-                            }`}
-                        >
-                          <div className="shrink-0 flex items-center justify-center relative w-7 h-7 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] overflow-hidden">
-                            {file.status === 'uploading' && (
-                              <div className="absolute inset-0 flex flex-col justify-end overflow-hidden opacity-20">
-                                <div className="bg-[var(--accent)] w-full transition-all duration-300" style={{ height: `${file.progress}%` }} />
-                              </div>
-                            )}
-                            <FileText className="h-3.5 w-3.5 text-[var(--muted-foreground)] z-10" />
-                          </div>
-                          <span className="truncate text-[13px] font-medium min-w-0 max-w-[160px]">{file.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(file.id)}
-                            className="p-1 rounded-md hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors ml-1 shrink-0"
-                            title="Remove file"
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* File chips removed from input per design */}
 
                   {/* Textarea */}
                   <textarea
@@ -1599,7 +1653,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
         </div>
       </div>
-    </div>
+    </div >
   )
 }
 

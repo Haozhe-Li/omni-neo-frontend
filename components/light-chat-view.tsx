@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign, Sparkles, Paperclip, FileText } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Copy, Check, ThumbsUp, ThumbsDown, Share, Menu, Search, Globe, X, CloudSun, ExternalLink, Droplets, Wind, Eye, TrendingUp, TrendingDown, Minus, Mic, Loader2, MoreHorizontal, DollarSign, Sparkles, Paperclip, FileText, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -478,8 +478,18 @@ const isUntitledTitle = (value?: string) => {
 }
 
 const inferTitleFromMessages = (messages: Message[], fallback: string) => {
+  let defaultTitle = fallback || ''
+  const mFallback = defaultTitle.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+  if (mFallback) defaultTitle = mFallback[2] || defaultTitle
+
   const firstUserMessage = messages.find((message) => message.role === 'user' && typeof message.content === 'string' && message.content.trim())
-  return firstUserMessage?.content?.trim() || fallback
+  if (!firstUserMessage) return defaultTitle
+  let content = firstUserMessage.content.trim()
+  const followUpMatch = content.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+  if (followUpMatch) {
+    content = followUpMatch[2] || content
+  }
+  return content || defaultTitle
 }
 
 const fetchedTitleThreadSet = new Set<string>()
@@ -1096,7 +1106,12 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
           <div className="absolute left-1/2 -translate-x-1/2 max-w-[50%] sm:max-w-[60%] text-center pointer-events-none">
             <span className="block text-sm font-medium tracking-tight text-foreground/90 truncate pointer-events-auto">
-              {title || query}
+              {(() => {
+                let displayTitle = title || query || ''
+                const m = displayTitle.match(/^User want to follow up this pages:\s*\n(\{[\s\S]*?\})\n\n([\s\S]*)$/)
+                if (m) displayTitle = m[2] || displayTitle
+                return displayTitle
+              })()}
             </span>
           </div>
 
@@ -1136,24 +1151,34 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                     <>
                       {/* Follow-up page card — rendered outside/above the user bubble */}
                       {isUser && followUpPage && (
-                        <a
-                          href={followUpPage.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full max-w-md mb-3 block rounded-xl overflow-hidden border border-[var(--border-subtle)]/60 bg-[var(--background)] shadow-[0_1px_6px_rgba(0,0,0,0.04)] hover:shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all group no-underline"
-                        >
-                          <div className="h-1 w-full bg-gradient-to-r from-[var(--accent)] to-teal-400" />
-                          <div className="flex items-center gap-3 px-4 py-3">
-                            <div className="h-9 w-9 flex items-center justify-center rounded-lg bg-[var(--accent)]/10 shrink-0 group-hover:bg-[var(--accent)]/15 transition-colors">
-                              <Sparkles className="h-4 w-4 text-[var(--accent)]" />
+                        <div className="w-full flex justify-end mb-6">
+                          <a
+                            href={followUpPage.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full sm:w-[500px] flex items-stretch overflow-hidden rounded-2xl border border-[var(--border-subtle)]/80 bg-[var(--background)] shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-md transition-all group no-underline"
+                          >
+                            <div className="flex flex-col flex-1 p-5 justify-center">
+                              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--muted-foreground)] mb-2.5 uppercase tracking-wide">
+                                <GitBranch className="h-3.5 w-3.5" />
+                                <span>Follow up to</span>
+                              </div>
+                              <p className="text-[15px] font-medium text-[var(--foreground)] leading-relaxed line-clamp-2 pr-2">
+                                {followUpPage.title}
+                              </p>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-medium text-[var(--muted-foreground)] tracking-wide mb-0.5">Following up on</p>
-                              <p className="text-sm font-semibold text-[var(--foreground)] truncate leading-snug">{followUpPage.title}</p>
+                            <div className="p-4 pl-0 flex items-center justify-center shrink-0">
+                              <div className="w-[84px] h-[84px] rounded-xl overflow-hidden bg-[var(--secondary)] border border-[var(--border-subtle)]/50">
+                                <img
+                                  src={followUpPage.image || `https://www.google.com/s2/favicons?domain=${getSourceDomain(followUpPage.url)}&sz=128`}
+                                  className="h-full w-full object-cover"
+                                  alt=""
+                                  onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.google.com/favicon.ico' }}
+                                />
+                              </div>
                             </div>
-                            <ExternalLink className="h-3.5 w-3.5 text-[var(--muted-foreground)] opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
-                          </div>
-                        </a>
+                          </a>
+                        </div>
                       )}
 
                       <div
@@ -1455,6 +1480,22 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
                         )}
 
                       </div>
+
+                      {/* Attached files — below bubble, flat neutral style */}
+                      {isUser && msg.attachedFiles && msg.attachedFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 justify-end mt-1.5">
+                          {msg.attachedFiles.map(file => (
+                            <div
+                              key={file.id}
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--secondary)]/50 text-[var(--muted-foreground)] text-[12px] border border-[var(--border-subtle)]/40"
+                            >
+                              <FileText className="h-3 w-3 shrink-0 opacity-60" />
+                              <span className="truncate max-w-[160px]">{file.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                     </>
                   )
                 })()}
@@ -1484,40 +1525,7 @@ export function LightChatView({ query, threadId, onNewSearch, onToggleSidebar, i
 
             {/* Unified input card */}
             <div className="flex flex-col bg-white dark:bg-[#121212] rounded-2xl shadow-sm border border-[var(--border-subtle)] focus-within:ring-1 focus-within:ring-[var(--accent)] transition-all">
-              {/* File chips at the top of the card */}
-              {attachedFiles.length > 0 && (
-                <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 border-b border-[var(--border-subtle)]/40">
-                  {attachedFiles.map((file) => (
-                    <div
-                      key={file.id}
-                      className={`flex items-center gap-2 pl-2 pr-1 py-1 rounded-lg border text-sm transition-colors ${file.status === 'error'
-                        ? 'border-destructive/50 bg-destructive/10 text-destructive'
-                        : file.status === 'ready'
-                          ? 'border-[var(--border-subtle)] bg-[var(--secondary)] text-[var(--foreground)]'
-                          : 'border-[var(--accent)]/30 bg-[var(--accent)]/5 text-[var(--foreground)]'
-                        }`}
-                    >
-                      <div className="shrink-0 flex items-center justify-center relative w-7 h-7 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] overflow-hidden">
-                        {file.status === 'uploading' && (
-                          <div className="absolute inset-0 flex flex-col justify-end overflow-hidden opacity-20">
-                            <div className="bg-[var(--accent)] w-full transition-all duration-300" style={{ height: `${file.progress}%` }} />
-                          </div>
-                        )}
-                        <FileText className="h-3.5 w-3.5 text-[var(--muted-foreground)] z-10" />
-                      </div>
-                      <span className="truncate text-[13px] font-medium min-w-0 max-w-[160px]">{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(file.id)}
-                        className="p-1 rounded-md hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors ml-1 shrink-0"
-                        title="Remove file"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* File chips removed from input per design */}
 
               {/* Textarea */}
               <textarea

@@ -1,16 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, BookOpen, ExternalLink } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, BookOpen, ExternalLink, SquarePen } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 interface StoredChat {
     thread_id: string
@@ -50,6 +51,7 @@ export function AppSidebar({
     const [mounted, setMounted] = useState(false)
     const [history, setHistory] = useState<StoredChat[]>([])
     const [searchQuery, setSearchQuery] = useState('')
+    const [isSearchVisible, setIsSearchVisible] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
 
     useEffect(() => { setMounted(true) }, [])
@@ -237,6 +239,36 @@ export function AppSidebar({
         chat.query.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
+    const searchGroupedHistory = useMemo(() => {
+        const today: StoredChat[] = []
+        const yesterday: StoredChat[] = []
+        const previous7Days: StoredChat[] = []
+        const previous30Days: StoredChat[] = []
+        const older: StoredChat[] = []
+
+        const now = new Date()
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        const yesterdayStart = todayStart - 86400000
+        const sevenDaysStart = todayStart - 7 * 86400000
+        const thirtyDaysStart = todayStart - 30 * 86400000
+
+        for (const chat of filteredHistory) {
+            if (chat.timestamp >= todayStart) today.push(chat)
+            else if (chat.timestamp >= yesterdayStart) yesterday.push(chat)
+            else if (chat.timestamp >= sevenDaysStart) previous7Days.push(chat)
+            else if (chat.timestamp >= thirtyDaysStart) previous30Days.push(chat)
+            else older.push(chat)
+        }
+
+        return [
+            { label: 'Today', items: today },
+            { label: 'Yesterday', items: yesterday },
+            { label: 'Previous 7 Days', items: previous7Days },
+            { label: 'Previous 30 Days', items: previous30Days },
+            { label: 'Older', items: older }
+        ].filter(g => g.items.length > 0)
+    }, [filteredHistory])
+
     const SidebarContent = (
         <>
             {/* Header / Toggle */}
@@ -347,32 +379,31 @@ export function AppSidebar({
                     )}
                 </Link>
 
-                {/* Search Input */}
-                {isExpanded && (
-                    <div className="relative group mt-2">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] group-focus-within:text-[var(--foreground)] transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="Search history..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-[var(--background)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-8 py-2 md:py-1.5 text-[16px] md:text-sm outline-none focus:border-[var(--muted-foreground)] transition-colors text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]"
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-md transition-colors"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
+                {/* Search History Toggle Button */}
+                <button
+                    onClick={() => {
+                        // Just open the search modal, no need to expand sidebar
+                        setIsSearchVisible(true)
+                    }}
+                    className={`
+                        flex items-center gap-3 w-full p-2 rounded-lg 
+                        hover:bg-[var(--secondary)] 
+                        transition-all duration-200
+                        ${!isExpanded ? 'justify-center' : ''}
+                        text-[var(--foreground)]
+                    `}
+                    title="Search chats"
+                >
+                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                        <Search size={18} />
                     </div>
-                )}
+                    {isExpanded && <span className="text-sm font-medium">Search History</span>}
+                </button>
             </div>
 
             {/* List Content (History) */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
-                {isExpanded ? (
+                {isExpanded && (
                     <>
                         {filteredHistory.map((chat) => (
                             <button
@@ -424,18 +455,10 @@ export function AppSidebar({
                         ))}
                         {filteredHistory.length === 0 && (
                             <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
-                                {searchQuery ? 'No results found' : 'No history yet'}
+                                No history yet
                             </div>
                         )}
                     </>
-                ) : (
-                    <button
-                        onClick={onToggle}
-                        className="flex items-center justify-center w-full p-2 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-all duration-200"
-                        title="Show History"
-                    >
-                        <History size={18} />
-                    </button>
                 )}
             </div>
 
@@ -519,6 +542,102 @@ export function AppSidebar({
                     )
                 )}
             </div>
+
+            {/* Search Dialog Modal */}
+            <Dialog open={isSearchVisible} onOpenChange={(open) => {
+                setIsSearchVisible(open)
+                if (!open) setSearchQuery('')
+            }}>
+                <DialogContent
+                    showCloseButton={false}
+                    overlayClassName="bg-black/5 dark:bg-black/40"
+                    className="p-0 border-0 sm:border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0 w-[100vw] h-[100dvh] max-w-none rounded-none !top-0 !left-0 !translate-x-0 !translate-y-0 sm:!top-[50%] sm:!left-[50%] sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:w-full sm:h-auto sm:max-h-[85vh] sm:max-w-[700px] sm:rounded-2xl"
+                >
+                    <DialogTitle className="sr-only">Search chats</DialogTitle>
+
+                    {/* Header Input */}
+                    <div className="flex items-center px-4 py-3 border-b border-[var(--border-subtle)] gap-2">
+                        <input
+                            type="text"
+                            placeholder="Search chats..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="flex-1 bg-transparent border-none outline-none text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] h-8"
+                            autoFocus
+                        />
+                        <button
+                            onClick={() => {
+                                setIsSearchVisible(false)
+                                setSearchQuery('')
+                            }}
+                            className="p-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-md transition-colors"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    {/* Scrollable List */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
+                        <button
+                            onClick={() => {
+                                if (onNewChat) onNewChat()
+                                setIsSearchVisible(false)
+                                setSearchQuery('')
+                                if (isMobile && onToggle) onToggle()
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-[var(--secondary)] text-[var(--foreground)] transition-colors text-left"
+                        >
+                            <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                                <Plus size={16} />
+                            </div>
+                            <span className="text-sm font-medium">New thread</span>
+                        </button>
+
+                        {searchGroupedHistory.length > 0 ? (
+                            <div className="space-y-6 pb-4">
+                                {searchGroupedHistory.map((group) => (
+                                    <div key={group.label} className="space-y-1.5">
+                                        <div className="px-3 text-xs font-semibold text-[var(--muted-foreground)]">
+                                            {group.label}
+                                        </div>
+                                        <div>
+                                            {group.items.map((chat) => (
+                                                <button
+                                                    key={chat.thread_id}
+                                                    onClick={() => {
+                                                        if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
+                                                        setIsSearchVisible(false)
+                                                        setSearchQuery('')
+                                                        if (isMobile && onToggle) onToggle()
+                                                    }}
+                                                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-[var(--secondary)] text-[var(--foreground)] transition-colors text-left"
+                                                >
+                                                    <div className="opacity-70 text-[var(--muted-foreground)]">
+                                                        {chat.model === 'canvas' ? (
+                                                            <Layout size={16} />
+                                                        ) : (
+                                                            <MessageSquare size={16} />
+                                                        )}
+                                                    </div>
+                                                    <span className="text-sm truncate flex-1">
+                                                        {chat.query}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            searchQuery && (
+                                <div className="py-8 text-center text-sm text-[var(--muted-foreground)]">
+                                    No results found
+                                </div>
+                            )
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </>
     )
 
