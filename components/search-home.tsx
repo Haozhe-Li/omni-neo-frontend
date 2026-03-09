@@ -254,13 +254,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }, [fetchThreadId])
 
-  // Pre-fetch thread_id as soon as the backend is ready so that the first
-  // uploadFile() and handleSubmit() always share the exact same ID.
-  useEffect(() => {
-    if (backendStatus === 'ready' && !threadIdRef.current) {
-      fetchThreadId().catch(() => { })
-    }
-  }, [backendStatus, fetchThreadId])
+  // NOTE: We intentionally do NOT pre-fetch thread_id here.
+  // Pre-fetching caused empty threads to be created on the backend before
+  // the user typed anything, which led to "Untitled Chat" ghosts in the sidebar.
+  // thread_id is fetched on-demand in handleSubmit / handleFileSelect / onDrop.
 
 
   // Auto-resize textarea

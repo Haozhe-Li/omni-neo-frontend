@@ -97,13 +97,19 @@ export function AppSidebar({
             const data = await res.json()
             if (!data.threads || !Array.isArray(data.threads)) return
 
-            const remoteItems: StoredChat[] = data.threads.map((t: any) => ({
-                thread_id: t.thread_id,
-                query: t.title || 'Untitled Chat',
-                timestamp: new Date(t.updated_at).getTime(),
-                model: 'auto',
-                isExpiring: false,
-            }))
+            const remoteItems: StoredChat[] = data.threads
+                .filter((t: any) => {
+                    // Filter out ghost threads that have no title (created by pre-fetching thread_id
+                    // before the user typed anything). They have no meaningful content.
+                    return t.title && t.title.trim() !== ''
+                })
+                .map((t: any) => ({
+                    thread_id: t.thread_id,
+                    query: t.title || 'Untitled Chat',
+                    timestamp: new Date(t.updated_at).getTime(),
+                    model: 'auto',
+                    isExpiring: false,
+                }))
 
             remoteItems.sort((a, b) => b.timestamp - a.timestamp)
             setHistory(remoteItems)
