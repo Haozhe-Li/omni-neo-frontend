@@ -475,7 +475,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   const KNOWN_TOOLS = new Set([
     'google_search', 'skimming_web_pages', 'load_web_page', 'verify_claim',
     'check_python_compile', 'draw_graph', 'write_file', 'read_file', 'edit_file',
-    'run_python_tool', 'get_history_trend', 'get_stock_data', 'read_user_document'
+    'run_python_tool', 'get_history_trend', 'get_stock_data', 'read_user_document', 'arxiv_search'
   ])
 
   const makeSSEHandler = useCallback((blockIdx: number) => {
@@ -1352,8 +1352,13 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                 </>
                               ) : (
                                 <div className="flex flex-col">
+                                  <div className="max-w-none blog-markdown markdown-body text-[16px] leading-[1.8]">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]}>
+                                      {preprocessMarkdown(msg.content)}
+                                    </ReactMarkdown>
+                                  </div>
                                   {msg.ready_to_begin_research && researchBlockIdx < 0 && !isChatLoading && !isResearching && (
-                                    <div className="mb-6 pb-6 border-b border-[var(--border-subtle)]/60 flex flex-col items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
+                                    <div className="mt-6 pt-6 border-t border-[var(--border-subtle)]/60 flex flex-col items-start gap-4 animate-in fade-in slide-in-from-top-2 duration-500">
                                       {rewrittenQuery && (
                                         <div className="w-full bg-[var(--background)] border border-[var(--active-border)]/20 rounded-xl p-4 shadow-sm">
                                           <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -1403,11 +1408,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                       </div>
                                     </div>
                                   )}
-                                  <div className="max-w-none blog-markdown markdown-body text-[16px] leading-[1.8]">
-                                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]}>
-                                      {preprocessMarkdown(msg.content)}
-                                    </ReactMarkdown>
-                                  </div>
                                 </div>
                               )}
 
@@ -1424,17 +1424,6 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                       onSubmit={(selections) => handleQuestionSubmit(i, selections)}
                                     />
                                   )}
-                                  <div className="flex items-center gap-2 mt-2 border-t border-[var(--border-subtle)] pt-2">
-                                    <button onClick={() => handleCopy(msg.content)} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Copy">
-                                      <Copy size={14} />
-                                    </button>
-                                    <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Helpful">
-                                      <ThumbsUp size={14} />
-                                    </button>
-                                    <button onClick={handleFeatureComingSoon} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors" title="Not Helpful">
-                                      <ThumbsDown size={14} />
-                                    </button>
-                                  </div>
                                 </>
                               )}
 

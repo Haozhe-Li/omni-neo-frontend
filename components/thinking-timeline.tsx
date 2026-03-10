@@ -270,6 +270,11 @@ function ToolContent({ message }: { message: SSEMessage }) {
           label: 'Searching',
           detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
+      case 'arxiv_search':
+        return {
+          label: 'Searching',
+          detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
+        }
       case 'skimming_web_pages':
       case 'load_web_page': {
         const urls = args.urls || args.url || ''
