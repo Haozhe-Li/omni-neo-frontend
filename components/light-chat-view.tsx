@@ -353,7 +353,7 @@ function getStepLabel(step: LightChatStep) {
   if (step.tool === 'load_web_page_light') {
     return `Visiting web page "${step.args?.url || '...'}"`
   }
-  if (step.tool === 'search_in_document') {
+  if (step.tool === 'read_user_document') {
     return `Reading attached files...`
   }
   return `Using ${step.tool}`

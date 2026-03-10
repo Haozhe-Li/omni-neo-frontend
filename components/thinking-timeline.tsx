@@ -299,7 +299,7 @@ function ToolContent({ message }: { message: SSEMessage }) {
           )
         }
       }
-      case 'search_in_document':
+      case 'read_user_document':
         return {
           label: 'Reading User Documents',
           detail: null
