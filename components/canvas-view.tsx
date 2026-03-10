@@ -1266,10 +1266,10 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
         <div className={`absolute inset-0 flex transition-opacity duration-250 ease-in-out ${isFading ? 'opacity-0' : 'opacity-100'}`}>
 
           {/* ── LEFT: Chat panel ── */}
-          <div className={`flex flex-col min-h-0 bg-[var(--background)] relative transition-all duration-300 ${isReportOpen && !isMobile
+          <div className={`${isReportOpen && isMobile ? 'hidden' : 'flex'} flex-col min-h-0 bg-[var(--background)] relative transition-all duration-300 ${isReportOpen && !isMobile
             ? 'w-[400px] lg:w-[480px] xl:w-[550px] border-r border-[var(--border-subtle)] shrink-0'
             : 'flex-1'
-            } ${isReportOpen && isMobile ? 'hidden' : ''}`}>
+            }`}>
 
             {/* Chat scroll */}
             <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
