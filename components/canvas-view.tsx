@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip, GitBranch, Sparkles, ExternalLink } from 'lucide-react'
+import { Telescope, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip, GitBranch, Sparkles, ExternalLink, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
@@ -48,6 +48,8 @@ interface ChatMessage {
   canvas_state?: CanvasPersistState
   questions_for_user?: { question: string; options: string[] }[]
   questions_submitted?: boolean
+  is_questions_submission?: boolean
+  survey_answers?: Record<string, string>
 }
 
 interface CanvasPersistState {
@@ -137,39 +139,50 @@ function QuestionSelector({
   const allAnswered = questions.every(q => selections[q.question]);
 
   return (
-    <div className="mt-5 flex flex-col gap-6 border border-[var(--border-subtle)] bg-[var(--background)]/50 p-5 rounded-xl shadow-sm">
-      {questions.map((q, idx) => (
-        <div key={idx} className="flex flex-col gap-3">
-          <div className="text-[15px] font-medium text-[var(--foreground)] leading-snug">{q.question}</div>
-          <div className="flex flex-wrap gap-2">
-            {q.options.map((opt, oIdx) => {
-              const selected = selections[q.question] === opt;
-              return (
-                <button
-                  key={oIdx}
-                  onClick={() => handleSelect(q.question, opt)}
-                  disabled={isSubmitted}
-                  className={`px-3.5 py-1.5 text-sm rounded-lg border transition-colors duration-200 ${selected
-                    ? 'bg-[var(--accent)] text-white border-[var(--accent)] shadow-sm'
-                    : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border-subtle)] hover:border-[var(--accent)]/50'
-                    } ${isSubmitted ? 'opacity-70 cursor-not-allowed' : ''}`}
-                >
-                  {opt}
-                </button>
-              );
-            })}
+    <div className="mt-5 rounded-xl border border-[var(--border-subtle)] bg-[var(--background)] overflow-hidden">
+      <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--border-subtle)]/50">
+        <span className="text-sm font-medium text-[var(--foreground)]">Survey</span>
+        <span className="text-xs text-[var(--muted-foreground)]">· {questions.length} questions</span>
+      </div>
+
+      <div className="p-5 space-y-6">
+        {questions.map((q, idx) => (
+          <div key={idx} className="space-y-3">
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-medium text-[var(--muted-foreground)] bg-[var(--secondary)]/60 rounded-full w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">{idx + 1}</span>
+              <div className="text-[15px] text-[var(--foreground)] leading-relaxed font-medium">
+                {q.question}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-8">
+              {q.options.map((opt, oIdx) => {
+                const selected = selections[q.question] === opt;
+                let optClass = 'border-[var(--border-subtle)] hover:border-[var(--foreground)]/30'
+                if (selected) optClass = 'border-[var(--foreground)]/50 bg-[var(--secondary)]/40 font-medium'
+
+                return (
+                  <button
+                    key={oIdx}
+                    onClick={() => handleSelect(q.question, opt)}
+                    disabled={isSubmitted}
+                    className={`relative text-left px-4 py-2.5 rounded-lg border text-sm transition-all duration-200 ${optClass} ${isSubmitted ? 'cursor-default opacity-60' : 'cursor-pointer'}`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
-      <div className="pt-1">
+        ))}
+      </div>
+
+      <div className="px-5 pb-5">
         <button
           onClick={handleSub}
           disabled={!allAnswered || isSubmitted}
-          className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 shadow-sm ${isSubmitted
-            ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] border border-[var(--border-subtle)]'
-            : !allAnswered
-              ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed border border-[var(--border-subtle)]/50'
-              : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
+          className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${allAnswered && !isSubmitted
+            ? 'bg-[var(--foreground)] text-[var(--background)] hover:opacity-90'
+            : 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed border border-[var(--border-subtle)]/50'
             }`}
         >
           {isSubmitted ? 'Submitted' : 'Submit Answers'}
@@ -608,7 +621,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
   }
 
   // ── Chat helper ────────────────────────────────────────────────────
-  const fetchHelper = async (userQuery: string, isInitial = false, prevMessages: ChatMessage[] = chatMessages, currentFollowUpText?: string) => {
+  const fetchHelper = async (userQuery: string, isInitial = false, prevMessages: ChatMessage[] = chatMessages, currentFollowUpText?: string, isQuestionsSubmission = false) => {
     setIsChatLoading(true)
 
     let updatedMessages = [...prevMessages]
@@ -624,6 +637,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
       role: 'user',
       content: userQuery,
       follow_up_content: currentFollowUpText,
+      is_questions_submission: isQuestionsSubmission,
       ...(fileMeta.length > 0 && { attachedFiles: fileMeta })
     }
 
@@ -1212,11 +1226,11 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
 
   const handleQuestionSubmit = (messageIndex: number, selections: Record<string, string>) => {
     const copy = [...chatMessages];
-    copy[messageIndex] = { ...copy[messageIndex], questions_submitted: true };
+    copy[messageIndex] = { ...copy[messageIndex], questions_submitted: true, survey_answers: selections };
     setChatMessages(copy);
 
     const combinedAnswers = Object.entries(selections).map(([q, a]) => `Question: ${q}\nAnswer: ${a}`).join('\n\n');
-    fetchHelper(combinedAnswers, false, copy, '');
+    fetchHelper(combinedAnswers, false, copy, '', true);
   };
 
   const isResearching = activeResearchIdx >= 0 && !researchBlocks[activeResearchIdx]?.isComplete
@@ -1290,7 +1304,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                       <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`
                           rounded-2xl px-5 py-3 flex flex-col gap-2
-                          ${msg.role === 'user' ? 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]' : 'w-full bg-transparent text-[var(--foreground)]'}
+                          ${msg.role === 'user' ? (msg.is_questions_submission ? 'p-0 bg-transparent w-full max-w-[85%]' : 'max-w-[85%] bg-[var(--secondary)] text-[var(--foreground)]') : 'w-full bg-transparent text-[var(--foreground)]'}
                         `}>
                           {msg.role === 'assistant' && msg.content === '...' ? (
                             <div className="flex flex-col gap-3 w-full py-1 min-w-[240px] sm:min-w-[320px]">
@@ -1306,7 +1320,33 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                             </div>
                           ) : (
                             <div className="animate-in fade-in slide-in-from-bottom-2 duration-700 ease-out fill-mode-both">
-                              {msg.role === 'user' ? (
+                              {msg.role === 'user' && msg.is_questions_submission ? (() => {
+                                const prevMsg = i > 0 ? chatMessages[i - 1] : null
+                                const questions = prevMsg?.questions_for_user
+                                const answers = prevMsg?.survey_answers
+                                const total = questions?.length ?? 0
+                                return (
+                                  <div className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/20 overflow-hidden">
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]/50">
+                                      <div className="flex items-center gap-2">
+                                        <Check className="h-3.5 w-3.5 text-[var(--accent)]" strokeWidth={2.5} />
+                                        <span className="text-sm font-medium text-[var(--foreground)]">Questions Submitted</span>
+                                      </div>
+                                      <span className="text-xs text-[var(--muted-foreground)]">· {total} answered</span>
+                                    </div>
+                                    {questions && answers && (
+                                      <div className="px-4 py-3 space-y-3">
+                                        {questions.map((q, qi) => (
+                                          <div key={qi} className="text-[13px]">
+                                            <div className="text-[var(--muted-foreground)] mb-0.5 font-medium">{q.question}</div>
+                                            <div className="text-[var(--foreground)] opacity-90">{answers[q.question]}</div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })() : msg.role === 'user' ? (
                                 <>
                                   {msg.follow_up_content && (() => {
                                     let followUpPageText = msg.follow_up_content
@@ -1362,7 +1402,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                       {rewrittenQuery && (
                                         <div className="w-full bg-[var(--background)] border border-[var(--active-border)]/20 rounded-xl p-4 shadow-sm">
                                           <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                            <Layout size={14} className="opacity-70" />
+                                            <Telescope size={14} className="opacity-70" />
                                             Research Topic
                                           </div>
                                           <div className="text-[15px] text-[var(--foreground)] font-medium leading-relaxed">
@@ -1385,7 +1425,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                               : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
                                               }`}
                                           >
-                                            <Layout size={16} />
+                                            <Telescope size={16} />
                                             Start Research
                                           </button>
                                           <button
@@ -1658,7 +1698,7 @@ function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress
           }}
         />
       )}
-      {/* Header: always stacked column layout */}
+      {/* Header: always stacked column Telescope */}
       <div className="flex flex-col gap-3">
         {/* Icon + title */}
         <div className="flex items-start gap-3 overflow-hidden min-w-0">
@@ -1666,7 +1706,7 @@ function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress
             {!block.isComplete ? (
               <div className="h-2 w-2 rounded-full bg-[var(--accent)]/80" />
             ) : (
-              <Layout className="h-4 w-4 text-[var(--accent)]" />
+              <Telescope className="h-4 w-4 text-[var(--accent)]" />
             )}
           </div>
           <div className="flex-1 min-w-0">

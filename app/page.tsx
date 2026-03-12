@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { SearchHome } from '@/components/search-home'
 import { CanvasView } from '@/components/canvas-view'
 import { LightChatView } from '@/components/light-chat-view'
+import { GuidedLearningView } from '@/components/guided-learning-view'
 import { AppSidebar } from '@/components/app-sidebar'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -13,10 +14,10 @@ import { useAuth, useClerk } from '@clerk/nextjs'
 // ... imports
 import { useIsMobile } from '@/hooks/use-mobile'
 
-type ModelType = 'canvas' | 'light' | 'auto'
+type ModelType = 'canvas' | 'light' | 'auto' | 'guided_learning'
 
 export default function Home() {
-  const [view, setView] = useState<'home' | 'canvas' | 'light'>('home')
+  const [view, setView] = useState<'home' | 'canvas' | 'light' | 'guided_learning'>('home')
   const [currentQuery, setCurrentQuery] = useState('')
   const [currentThreadId, setCurrentThreadId] = useState('')
   const [model, setModel] = useState<ModelType>('auto')
@@ -47,7 +48,7 @@ export default function Home() {
     const loadModel = () => {
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('omni_model_preference')
-        if (saved === 'canvas' || saved === 'light' || saved === 'auto') {
+        if (saved === 'canvas' || saved === 'light' || saved === 'auto' || saved === 'guided_learning') {
           setModel(saved)
         }
       }
@@ -164,7 +165,11 @@ export default function Home() {
         clerk.openSignIn()
         return
       }
-      setView(model)
+      if (model === 'guided_learning') {
+        setView('guided_learning')
+      } else {
+        setView(model as 'canvas' | 'light')
+      }
     }
   }, [model, quotaExceeded, isSignedIn, clerk])
 
@@ -195,6 +200,10 @@ export default function Home() {
           const remoteMessages = Array.isArray(data?.messages) ? data.messages : []
           const remoteMode = typeof remoteMessages?.[0]?.mode === 'string' ? remoteMessages[0].mode : null
 
+          if (remoteMode === 'guided_learning') {
+            setView('guided_learning')
+            return
+          }
           if (remoteMode === 'light') {
             setView('light')
             return
@@ -214,6 +223,10 @@ export default function Home() {
       if (stored) {
         try {
           const data = JSON.parse(stored)
+          if (data.type === 'guided_learning' || data.model === 'guided_learning') {
+            setView('guided_learning')
+            return
+          }
           if (data.type === 'light' || data.model === 'light') {
             setView('light')
             return
@@ -319,6 +332,17 @@ export default function Home() {
             isMobile={isMobile}
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}
+            initialAttachedFileIds={pendingAttachments}
+            initialAttachedFileMeta={pendingAttachmentMeta}
+          />
+        ) : view === 'guided_learning' ? (
+          <GuidedLearningView
+            key={currentThreadId}
+            query={currentQuery}
+            threadId={currentThreadId}
+            onNewSearch={handleNewSearch}
+            onToggleSidebar={toggleSidebar}
+            isMobile={isMobile}
             initialAttachedFileIds={pendingAttachments}
             initialAttachedFileMeta={pendingAttachmentMeta}
           />

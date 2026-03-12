@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Layout, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, BookOpen, ExternalLink, SquarePen } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, ExternalLink, SquarePen } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -369,7 +369,7 @@ export function AppSidebar({
                     title="Omni Pages (Opens in new tab)"
                 >
                     <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <BookOpen size={18} />
+                        <Library size={18} />
                     </div>
                     {isExpanded && (
                         <div className="flex items-center justify-between flex-1 min-w-0">
@@ -423,7 +423,7 @@ export function AppSidebar({
                             >
                                 <div className="mt-0.5">
                                     {chat.model === 'canvas' ? (
-                                        <Layout size={16} className="min-w-[16px]" />
+                                        <Telescope size={16} className="min-w-[16px]" />
                                     ) : (
                                         <MessageSquare size={16} className="min-w-[16px]" />
                                     )}
@@ -459,11 +459,12 @@ export function AppSidebar({
                             </div>
                         )}
                     </>
-                )}
-            </div>
+                )
+                }
+            </div >
 
             {/* Footer / Settings + User */}
-            <div className="p-3 border-t border-[var(--border-subtle)] space-y-1">
+            < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
                 <button
                     onClick={() => {
                         if (pathname !== '/settings') {
@@ -485,66 +486,68 @@ export function AppSidebar({
                 </button>
 
                 {/* Auth row — only render after mount to avoid SSR/client hydration mismatch */}
-                {mounted && (
-                    isSignedIn ? (
-                        <div className={`
+                {
+                    mounted && (
+                        isSignedIn ? (
+                            <div className={`
                             flex items-center gap-3 w-full p-2 rounded-lg
                             text-[var(--muted-foreground)]
                             ${!isExpanded ? 'justify-center' : ''}
                         `}>
-                            {user?.imageUrl ? (
-                                <img
-                                    src={user.imageUrl}
-                                    alt=""
-                                    className="w-[22px] h-[22px] rounded-full shrink-0 ring-1 ring-[var(--border-subtle)]"
-                                />
-                            ) : (
-                                <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
-                                    <User size={12} className="text-[var(--accent)]" />
-                                </div>
-                            )}
-                            {isExpanded && (
-                                <>
-                                    <span className="text-sm truncate flex-1">
-                                        {user?.firstName || 'Account'}
-                                    </span>
-                                    <button
-                                        onClick={async () => {
-                                            await clerk.signOut()
-                                            if (typeof window !== 'undefined') {
-                                                window.location.reload()
-                                            }
-                                        }}
-                                        className="p-1 rounded-md hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
-                                        title="Sign Out"
-                                    >
-                                        <LogOut size={14} />
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    ) : (
-                        <SignUpButton mode="modal">
-                            <button
-                                className={`
+                                {user?.imageUrl ? (
+                                    <img
+                                        src={user.imageUrl}
+                                        alt=""
+                                        className="w-[22px] h-[22px] rounded-full shrink-0 ring-1 ring-[var(--border-subtle)]"
+                                    />
+                                ) : (
+                                    <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
+                                        <User size={12} className="text-[var(--accent)]" />
+                                    </div>
+                                )}
+                                {isExpanded && (
+                                    <>
+                                        <span className="text-sm truncate flex-1">
+                                            {user?.firstName || 'Account'}
+                                        </span>
+                                        <button
+                                            onClick={async () => {
+                                                await clerk.signOut()
+                                                if (typeof window !== 'undefined') {
+                                                    window.location.reload()
+                                                }
+                                            }}
+                                            className="p-1 rounded-md hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
+                                            title="Sign Out"
+                                        >
+                                            <LogOut size={14} />
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        ) : (
+                            <SignUpButton mode="modal">
+                                <button
+                                    className={`
                                     flex items-center gap-3 w-full p-2 rounded-lg
                                     text-[var(--muted-foreground)]
                                     hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
                                     transition-all duration-200
                                     ${!isExpanded ? 'justify-center' : ''}
                                 `}
-                                title="Get started to sync your history and settings"
-                            >
-                                <User size={18} />
-                                {isExpanded && <span className="text-sm">Sign In</span>}
-                            </button>
-                        </SignUpButton>
+                                    title="Get started to sync your history and settings"
+                                >
+                                    <User size={18} />
+                                    {isExpanded && <span className="text-sm">Sign In</span>}
+                                </button>
+                            </SignUpButton>
+                        )
                     )
-                )}
-            </div>
+                }
+            </div >
 
             {/* Search Dialog Modal */}
-            <Dialog open={isSearchVisible} onOpenChange={(open) => {
+            < Dialog open={isSearchVisible} onOpenChange={(open) => {
                 setIsSearchVisible(open)
                 if (!open) setSearchQuery('')
             }}>
@@ -614,7 +617,7 @@ export function AppSidebar({
                                                 >
                                                     <div className="opacity-70 text-[var(--muted-foreground)]">
                                                         {chat.model === 'canvas' ? (
-                                                            <Layout size={16} />
+                                                            <Telescope size={16} />
                                                         ) : (
                                                             <MessageSquare size={16} />
                                                         )}
@@ -637,7 +640,7 @@ export function AppSidebar({
                         )}
                     </div>
                 </DialogContent>
-            </Dialog>
+            </Dialog >
         </>
     )
 

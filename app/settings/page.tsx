@@ -23,7 +23,7 @@ import {
     Database,
     Menu,
     BrainCircuit,
-    Layout,
+    Telescope,
     User,
     Waypoints,
     Trash2,
@@ -53,7 +53,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
-type ModelType = 'auto' | 'canvas' | 'light'
+type ModelType = 'auto' | 'canvas' | 'light' | 'guided_learning'
 type ThemeType = 'system' | 'dark' | 'light'
 
 const APP_VERSION = '0.2.0'
@@ -100,7 +100,7 @@ export default function SettingsPage() {
         setMounted(true)
         if (typeof window !== 'undefined') {
             const savedModel = localStorage.getItem('omni_model_preference')
-            if (savedModel === 'canvas' || savedModel === 'light' || savedModel === 'auto') {
+            if (savedModel === 'canvas' || savedModel === 'light' || savedModel === 'auto' || savedModel === 'guided_learning') {
                 setChatModel(savedModel)
             }
             const savedLang = localStorage.getItem('omni_response_language')
@@ -341,7 +341,7 @@ export default function SettingsPage() {
                                         value="canvas"
                                         title="Canvas"
                                         description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Comprehensive report on Canvas, with multi-step reasoning and deep research.'}
-                                        icon={<Layout size={16} />}
+                                        icon={<Telescope size={16} />}
                                         active={chatModel === 'canvas'}
                                         onClick={() => handleModelChange('canvas')}
                                         locked={quotaExceeded}
@@ -354,6 +354,14 @@ export default function SettingsPage() {
                                         icon={<MessageSquare size={16} />}
                                         active={chatModel === 'light'}
                                         onClick={() => handleModelChange('light')}
+                                    />
+                                    <ModelOption
+                                        value="guided_learning"
+                                        title="Guided Learning"
+                                        description="Interactive learning with quizzes, flashcards, and study notes."
+                                        icon={<BookOpen size={16} />}
+                                        active={chatModel === 'guided_learning'}
+                                        onClick={() => handleModelChange('guided_learning')}
                                     />
                                 </div>
                             </div>

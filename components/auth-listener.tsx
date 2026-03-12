@@ -8,7 +8,7 @@ import { useApi } from '@/hooks/useApi'
 /**
  * AuthListener
  *
- * Mounts at the top of the app (in layout.tsx).
+ * Mounts at the top of the app (in Telescope.tsx).
  * When a guest user signs in, it automatically migrates all their
  * locally-stored chat history from the guest_id to their new user account,
  * then clears the guest_id from localStorage.

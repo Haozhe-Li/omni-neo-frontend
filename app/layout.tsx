@@ -76,7 +76,7 @@ export const metadata: Metadata = {
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 
-export default function RootLayout({
+export default function RootTelescope({
   children,
 }: Readonly<{
   children: React.ReactNode

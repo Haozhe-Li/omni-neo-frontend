@@ -12,7 +12,7 @@ import {
   Download,
   X,
   Share,
-  Layout,
+  Telescope,
   Lock,
   Globe,
   Loader2
@@ -447,7 +447,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
         /* ── Normal editable header ── */
         <div className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 bg-card/95 backdrop-blur-md border-b border-border/50 rounded-t-xl">
           <div className="flex items-center gap-2 text-[var(--muted-foreground)] font-medium text-sm sm:text-[15px]">
-            <Layout size={16} className="opacity-70" />
+            <Telescope size={16} className="opacity-70" />
             Report
           </div>
 

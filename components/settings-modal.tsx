@@ -6,8 +6,8 @@ import { useState, useEffect } from 'react'
 interface SettingsModalProps {
     isOpen: boolean
     onClose: () => void
-    model: 'canvas' | 'light'
-    onModelChange: (model: 'canvas' | 'light') => void
+    model: 'canvas' | 'light' | 'guided_learning'
+    onModelChange: (model: 'canvas' | 'light' | 'guided_learning') => void
     quotaExceeded?: boolean
 }
 
@@ -64,7 +64,7 @@ export function SettingsModal({ isOpen, onClose, model, onModelChange, quotaExce
                 <div className="p-6 space-y-6">
                     <div className="space-y-3">
                         <label className="text-sm font-medium text-[var(--muted-foreground)] uppercase tracking-wider">Model Preference</label>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                             <button
                                 onClick={() => !quotaExceeded && setLocalModel('canvas')}
                                 disabled={quotaExceeded}
@@ -103,6 +103,25 @@ export function SettingsModal({ isOpen, onClose, model, onModelChange, quotaExce
                                 </div>
                                 <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
                                     Fast, direct answers in a traditional chat interface without visible reasoning steps.
+                                </p>
+                            </button>
+
+                            <button
+                                onClick={() => setLocalModel('guided_learning')}
+                                className={`
+                    relative p-4 rounded-xl border-2 text-left transition-all duration-200
+                    ${localModel === 'guided_learning'
+                                        ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+                                        : 'border-transparent bg-[var(--secondary)] hover:bg-[var(--secondary)]/80'
+                                    }
+                `}
+                            >
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className={`font-semibold ${localModel === 'guided_learning' ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>Guided Learning</span>
+                                    {localModel === 'guided_learning' && <div className="w-2 h-2 rounded-full bg-[var(--accent)]" />}
+                                </div>
+                                <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                                    Interactive learning with quizzes, flashcards, and study notes.
                                 </p>
                             </button>
                         </div>
