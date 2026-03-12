@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, ExternalLink, SquarePen } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, layout, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, ExternalLink, SquarePen } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -423,7 +423,7 @@ export function AppSidebar({
                             >
                                 <div className="mt-0.5">
                                     {chat.model === 'canvas' ? (
-                                        <Telescope size={16} className="min-w-[16px]" />
+                                        <layout size={16} className="min-w-[16px]" />
                                     ) : (
                                         <MessageSquare size={16} className="min-w-[16px]" />
                                     )}
@@ -617,7 +617,7 @@ export function AppSidebar({
                                                 >
                                                     <div className="opacity-70 text-[var(--muted-foreground)]">
                                                         {chat.model === 'canvas' ? (
-                                                            <Telescope size={16} />
+                                                            <layout size={16} />
                                                         ) : (
                                                             <MessageSquare size={16} />
                                                         )}

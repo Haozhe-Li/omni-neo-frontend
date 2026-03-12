@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { Telescope, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip, GitBranch, Sparkles, ExternalLink, Check } from 'lucide-react'
+import { layout, Clock, FileText, Menu, AlertCircle, ArrowUp, X, Copy, ThumbsUp, ThumbsDown, Share, Mic, Loader2, Paperclip, GitBranch, Sparkles, ExternalLink, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { ThinkingTimeline } from '@/components/thinking-timeline'
 import { ResearchProgress } from '@/components/research-progress'
@@ -1402,7 +1402,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                       {rewrittenQuery && (
                                         <div className="w-full bg-[var(--background)] border border-[var(--active-border)]/20 rounded-xl p-4 shadow-sm">
                                           <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                            <Telescope size={14} className="opacity-70" />
+                                            <layout size={14} className="opacity-70" />
                                             Research Topic
                                           </div>
                                           <div className="text-[15px] text-[var(--foreground)] font-medium leading-relaxed">
@@ -1425,7 +1425,7 @@ export function CanvasView({ query, threadId, onNewSearch, onToggleSidebar, isMo
                                               : 'bg-[var(--accent)] text-white hover:opacity-90 hover:scale-[1.02]'
                                               }`}
                                           >
-                                            <Telescope size={16} />
+                                            <layout size={16} />
                                             Start Research
                                           </button>
                                           <button
@@ -1698,7 +1698,7 @@ function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress
           }}
         />
       )}
-      {/* Header: always stacked column Telescope */}
+      {/* Header: always stacked column layout */}
       <div className="flex flex-col gap-3">
         {/* Icon + title */}
         <div className="flex items-start gap-3 overflow-hidden min-w-0">
@@ -1706,7 +1706,7 @@ function InlineResearchBlock({ block, duration, isActiveReport, onToggleProgress
             {!block.isComplete ? (
               <div className="h-2 w-2 rounded-full bg-[var(--accent)]/80" />
             ) : (
-              <Telescope className="h-4 w-4 text-[var(--accent)]" />
+              <layout className="h-4 w-4 text-[var(--accent)]" />
             )}
           </div>
           <div className="flex-1 min-w-0">

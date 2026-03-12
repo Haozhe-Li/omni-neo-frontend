@@ -1,4 +1,4 @@
-import { useRef, useTelescopeEffect, useState, useEffect } from 'react'
+import { useRef, useLayoutEffect, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { BookOpen, Copy, MessageSquarePlus, X, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,8 +31,8 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
     const [verifiedSource, setVerifiedSource] = useState<Source | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
 
-    // Use useTelescopeEffect to prevent initial flash at 0,0 by updating position before paint
-    useTelescopeEffect(() => {
+    // Use useLayoutEffect to prevent initial flash at 0,0 by updating position before paint
+    useLayoutEffect(() => {
         if (!isVisible || !menuRef.current || !activeRangeRef.current) return
 
         const updatePosition = () => {
