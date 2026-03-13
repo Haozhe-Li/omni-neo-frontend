@@ -23,7 +23,7 @@ import {
     Database,
     Menu,
     BrainCircuit,
-    layout,
+    Telescope,
     User,
     Waypoints,
     Trash2,
@@ -341,7 +341,7 @@ export default function SettingsPage() {
                                         value="canvas"
                                         title="Canvas"
                                         description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Comprehensive report on Canvas, with multi-step reasoning and deep research.'}
-                                        icon={<layout size={16} />}
+                                        icon={<Telescope size={16} />}
                                         active={chatModel === 'canvas'}
                                         onClick={() => handleModelChange('canvas')}
                                         locked={quotaExceeded}
