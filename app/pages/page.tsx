@@ -83,7 +83,7 @@ export default async function OmniPagesList() {
                     <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-center">
                         <div className="relative w-full lg:w-[60%] aspect-[16/9] rounded-2xl overflow-hidden shadow-lg">
                             <Image
-                                src="/omniknows_pages.png"
+                                src="/omniknows_pages.webp"
                                 alt="Omni Knows"
                                 fill
                                 className="object-cover"
