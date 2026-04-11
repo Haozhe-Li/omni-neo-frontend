@@ -12,6 +12,16 @@ import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogFooter,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogAction,
+    AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 
 interface StoredChat {
     thread_id: string
@@ -53,8 +63,16 @@ export function AppSidebar({
     const [searchQuery, setSearchQuery] = useState('')
     const [isSearchVisible, setIsSearchVisible] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+    const [threadToDelete, setThreadToDelete] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [loadingAction, setLoadingAction] = useState<string | null>(null)
 
     useEffect(() => { setMounted(true) }, [])
+
+    useEffect(() => {
+        setLoadingAction(null)
+    }, [pathname, currentThreadId])
 
     // ── 1. Fast localStorage scan (runs every 2 s, no network) ────────
     const loadLocalHistory = useCallback(() => {
@@ -183,23 +201,32 @@ export function AppSidebar({
         items.forEach(item => localStorage.setItem(item.key, item.value))
     }, [])
 
-    const handleDelete = async (e: React.MouseEvent, threadId: string) => {
+    const onSingleDeleteClick = (e: React.MouseEvent, threadId: string) => {
         e.stopPropagation()
+        setThreadToDelete(threadId)
+    }
+
+    const handleDeleteConfirm = async () => {
+        if (!threadToDelete) return
+        setIsDeleting(true)
+
         if (typeof window !== 'undefined') {
-            const removedLocalItems = removeThreadLocalCache(threadId)
-            setHistory(prev => prev.filter(item => item.thread_id !== threadId))
+            const removedLocalItems = removeThreadLocalCache(threadToDelete)
+            setHistory(prev => prev.filter(item => item.thread_id !== threadToDelete))
 
             if (!isSignedIn) {
-                // Guest mode is local-only: skip cloud delete
-                if (threadId === currentThreadId && onNewChat) {
+                // Guest mode: local-only
+                if (threadToDelete === currentThreadId && onNewChat) {
                     onNewChat()
                 }
+                setThreadToDelete(null)
+                setIsDeleting(false)
                 return
             }
 
             try {
                 const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-                const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadId}`, { method: 'DELETE' })
+                const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadToDelete}`, { method: 'DELETE' })
                 if (!res.ok) {
                     restoreRemovedLocalCache(removedLocalItems)
                     if (isSignedIn) {
@@ -208,11 +235,13 @@ export function AppSidebar({
                         loadLocalHistory()
                     }
                     toast.error('Delete failed on server')
+                    setThreadToDelete(null)
+                    setIsDeleting(false)
                     return
                 }
 
                 // If deleted active thread, go to new chat
-                if (threadId === currentThreadId && onNewChat) {
+                if (threadToDelete === currentThreadId && onNewChat) {
                     onNewChat()
                 }
 
@@ -228,6 +257,80 @@ export function AppSidebar({
                 }
                 toast.error('Network error while deleting thread')
             }
+        }
+        setThreadToDelete(null)
+        setIsDeleting(false)
+    }
+
+    const handleBulkDelete = async () => {
+        if (history.length === 0) {
+            toast.error('No threads to delete')
+            setIsDeleteConfirmOpen(false)
+            return
+        }
+        setIsDeleting(true)
+        const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+        let deletedCount = 0
+        let failedCount = 0
+
+        for (const chat of history) {
+            if (isSignedIn) {
+                try {
+                    const res = await fetchWithAuth(`${backendUrl}/api/threads/${chat.thread_id}`, { method: 'DELETE' })
+                    if (res.ok) {
+                        deletedCount++
+                    } else {
+                        failedCount++
+                    }
+                } catch {
+                    failedCount++
+                }
+            } else {
+                deletedCount++
+            }
+        }
+
+        // Force clear ALL local history regardless of cloud state
+        if (typeof window !== 'undefined') {
+            const keys = Object.keys(localStorage)
+            for (const key of keys) {
+                try {
+                    const raw = localStorage.getItem(key)
+                    if (raw) {
+                        const data = JSON.parse(raw)
+                        // If it matches the schema of a stored chat or a thread_id, delete it
+                        if (data?.thread_id || key.includes('_chat_')) {
+                            localStorage.removeItem(key)
+                        }
+                    }
+                } catch {
+                    // Also catch raw string thread ID keys if any
+                    if (key.includes('_chat_')) {
+                        localStorage.removeItem(key)
+                    }
+                }
+            }
+        }
+
+        // Check if current thread was deleted
+        if (currentThreadId && history.some(c => c.thread_id === currentThreadId)) {
+            if (onNewChat) onNewChat()
+        }
+
+        // Refresh list
+        if (isSignedIn) {
+            await syncFromBackend()
+        } else {
+            loadLocalHistory()
+        }
+
+        setIsDeleting(false)
+        setIsDeleteConfirmOpen(false)
+
+        if (failedCount > 0) {
+            toast.error(`Deleted ${deletedCount} threads, ${failedCount} failed`)
+        } else {
+            toast.success(`Deleted ${deletedCount} thread${deletedCount !== 1 ? 's' : ''}`)
         }
     }
 
@@ -333,7 +436,9 @@ export function AppSidebar({
             <div className="px-3 pb-2 space-y-2">
                 <button
                     onClick={() => {
+                        setLoadingAction('new-chat')
                         if (onNewChat) onNewChat()
+                        setTimeout(() => setLoadingAction(null), 1000)
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
@@ -348,7 +453,12 @@ export function AppSidebar({
                     <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
                         <Plus size={18} />
                     </div>
-                    {isExpanded && <span className="text-sm font-medium">New Thread</span>}
+                    {isExpanded && (
+                        <div className="flex items-center justify-between flex-1 min-w-0 pr-1">
+                            <span className="text-sm font-medium">New Thread</span>
+                            {loadingAction === 'new-chat' && <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />}
+                        </div>
+                    )}
                 </button>
 
                 {/* Pages Link */}
@@ -379,10 +489,9 @@ export function AppSidebar({
                     )}
                 </Link>
 
-                {/* Search History Toggle Button */}
+                {/* History Toggle Button */}
                 <button
                     onClick={() => {
-                        // Just open the search modal, no need to expand sidebar
                         setIsSearchVisible(true)
                     }}
                     className={`
@@ -392,12 +501,12 @@ export function AppSidebar({
                         ${!isExpanded ? 'justify-center' : ''}
                         text-[var(--foreground)]
                     `}
-                    title="Search chats"
+                    title="History"
                 >
                     <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <Search size={18} />
+                        <History size={18} />
                     </div>
-                    {isExpanded && <span className="text-sm font-medium">Search History</span>}
+                    {isExpanded && <span className="text-sm font-medium">History</span>}
                 </button>
             </div>
 
@@ -409,7 +518,10 @@ export function AppSidebar({
                             <button
                                 key={chat.thread_id}
                                 onClick={() => {
-                                    if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
+                                    if (currentThreadId !== chat.thread_id) {
+                                        setLoadingAction(`thread_${chat.thread_id}`)
+                                        if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
+                                    }
                                     if (isMobile && onToggle) onToggle()
                                 }}
                                 className={`
@@ -429,9 +541,14 @@ export function AppSidebar({
                                     )}
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1 pr-5">
-                                    <span className="text-sm truncate w-full">
-                                        {chat.query}
-                                    </span>
+                                    <div className="flex items-center justify-between w-full">
+                                        <span className="text-sm truncate w-full">
+                                            {chat.query}
+                                        </span>
+                                        {loadingAction === `thread_${chat.thread_id}` && (
+                                            <Loader2 size={12} className="animate-spin text-[var(--muted-foreground)] flex-shrink-0 ml-2" />
+                                        )}
+                                    </div>
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <span className="text-[10px] opacity-60">
                                             {formatDistanceToNow(chat.timestamp, { addSuffix: true })}
@@ -444,8 +561,8 @@ export function AppSidebar({
                                     </div>
                                 </div>
                                 <div
-                                    onClick={(e) => handleDelete(e, chat.thread_id)}
-                                    className={`absolute right-2 top-2 p-1 hover:bg-[var(--background)] rounded text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-all ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                    onClick={(e) => onSingleDeleteClick(e, chat.thread_id)}
+                                    className={`absolute right-2 top-2 p-1 hover:bg-[var(--background)] rounded text-[var(--muted-foreground)] hover:text-red-500 transition-all ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                                     role="button"
                                     aria-label="Delete chat"
                                 >
@@ -468,6 +585,7 @@ export function AppSidebar({
                 <button
                     onClick={() => {
                         if (pathname !== '/settings') {
+                            setLoadingAction('settings')
                             router.push('/settings')
                         }
                         if (isMobile && onToggle) onToggle()
@@ -482,7 +600,12 @@ export function AppSidebar({
             `}
                 >
                     <Settings size={18} />
-                    {isExpanded && <span className="text-sm">Settings</span>}
+                    {isExpanded && (
+                        <div className="flex items-center justify-between flex-1 min-w-0 pr-1">
+                            <span className="text-sm">Settings</span>
+                            {loadingAction === 'settings' && <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />}
+                        </div>
+                    )}
                 </button>
 
                 {/* Auth row — only render after mount to avoid SSR/client hydration mismatch */}
@@ -556,7 +679,7 @@ export function AppSidebar({
                     overlayClassName="bg-black/5 dark:bg-black/40"
                     className="p-0 border-0 sm:border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0 w-[100vw] h-[100dvh] max-w-none rounded-none !top-0 !left-0 !translate-x-0 !translate-y-0 sm:!top-[50%] sm:!left-[50%] sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:w-full sm:h-auto sm:max-h-[85vh] sm:max-w-[700px] sm:rounded-2xl"
                 >
-                    <DialogTitle className="sr-only">Search chats</DialogTitle>
+                    <DialogTitle className="sr-only">History</DialogTitle>
 
                     {/* Header Input */}
                     <div className="flex items-center px-4 py-3 border-b border-[var(--border-subtle)] gap-2">
@@ -596,6 +719,17 @@ export function AppSidebar({
                             <span className="text-sm font-medium">New thread</span>
                         </button>
 
+                        {/* Delete All Threads Button */}
+                        <button
+                            onClick={() => setIsDeleteConfirmOpen(true)}
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-red-500/20 bg-red-500/10 text-red-500 transition-colors text-left border border-red-500/20"
+                        >
+                            <div className="flex items-center justify-center p-1 rounded-md bg-transparent text-red-500">
+                                <Trash2 size={16} />
+                            </div>
+                            <span className="text-sm font-medium">Delete all threads</span>
+                        </button>
+
                         {searchGroupedHistory.length > 0 ? (
                             <div className="space-y-6 pb-4">
                                 {searchGroupedHistory.map((group) => (
@@ -613,7 +747,7 @@ export function AppSidebar({
                                                         setSearchQuery('')
                                                         if (isMobile && onToggle) onToggle()
                                                     }}
-                                                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-[var(--secondary)] text-[var(--foreground)] transition-colors text-left"
+                                                    className="group relative flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-[var(--secondary)] text-[var(--foreground)] transition-colors text-left"
                                                 >
                                                     <div className="opacity-70 text-[var(--muted-foreground)]">
                                                         {chat.model === 'canvas' ? (
@@ -622,9 +756,17 @@ export function AppSidebar({
                                                             <MessageSquare size={16} />
                                                         )}
                                                     </div>
-                                                    <span className="text-sm truncate flex-1">
+                                                    <span className="text-sm truncate flex-1 pr-6">
                                                         {chat.query}
                                                     </span>
+                                                    <div
+                                                        onClick={(e) => onSingleDeleteClick(e, chat.thread_id)}
+                                                        className={`absolute right-3 p-1 hover:bg-[var(--background)] rounded-md text-[var(--muted-foreground)] hover:text-red-500 transition-all ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                                        role="button"
+                                                        aria-label="Delete chat"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </div>
                                                 </button>
                                             ))}
                                         </div>
@@ -641,6 +783,82 @@ export function AppSidebar({
                     </div>
                 </DialogContent>
             </Dialog >
+
+            {/* Delete Threads Confirmation Dialog */}
+            <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+                <AlertDialogContent className="bg-[var(--background)] border border-[var(--border-subtle)] rounded-xl shadow-lg max-w-sm p-6">
+                    <AlertDialogHeader className="gap-3">
+                        <AlertDialogTitle className="text-[var(--foreground)] text-base font-medium flex items-center justify-center mb-1">
+                            Clear all history?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-[var(--muted-foreground)] text-sm text-center leading-relaxed">
+                            {history.length === 0 ? (
+                                <span>Your history is already empty.</span>
+                            ) : (
+                                <span>
+                                    This will permanently delete all <strong className="text-[var(--foreground)] font-medium">{history.length}</strong> threads. This action cannot be undone.
+                                </span>
+                            )}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-6 flex sm:justify-between w-full gap-2">
+                        <AlertDialogCancel
+                            disabled={isDeleting}
+                            className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0"
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <button
+                            onClick={handleBulkDelete}
+                            disabled={isDeleting || history.length === 0}
+                            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg h-10 text-sm font-medium transition-colors
+                                bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20
+                                disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isDeleting ? (
+                                <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                                'Delete all'
+                            )}
+                        </button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Single Thread Delete Confirmation Dialog */}
+            <AlertDialog open={!!threadToDelete} onOpenChange={(open) => !open && setThreadToDelete(null)}>
+                <AlertDialogContent className="bg-[var(--background)] border border-[var(--border-subtle)] rounded-xl shadow-lg max-w-sm p-6">
+                    <AlertDialogHeader className="gap-3">
+                        <AlertDialogTitle className="text-[var(--foreground)] text-base font-medium flex items-center justify-center mb-1">
+                            Delete thread?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-[var(--muted-foreground)] text-sm text-center leading-relaxed">
+                            This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-6 flex sm:justify-between w-full gap-2">
+                        <AlertDialogCancel
+                            disabled={isDeleting}
+                            className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0"
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <button
+                            onClick={handleDeleteConfirm}
+                            disabled={isDeleting}
+                            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg h-10 text-sm font-medium transition-colors
+                                bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20
+                                disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isDeleting ? (
+                                <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                                'Delete thread'
+                            )}
+                        </button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     )
 

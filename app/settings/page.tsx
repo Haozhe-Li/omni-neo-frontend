@@ -51,6 +51,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 
 type ModelType = 'auto' | 'canvas' | 'light' | 'guided_learning'
@@ -74,6 +83,7 @@ export default function SettingsPage() {
     const [isLocating, setIsLocating] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [activeSection, setActiveSection] = useState('Appearance')
+    const [isDeleteLocalDataConfirmOpen, setIsDeleteLocalDataConfirmOpen] = useState(false)
     const { quota, quotaExceeded } = useGuestQuota()
     const remainingQuota = !isSignedIn && quota && quota.remaining > 0 ? quota.remaining : null
 
@@ -178,6 +188,15 @@ export default function SettingsPage() {
         } finally {
             setIsLocating(false)
         }
+    }
+
+    const handleDeleteAllLocalData = () => {
+        const preservedGuestId = localStorage.getItem('guest_id')
+        localStorage.clear()
+        if (preservedGuestId) {
+            localStorage.setItem('guest_id', preservedGuestId)
+        }
+        window.location.reload()
     }
 
     const toggleMemories = () => {
@@ -652,21 +671,39 @@ export default function SettingsPage() {
                                         <span className="block text-xs text-[var(--muted-foreground)]">Permanently remove all local data.</span>
                                     </div>
                                     <button
-                                        onClick={() => {
-                                            if (confirm('Are you sure you want to delete all chat history, memory and personalization data? This action cannot be undone.')) {
-                                                const preservedGuestId = localStorage.getItem('guest_id')
-                                                localStorage.clear()
-                                                if (preservedGuestId) {
-                                                    localStorage.setItem('guest_id', preservedGuestId)
-                                                }
-                                                window.location.reload()
-                                            }
-                                        }}
+                                        onClick={() => setIsDeleteLocalDataConfirmOpen(true)}
                                         className="px-4 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 text-xs font-medium transition-colors"
                                     >
                                         Delete All
                                     </button>
                                 </div>
+
+                                <AlertDialog open={isDeleteLocalDataConfirmOpen} onOpenChange={setIsDeleteLocalDataConfirmOpen}>
+                                    <AlertDialogContent className="bg-[var(--background)] border border-[var(--border-subtle)] rounded-xl shadow-lg max-w-sm p-6">
+                                        <AlertDialogHeader className="gap-3">
+                                            <AlertDialogTitle className="text-[var(--foreground)] text-base font-medium flex items-center justify-center mb-1">
+                                                Delete all local data?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription className="text-[var(--muted-foreground)] text-sm text-center leading-relaxed">
+                                                This will permanently delete all chat history, memory and personalization data. This action cannot be undone.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter className="mt-6 flex sm:justify-between w-full gap-2">
+                                            <AlertDialogCancel
+                                                className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0"
+                                            >
+                                                Cancel
+                                            </AlertDialogCancel>
+                                            <button
+                                                onClick={handleDeleteAllLocalData}
+                                                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg h-10 text-sm font-medium transition-colors
+                                                    bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
+                                            >
+                                                Delete all
+                                            </button>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                             </div>
                         </div>
                     </section>
