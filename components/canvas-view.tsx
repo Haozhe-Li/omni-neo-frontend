@@ -123,7 +123,39 @@ function QuestionSelector({
   isSubmitted?: boolean,
   onSubmit: (selections: Record<string, string>) => void
 }) {
-  const [selections, setSelections] = useState<Record<string, string>>({});
+  const [selections, setSelections] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    questions.forEach(q => {
+      if (q.options && q.options.length > 0) {
+        initial[q.question] = q.options[0];
+      }
+    });
+    return initial;
+  });
+
+  const selectionsRef = useRef(selections);
+  const onSubmitRef = useRef(onSubmit);
+  const [timeLeft, setTimeLeft] = useState(60);
+
+  useEffect(() => {
+    selectionsRef.current = selections;
+  }, [selections]);
+
+  useEffect(() => {
+    onSubmitRef.current = onSubmit;
+  }, [onSubmit]);
+
+  useEffect(() => {
+    if (isSubmitted) return;
+    if (timeLeft <= 0) {
+      onSubmitRef.current(selectionsRef.current);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, isSubmitted]);
 
   if (isSubmitted) return null;
 
@@ -133,7 +165,7 @@ function QuestionSelector({
   };
 
   const handleSub = () => {
-    onSubmit(selections);
+    onSubmitRef.current(selections);
   };
 
   const allAnswered = questions.every(q => selections[q.question]);
@@ -181,11 +213,11 @@ function QuestionSelector({
           onClick={handleSub}
           disabled={!allAnswered || isSubmitted}
           className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${allAnswered && !isSubmitted
-            ? 'bg-[var(--foreground)] text-[var(--background)] hover:opacity-90'
+            ? 'bg-[var(--accent)] text-white hover:opacity-90'
             : 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed border border-[var(--border-subtle)]/50'
             }`}
         >
-          {isSubmitted ? 'Submitted' : 'Submit Answers'}
+          {isSubmitted ? 'Submitted' : `Submit Answers (${timeLeft}s)`}
         </button>
       </div>
     </div>

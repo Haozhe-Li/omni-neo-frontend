@@ -245,7 +245,7 @@ function QuizBlock({ questions, userAnswers, graded, onSubmit }: {
                     </div>
                 ) : (
                     <button onClick={() => { if (allAnswered) onSubmit(selections as number[]) }} disabled={!allAnswered}
-                        className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${allAnswered ? 'bg-[var(--foreground)] text-[var(--background)] hover:opacity-90' : 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'}`}>
+                        className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${allAnswered ? 'bg-[var(--accent)] text-white hover:opacity-90' : 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'}`}>
                         Submit Answers
                     </button>
                 )}
