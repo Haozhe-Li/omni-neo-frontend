@@ -722,9 +722,9 @@ export function AppSidebar({
                         {/* Delete All Threads Button */}
                         <button
                             onClick={() => setIsDeleteConfirmOpen(true)}
-                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-red-500/20 bg-red-500/10 text-red-500 transition-colors text-left border border-red-500/20"
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-[var(--secondary)] text-[var(--foreground)] transition-colors text-left"
                         >
-                            <div className="flex items-center justify-center p-1 rounded-md bg-transparent text-red-500">
+                            <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
                                 <Trash2 size={16} />
                             </div>
                             <span className="text-sm font-medium">Delete all threads</span>
@@ -801,7 +801,7 @@ export function AppSidebar({
                             )}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="mt-6 flex sm:justify-between w-full gap-2">
+                    <AlertDialogFooter className="mt-6 flex flex-row w-full gap-2">
                         <AlertDialogCancel
                             disabled={isDeleting}
                             className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0"
@@ -836,7 +836,7 @@ export function AppSidebar({
                             This action cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="mt-6 flex sm:justify-between w-full gap-2">
+                    <AlertDialogFooter className="mt-6 flex flex-row w-full gap-2">
                         <AlertDialogCancel
                             disabled={isDeleting}
                             className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0"
