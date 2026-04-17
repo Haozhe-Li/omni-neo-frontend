@@ -972,7 +972,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                             </div>
                             <div className="flex flex-col gap-2.5">
                               {[
-                                { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                                { value: 'auto' as const, label: 'Auto', desc: 'Select best model for you' },
                                 { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
                                 { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
                                 { value: 'guided_learning' as const, label: 'Guided Learning', desc: 'Quizzes, flashcards & notes' },

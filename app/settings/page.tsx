@@ -349,7 +349,7 @@ export default function SettingsPage() {
                                 <div className="flex flex-col gap-3">
                                     <ModelOption
                                         value="auto"
-                                        title="Smart"
+                                        title="Auto"
                                         description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Automatically selects the best model for your query.'}
                                         icon={<Waypoints size={16} />}
                                         active={chatModel === 'auto'}
