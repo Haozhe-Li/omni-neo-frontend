@@ -909,7 +909,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         {/* Desktop Dropdown */}
                         <div className="hidden md:block absolute top-full right-0 mt-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                           {[
-                            { value: 'auto' as const, label: 'Auto', desc: 'Smart model selection' },
+                            { value: 'auto' as const, label: 'Auto', desc: 'Auto model selection' },
                             { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
                             { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
                             { value: 'guided_learning' as const, label: 'Guided Learning', desc: 'Quizzes, flashcards & notes' },

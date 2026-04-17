@@ -343,7 +343,7 @@ export default function SettingsPage() {
                             <div className="space-y-3">
                                 <div className="space-y-0.5">
                                     <Label text="Artificial Intelligence" />
-                                    <p className="text-xs text-[var(--muted-foreground)]">Choose the way AI thinks for your conversation.</p>
+                                    <p className="text-xs text-[var(--muted-foreground)]">Choose the preferred way AI thinks for your conversation.</p>
                                 </div>
 
                                 <div className="flex flex-col gap-3">

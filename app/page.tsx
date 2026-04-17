@@ -43,7 +43,7 @@ export default function Home() {
     }
   }, [isMobile])
 
-  // Load model preference from local storage (and re-read on window focus for settings page sync)
+  // Load model preference from local storage
   useEffect(() => {
     const loadModel = () => {
       if (typeof window !== 'undefined') {
@@ -54,10 +54,8 @@ export default function Home() {
       }
     }
     loadModel()
-    window.addEventListener('focus', loadModel)
     window.addEventListener('storage', loadModel)
     return () => {
-      window.removeEventListener('focus', loadModel)
       window.removeEventListener('storage', loadModel)
     }
   }, [])
@@ -77,7 +75,6 @@ export default function Home() {
       }
     }
     setModel(newModel)
-    localStorage.setItem('omni_model_preference', newModel)
   }
 
   const handleSearch = useCallback(async (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[]) => {
