@@ -25,7 +25,6 @@ import {
     BrainCircuit,
     Telescope,
     User,
-    Waypoints,
     Trash2,
     Plus,
     MapPin,
@@ -37,7 +36,6 @@ import {
     ChevronRight,
     Lock,
     Copy,
-    BookOpen,
     Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -62,7 +60,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 
-type ModelType = 'auto' | 'canvas' | 'light' | 'guided_learning'
+type ModelType = 'fast' | 'pro'
 type ThemeType = 'system' | 'dark' | 'light'
 
 const APP_VERSION = '0.2.0'
@@ -75,7 +73,7 @@ export default function SettingsPage() {
     const { user } = useUser()
     const clerk = useClerk()
 
-    const [chatModel, setChatModel] = useState<ModelType>('auto')
+    const [chatModel, setChatModel] = useState<ModelType>('fast')
     const [responseLanguage, setResponseLanguage] = useState<string>('auto')
     const [enableMemories, setEnableMemories] = useState<boolean>(false)
     const [memories, setMemories] = useState<Memories | null>(null)
@@ -110,7 +108,7 @@ export default function SettingsPage() {
         setMounted(true)
         if (typeof window !== 'undefined') {
             const savedModel = localStorage.getItem('omni_model_preference')
-            if (savedModel === 'canvas' || savedModel === 'light' || savedModel === 'auto' || savedModel === 'guided_learning') {
+            if (savedModel === 'fast' || savedModel === 'pro') {
                 setChatModel(savedModel)
             }
             const savedLang = localStorage.getItem('omni_response_language')
@@ -161,15 +159,9 @@ export default function SettingsPage() {
     }, [mounted])
 
     const handleModelChange = (newModel: ModelType) => {
-        if (!isSignedIn && quotaExceeded) {
-            if (newModel === 'auto') {
-                clerk.openSignIn()
-                return
-            }
-            if (newModel === 'canvas') {
-                clerk.openSignIn()
-                return
-            }
+        if (!isSignedIn && quotaExceeded && newModel === 'pro') {
+            clerk.openSignIn()
+            return
         }
         setChatModel(newModel)
         localStorage.setItem('omni_model_preference', newModel)
@@ -348,39 +340,22 @@ export default function SettingsPage() {
 
                                 <div className="flex flex-col gap-3">
                                     <ModelOption
-                                        value="auto"
-                                        title="Auto"
-                                        description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Automatically selects the best model for your query.'}
-                                        icon={<Waypoints size={16} />}
-                                        active={chatModel === 'auto'}
-                                        onClick={() => handleModelChange('auto')}
-                                        locked={quotaExceeded}
+                                        value="fast"
+                                        title="Fast"
+                                        description="Quick, concise answers for everyday questions. Unlimited and free."
+                                        icon={<MessageSquare size={16} />}
+                                        active={chatModel === 'fast'}
+                                        onClick={() => handleModelChange('fast')}
                                     />
                                     <ModelOption
-                                        value="canvas"
-                                        title="Canvas"
-                                        description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Comprehensive report on Canvas, with multi-step reasoning and deep research.'}
+                                        value="pro"
+                                        title="Pro"
+                                        description={quotaExceeded ? 'Daily quota reached — sign in for unlimited access.' : 'Deep agent with interactive charts, long-form reports, and multi-step reasoning.'}
                                         icon={<Telescope size={16} />}
-                                        active={chatModel === 'canvas'}
-                                        onClick={() => handleModelChange('canvas')}
+                                        active={chatModel === 'pro'}
+                                        onClick={() => handleModelChange('pro')}
                                         locked={quotaExceeded}
                                         badgeText={!quotaExceeded && remainingQuota !== null ? `${remainingQuota} left` : undefined}
-                                    />
-                                    <ModelOption
-                                        value="light"
-                                        title="Light"
-                                        description="Quick, concise answers for simple questions and casual chat."
-                                        icon={<MessageSquare size={16} />}
-                                        active={chatModel === 'light'}
-                                        onClick={() => handleModelChange('light')}
-                                    />
-                                    <ModelOption
-                                        value="guided_learning"
-                                        title="Guided Learning"
-                                        description="Interactive learning with quizzes, flashcards, and study notes."
-                                        icon={<BookOpen size={16} />}
-                                        active={chatModel === 'guided_learning'}
-                                        onClick={() => handleModelChange('guided_learning')}
                                     />
                                 </div>
                             </div>

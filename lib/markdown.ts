@@ -1,17 +1,15 @@
 /**
  * Preprocesses markdown content to fix math delimiters and other formatting issues.
- * Specifically handles display math wrapped in [ ] and inline math in ( ) 
+ * Specifically handles display math wrapped in [ ] and inline math in ( )
  * by converting them to $$ $$ and $ $ for remark-math.
+ *
+ * Fenced code blocks (```...```) are left untouched, so JSON inside an
+ * ```echarts``` / ```mermaid``` block never gets mangled by the math rewrites.
  */
-export function preprocessMarkdown(content: any): string {
-    if (!content) return ''
-
-    // Ensure content is a string before using .replace
-    const text = typeof content === 'string' ? content : String(content)
-
+function transformMath(text: string): string {
     return text
         // 1. Convert block math [ math ] or \[ math \] to $$ math $$
-        // We look for [ or \[ at the start of a line (or after a newline) 
+        // We look for [ or \[ at the start of a line (or after a newline)
         // and wait for the corresponding ] or \].
         .replace(/(^|\n)\[\s*([\s\S]*?)\s*\](?=\n|$)/g, '$1$$\n$2\n$$')
         .replace(/(^|\n)\\\[\s*([\s\S]*?)\s*\\\](?=\n|$)/g, '$1$$\n$2\n$$')
@@ -25,3 +23,16 @@ export function preprocessMarkdown(content: any): string {
         .replace(/\[\s*(\\.*|.*(\\text|\\frac|\\sum|\\approx|\\times).*?)\s*\]/g, '$$$1$$')
 }
 
+export function preprocessMarkdown(content: any): string {
+    if (!content) return ''
+
+    // Ensure content is a string before using .replace
+    const text = typeof content === 'string' ? content : String(content)
+
+    // Split out fenced code blocks and only run the math transforms on the prose
+    // between them. The capturing group keeps the fences in the result array.
+    return text
+        .split(/(```[\s\S]*?```)/g)
+        .map((segment) => (segment.startsWith('```') ? segment : transformMath(segment)))
+        .join('')
+}

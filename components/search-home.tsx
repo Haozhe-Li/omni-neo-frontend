@@ -16,13 +16,13 @@ interface SearchHomeProps {
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   isMobile?: boolean
-  model?: 'auto' | 'canvas' | 'light' | 'guided_learning'
-  onModelChange?: (model: 'auto' | 'canvas' | 'light' | 'guided_learning') => void
+  model?: 'fast' | 'pro'
+  onModelChange?: (model: 'fast' | 'pro') => void
   quotaExceeded?: boolean
   remainingQuota?: number | null
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'auto', onModelChange, quotaExceeded = false, remainingQuota = null }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, quotaExceeded = false, remainingQuota = null }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -320,9 +320,9 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     void handleSubmit(e as unknown as React.FormEvent)
   }
 
-  const selectedModelLabel = model === 'auto' ? 'Auto' : model === 'canvas' ? 'Canvas' : model === 'guided_learning' ? 'Guided Learning' : 'Light'
-  const showCanvasRemaining = model === 'canvas' && !quotaExceeded && remainingQuota !== null
-  const showSelectedLock = quotaExceeded && (model === 'canvas' || model === 'auto')
+  const selectedModelLabel = model === 'pro' ? 'Pro' : 'Fast'
+  const showCanvasRemaining = model === 'pro' && !quotaExceeded && remainingQuota !== null
+  const showSelectedLock = quotaExceeded && model === 'pro'
 
   const VAD_RMS_THRESHOLD = 0.02
   const VAD_MIN_VOICED_FRAMES = 3
@@ -909,15 +909,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         {/* Desktop Dropdown */}
                         <div className="hidden md:block absolute top-full right-0 mt-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                           {[
-                            { value: 'auto' as const, label: 'Auto', desc: 'Auto model selection' },
-                            { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
-                            { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
-                            { value: 'guided_learning' as const, label: 'Guided Learning', desc: 'Quizzes, flashcards & notes' },
+                            { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
+                            { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
                           ].map((opt) => {
-                            const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
-                            const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
-                            const isLocked = isAutoOptionLocked || isCanvasOptionLocked
-                            const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
+                            const isLocked = quotaExceeded && opt.value === 'pro'
+                            const showRemaining = opt.value === 'pro' && !quotaExceeded && remainingQuota !== null
                             return (
                               <button
                                 key={opt.value}
@@ -941,7 +937,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                                     )}
                                   </div>
                                   <div className="text-[11px] text-[var(--muted-foreground)] leading-snug line-clamp-2">
-                                    {isAutoOptionLocked || isCanvasOptionLocked
+                                    {isLocked
                                       ? 'Daily quota reached — sign in for unlimited'
                                       : opt.desc}
                                   </div>
@@ -972,15 +968,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                             </div>
                             <div className="flex flex-col gap-2.5">
                               {[
-                                { value: 'auto' as const, label: 'Auto', desc: 'Select best model for you' },
-                                { value: 'canvas' as const, label: 'Canvas', desc: 'Deep research mode' },
-                                { value: 'light' as const, label: 'Light', desc: 'Quick answers' },
-                                { value: 'guided_learning' as const, label: 'Guided Learning', desc: 'Quizzes, flashcards & notes' },
+                                { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
+                                { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
                               ].map((opt) => {
-                                const isCanvasOptionLocked = quotaExceeded && opt.value === 'canvas'
-                                const isAutoOptionLocked = quotaExceeded && opt.value === 'auto'
-                                const isLocked = isAutoOptionLocked || isCanvasOptionLocked
-                                const showRemaining = opt.value === 'canvas' && !quotaExceeded && remainingQuota !== null
+                                const isLocked = quotaExceeded && opt.value === 'pro'
+                                const showRemaining = opt.value === 'pro' && !quotaExceeded && remainingQuota !== null
                                 return (
                                   <button
                                     key={opt.value}
@@ -997,7 +989,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                                         {isLocked && <Lock className="h-3.5 w-3.5" />}
                                       </span>
                                       <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
-                                        {isAutoOptionLocked || isCanvasOptionLocked
+                                        {isLocked
                                           ? 'Daily quota reached — sign in'
                                           : opt.desc}
                                       </span>

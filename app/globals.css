@@ -736,3 +736,23 @@
   border: 1px solid color-mix(in srgb, var(--foreground) 14%, var(--background));
 }
 
+
+/* ── Omni "thinking" shimmer (neutral, Claude-style) ───────────────────── */
+@keyframes omni-shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.omni-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--foreground) 35%, transparent) 0%,
+    var(--foreground) 50%,
+    color-mix(in srgb, var(--foreground) 35%, transparent) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: omni-shimmer 2.4s linear infinite;
+}
