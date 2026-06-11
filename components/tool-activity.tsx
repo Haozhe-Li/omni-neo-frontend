@@ -13,8 +13,6 @@ import {
   ChevronDown,
   Code2,
   Check,
-  Circle,
-  CircleDot,
   Blocks,
 } from 'lucide-react'
 import type { ToolStep } from '@/lib/types'
@@ -30,6 +28,16 @@ function domainOf(url: string) {
 const lc = (s: string) => (s || '').toLowerCase()
 const isTodo = (t: string) => lc(t).includes('todo')
 const isSearch = (t: string) => (lc(t).includes('search') || lc(t).includes('arxiv')) && !lc(t).includes('places')
+
+// Retrieval = anything that reaches out to the web / live data. Used by the
+// no-plan fallback to group these under one "Searching through the internet" step.
+function isRetrieval(step: ToolStep): boolean {
+  const t = lc(step.tool)
+  if (isSearch(step.tool)) return true
+  return ['load_web', 'web_page', 'fetch', 'read_web', 'places', 'weather', 'stock', 'currency', 'document', 'read_user'].some(
+    (k) => t.includes(k)
+  )
+}
 
 // A read_file on a /skills/<name>/SKILL.md path = the agent activating a skill.
 function skillOf(step: ToolStep): string | null {
@@ -140,15 +148,13 @@ function CodeStep({ code, output }: { code: string; output?: string }) {
   )
 }
 
-// `active` = this is the step currently executing (the bottom-most row): its
-// label gets the same neutral shimmer the answer uses while thinking.
-function ToolRow({ step, active }: { step: ToolStep; active?: boolean }) {
+function ToolRow({ step }: { step: ToolStep }) {
   if (typeof step.args?.code === 'string') return <CodeStep code={step.args.code} output={(step.args as any).output} />
   const { Icon, label, chip } = singleStepInfo(step.tool, step.args)
   return (
     <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
       <Icon size={13} strokeWidth={1.75} className="shrink-0" />
-      <span className={`shrink-0 ${active ? 'omni-shimmer-text' : ''}`}>{label}</span>
+      <span className="shrink-0">{label}</span>
       {chip && <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[12px] text-[var(--foreground)]">{chip}</span>}
     </div>
   )
@@ -165,10 +171,66 @@ function SkillRow({ name }: { name: string }) {
   )
 }
 
-function TodoIcon({ done, active }: { done: boolean; active: boolean }) {
-  if (done) return <Check size={14} strokeWidth={2} className="shrink-0 text-[var(--muted-foreground)]" />
-  if (active) return <CircleDot size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
-  return <Circle size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]/50" />
+// A unified step group: a real todo, or a synthesized one (see synthesizeGroups).
+interface Group {
+  key: string
+  content: string
+  status: 'completed' | 'in_progress' | 'pending'
+  tools: ToolStep[]
+  skills: string[]
+}
+
+// Fallback for when the agent ran tools without writing any todos: keep the same
+// two-level hierarchy by grouping contiguous tool calls into a synthetic step —
+// retrieval tools collapse into "Searching through the internet", the rest into a
+// generic working step. The last group is in-progress while still thinking.
+function synthesizeGroups(tools: ToolStep[], thinking: boolean): Group[] {
+  const groups: Group[] = []
+  let cat: 'retrieval' | 'other' | null = null
+  for (const s of tools) {
+    const c = isRetrieval(s) ? 'retrieval' : 'other'
+    if (!groups.length || c !== cat) {
+      groups.push({
+        key: `g${groups.length}`,
+        content: c === 'retrieval' ? 'Searching through the internet' : 'Working through the task',
+        status: 'completed',
+        tools: [],
+        skills: [],
+      })
+      cat = c
+    }
+    groups[groups.length - 1].tools.push(s)
+  }
+  if (thinking && groups.length) groups[groups.length - 1].status = 'in_progress'
+  return groups
+}
+
+// One step (todo): a check once done, otherwise just its text — the active one
+// shimmers (the same neutral effect the answer uses while thinking). Its tools
+// and skills nest beneath it.
+function GroupRow({ group, thinking }: { group: Group; thinking: boolean }) {
+  const done = group.status === 'completed'
+  const active = thinking && group.status === 'in_progress'
+  return (
+    <div className="omni-step-in">
+      <div className="flex items-start gap-2 text-[13px]">
+        {done && <Check size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />}
+        <span className={active ? 'omni-shimmer-text font-medium' : done ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}>
+          {group.content}
+        </span>
+      </div>
+      {(group.skills.length > 0 || group.tools.length > 0) && (
+        <div className="ml-[7px] mt-1 mb-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
+          {group.skills.map((sk, k) => (
+            <SkillRow key={`s${k}`} name={sk} />
+          ))}
+          {group.tools.map((s, k) => (
+            <ToolRow key={`t${k}`} step={s} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface ToolActivityProps {
@@ -180,42 +242,65 @@ interface ToolActivityProps {
 
 export function ToolActivity({ steps = [], isStreaming, answered, drafting }: ToolActivityProps) {
   const { todos, toolsByTodo, skillsByTodo, preTools, preSkills } = buildPlan(steps)
-  const stepCount = todos.length || preSkills.length + preTools.length
-  const hasSteps = stepCount > 0 || !!drafting
 
-  // Reveal the plan incrementally: show the completed steps plus the current one
-  // (the first not-yet-completed todo), and hide steps that haven't started. As
-  // the agent ticks each step off, the next one stacks in — and once the answer
-  // is streaming (answered) or every step is done, the whole checked-off list shows.
+  // Thinking phase = streaming with no answer yet.
+  const thinking = !!isStreaming && !answered
+  const [open, setOpen] = useState(false)
+
+  // Reveal the plan incrementally: show completed steps plus the current one
+  // (the first not-yet-completed todo), hiding steps that haven't started. Once
+  // answered, the whole checked-off list shows.
   const firstIncomplete = todos.findIndex((t) => t.status !== 'completed')
   const visibleTodos = answered || firstIncomplete === -1 ? todos : todos.slice(0, firstIncomplete + 1)
 
-  // Thinking phase = streaming with no answer yet. Steps stay expanded while
-  // thinking, then collapse to "Completed N steps" once the answer begins.
-  const thinking = !!isStreaming && !answered
-  const [open, setOpen] = useState(false)
-  const showBody = thinking ? hasSteps : open
+  // Always render a todo layer. With real todos, use them; otherwise synthesize
+  // groups out of the loose tool calls so a plain tool run (fast OR pro) still
+  // reads as "Searching through the internet" etc. Skills/tools nest beneath.
+  let groups: Group[]
+  if (todos.length > 0) {
+    groups = visibleTodos.map((t, i) => ({
+      key: `td${i}`,
+      content: t.content || '',
+      status: (answered ? 'completed' : t.status) as Group['status'],
+      tools: t.content ? toolsByTodo.get(t.content) ?? [] : [],
+      skills: t.content ? skillsByTodo.get(t.content) ?? [] : [],
+    }))
+  } else {
+    groups = synthesizeGroups(preTools, thinking)
+    // Any skills read before a plan (rare without todos) lead the first group.
+    if (preSkills.length) {
+      if (!groups.length) groups.push({ key: 'g0', content: 'Working through the task', status: thinking ? 'in_progress' : 'completed', tools: [], skills: [] })
+      groups[0] = { ...groups[0], skills: [...preSkills, ...groups[0].skills] }
+    }
+  }
 
-  if (!hasSteps) return null
+  // Loose tools that ran before a real plan keep showing above it.
+  const looseSkills = todos.length > 0 ? preSkills : []
+  const looseTools = todos.length > 0 ? preTools : []
 
-  // The bottom-most row while thinking carries a subtle shimmer to mark the step
-  // currently executing: the active todo's latest tool (or the todo itself if it
-  // has no tools yet), the last pre-plan tool when there's no plan, or — taking
-  // priority — the drafting row when a report/chart is being written.
-  const activeTodoIdx = visibleTodos.findIndex((t) => !answered && t.status === 'in_progress')
-  const noPlan = visibleTodos.length === 0
+  const hasContent = groups.length > 0 || looseTools.length > 0 || looseSkills.length > 0 || !!drafting
+  const stepCount = groups.length || looseTools.length + looseSkills.length
+  const showBody = thinking ? hasContent : open
+
+  if (!thinking && !hasContent) return null
 
   return (
     <div className="mb-3 space-y-2">
-      {/* While thinking the steps speak for themselves — no separate indicator.
-          Once answered they collapse behind a toggle. */}
-      {!thinking && (
+      {thinking ? (
+        // Until the first todo/tool arrives, hold the spot with a "Thinking" line
+        // carrying the same active shimmer; after that the steps speak for themselves.
+        !hasContent ? (
+          <div className="omni-step-in text-[13px]">
+            <span className="omni-shimmer-text font-medium">Thinking</span>
+          </div>
+        ) : null
+      ) : (
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
         >
           <span>
-            Completed {stepCount} step{stepCount > 1 ? 's' : ''}
+            Completed {stepCount} step{stepCount === 1 ? '' : 's'}
           </span>
           <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
@@ -223,55 +308,18 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
 
       {showBody && (
         <div className="space-y-2 border-l-2 border-[var(--border-subtle)] pl-3.5">
-          {/* skills loaded before any plan (no owning todo) */}
-          {preSkills.map((sk, i) => (
+          {/* loose skills/tools that ran before any real plan */}
+          {looseSkills.map((sk, i) => (
             <SkillRow key={`sk${i}`} name={sk} />
           ))}
-
-          {/* tool calls made before any plan */}
-          {preTools.map((s, i) => (
-            <ToolRow key={`pre${i}`} step={s} active={thinking && !drafting && noPlan && i === preTools.length - 1} />
+          {looseTools.map((s, i) => (
+            <ToolRow key={`pre${i}`} step={s} />
           ))}
 
-          {/* the plan — each todo with the tools that ran while it was active */}
-          {visibleTodos.map((todo, i) => {
-            const tools = todo.content ? toolsByTodo.get(todo.content) ?? [] : []
-            const todoSkills = todo.content ? skillsByTodo.get(todo.content) ?? [] : []
-            // Once the answer starts streaming, show every todo as completed.
-            const done = !!answered || todo.status === 'completed'
-            const active = !answered && todo.status === 'in_progress'
-            const isCurrent = thinking && !drafting && i === activeTodoIdx
-            return (
-              <div key={`td${i}`} className="omni-step-in">
-                <div className="flex items-start gap-2 text-[13px]">
-                  <span className="mt-0.5">
-                    <TodoIcon done={done} active={active} />
-                  </span>
-                  <span
-                    className={
-                      isCurrent && tools.length === 0
-                        ? 'omni-shimmer-text font-medium'
-                        : active
-                          ? 'text-[var(--foreground)]'
-                          : 'text-[var(--muted-foreground)]'
-                    }
-                  >
-                    {todo.content}
-                  </span>
-                </div>
-                {(todoSkills.length > 0 || tools.length > 0) && (
-                  <div className="ml-[7px] mt-1 mb-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
-                    {todoSkills.map((sk, k) => (
-                      <SkillRow key={`s${k}`} name={sk} />
-                    ))}
-                    {tools.map((s, k) => (
-                      <ToolRow key={`t${k}`} step={s} active={isCurrent && k === tools.length - 1} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {/* the plan — real todos or synthesized groups */}
+          {groups.map((g) => (
+            <GroupRow key={g.key} group={g} thinking={thinking} />
+          ))}
 
           {drafting && (
             <div className="omni-step-in text-[13px]">
