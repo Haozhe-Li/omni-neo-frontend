@@ -12,7 +12,6 @@ export interface SSEEvent {
     | 'sources'
     | 'text'
     | 'artifact'
-    | 'report'
     | 'drafting'
     | 'done'
     | 'error'
@@ -28,7 +27,6 @@ export interface SSEEvent {
   kind?: string
   spec?: any
   artifacts?: string[]
-  reports?: string[]
 }
 
 export function parseSSEEvent(raw: any): SSEEvent {
@@ -68,6 +66,8 @@ export interface ReportArtifact {
   id: string
   title: string
   content: string
+  // false while the report is still streaming into the reader; undefined/true once done.
+  complete?: boolean
 }
 
 export interface WidgetData {
