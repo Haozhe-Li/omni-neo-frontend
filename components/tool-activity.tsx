@@ -41,7 +41,46 @@ function skillOf(step: ToolStep): string | null {
   return m ? m[1] : null
 }
 
-// ── Thinking indicator (Claude-style neutral shimmer, Omni teal sparkle) ───
+interface Todo {
+  content?: string
+  status?: string
+}
+
+// Reconstruct the plan chronologically: associate each tool call with the todo
+// that was in_progress when it ran. Tools before any plan land in `preTools`.
+function buildPlan(steps: ToolStep[]) {
+  let todos: Todo[] = []
+  let activeContent: string | null = null
+  const toolsByTodo = new Map<string, ToolStep[]>()
+  const preTools: ToolStep[] = []
+  const skills: string[] = []
+
+  for (const s of steps) {
+    const sk = skillOf(s)
+    if (sk) {
+      if (!skills.includes(sk)) skills.push(sk)
+      continue
+    }
+    if (isTodo(s.tool)) {
+      if (Array.isArray(s.args?.todos)) {
+        todos = s.args.todos
+        activeContent = todos.find((t) => t.status === 'in_progress')?.content ?? activeContent
+      }
+      continue
+    }
+    // a real tool call
+    if (activeContent) {
+      const list = toolsByTodo.get(activeContent) ?? []
+      list.push(s)
+      toolsByTodo.set(activeContent, list)
+    } else {
+      preTools.push(s)
+    }
+  }
+  return { todos, toolsByTodo, preTools, skills }
+}
+
+// ── presentation ────────────────────────────────────────────────────────────
 function ThinkingIndicator() {
   return (
     <div className="flex items-center gap-2">
@@ -51,72 +90,10 @@ function ThinkingIndicator() {
   )
 }
 
-// ── Plan (write_todos) ─────────────────────────────────────────────────────
-interface Todo {
-  content?: string
-  activeForm?: string
-  status?: string
-}
-
-function latestTodos(steps: ToolStep[]): Todo[] {
-  let todos: Todo[] = []
-  for (const s of steps) if (isTodo(s.tool) && Array.isArray(s.args?.todos)) todos = s.args.todos
-  return todos
-}
-
-function PlanBlock({ todos }: { todos: Todo[] }) {
-  if (todos.length === 0) return null
-  return (
-    <div className="space-y-1.5">
-      {todos.map((t, i) => {
-        const done = t.status === 'completed'
-        const active = t.status === 'in_progress'
-        const label = active ? t.activeForm || t.content : t.content
-        return (
-          <div key={i} className="flex items-center gap-2 text-[13px]">
-            {done ? (
-              <Check size={14} strokeWidth={2} className="shrink-0 text-[var(--muted-foreground)]" />
-            ) : active ? (
-              <CircleDot size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
-            ) : (
-              <Circle size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]/50" />
-            )}
-            <span className={active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}>{label}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Grouped searches (expandable nested queries) ───────────────────────────
-function SearchGroup({ queries }: { queries: string[] }) {
-  const [open, setOpen] = useState(true)
-  if (queries.length === 0) return null
-  return (
-    <div>
-      <button onClick={() => setOpen((v) => !v)} className="flex items-center gap-2 text-[13px] text-[var(--foreground)]">
-        <Globe size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]" />
-        <span>Searching the web</span>
-        <ChevronDown size={13} className={`text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="ml-[7px] mt-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
-          {queries.map((q, i) => (
-            <div key={i} className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-              <Search size={12} strokeWidth={1.75} className="shrink-0" />
-              <span className="min-w-0 truncate">{q}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function singleStepInfo(tool: string, args: any) {
   const t = lc(tool)
   const a = args || {}
+  if (isSearch(tool)) return { Icon: Search, label: 'Searching', chip: a.query || a.q }
   if (['load_web', 'web_page', 'fetch', 'read_web'].some((k) => t.includes(k)))
     return { Icon: Globe, label: 'Reading', chip: a.url ? domainOf(a.url) : undefined }
   if (t.includes('places')) return { Icon: MapPin, label: 'Finding places', chip: a.query || a.location }
@@ -136,17 +113,6 @@ function singleStepInfo(tool: string, args: any) {
   if (t === 'execute') return { Icon: Wrench, label: 'Running command', chip: a.command }
   if (t === 'task') return { Icon: Wrench, label: 'Delegating subtask', chip: a.description }
   return { Icon: Wrench, label: tool || 'Working', chip: undefined }
-}
-
-function StepRow({ step }: { step: ToolStep }) {
-  const { Icon, label, chip } = singleStepInfo(step.tool, step.args)
-  return (
-    <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-      <Icon size={14} strokeWidth={1.75} className="shrink-0" />
-      <span className="shrink-0">{label}</span>
-      {chip && <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[12px] text-[var(--foreground)]">{chip}</span>}
-    </div>
-  )
 }
 
 function CodeStep({ code, output }: { code: string; output?: string }) {
@@ -173,6 +139,24 @@ function CodeStep({ code, output }: { code: string; output?: string }) {
   )
 }
 
+function ToolRow({ step }: { step: ToolStep }) {
+  if (typeof step.args?.code === 'string') return <CodeStep code={step.args.code} output={(step.args as any).output} />
+  const { Icon, label, chip } = singleStepInfo(step.tool, step.args)
+  return (
+    <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
+      <Icon size={13} strokeWidth={1.75} className="shrink-0" />
+      <span className="shrink-0">{label}</span>
+      {chip && <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[12px] text-[var(--foreground)]">{chip}</span>}
+    </div>
+  )
+}
+
+function TodoIcon({ done, active }: { done: boolean; active: boolean }) {
+  if (done) return <Check size={14} strokeWidth={2} className="shrink-0 text-[var(--muted-foreground)]" />
+  if (active) return <CircleDot size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
+  return <Circle size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]/50" />
+}
+
 interface ToolActivityProps {
   steps?: ToolStep[]
   isStreaming?: boolean
@@ -181,19 +165,12 @@ interface ToolActivityProps {
 }
 
 export function ToolActivity({ steps = [], isStreaming, answered, drafting }: ToolActivityProps) {
-  const todos = latestTodos(steps)
-  const queries = steps.filter((s) => isSearch(s.tool)).map((s) => s.args?.query || s.args?.q).filter(Boolean) as string[]
-  const skills = [...new Set(steps.map(skillOf).filter(Boolean))] as string[]
-  const codeSteps = steps.filter((s) => typeof s.args?.code === 'string')
-  const otherSteps = steps.filter(
-    (s) => !isTodo(s.tool) && !isSearch(s.tool) && !skillOf(s) && typeof s.args?.code !== 'string'
-  )
-
-  const stepCount = todos.length || (queries.length ? 1 : 0) + skills.length + otherSteps.length + codeSteps.length
+  const { todos, toolsByTodo, preTools, skills } = buildPlan(steps)
+  const stepCount = todos.length || skills.length + preTools.length
   const hasSteps = stepCount > 0 || !!drafting
 
-  // Thinking phase = streaming and no answer text yet. Steps stay expanded while
-  // thinking, then collapse to a "Completed N steps" summary once the answer starts.
+  // Thinking phase = streaming with no answer yet. Steps stay expanded while
+  // thinking, then collapse to "Completed N steps" once the answer begins.
   const thinking = !!isStreaming && !answered
   const [open, setOpen] = useState(false)
   const showBody = thinking ? hasSteps : open
@@ -202,7 +179,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
 
   return (
     <div className="mb-3 space-y-2">
-      {/* header — OUTSIDE the steps */}
       {thinking ? (
         <ThinkingIndicator />
       ) : (
@@ -217,10 +193,9 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
         </button>
       )}
 
-      {/* steps body (collapsible) */}
       {showBody && (
         <div className="space-y-2 border-l-2 border-[var(--border-subtle)] pl-3.5">
-          {todos.length > 0 && <PlanBlock todos={todos} />}
+          {/* skills the agent loaded */}
           {skills.map((sk, i) => (
             <div key={`sk${i}`} className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
               <Sparkles size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
@@ -229,13 +204,37 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
               </span>
             </div>
           ))}
-          {queries.length > 0 && <SearchGroup queries={queries} />}
-          {otherSteps.map((s, i) => (
-            <StepRow key={i} step={s} />
+
+          {/* tool calls made before any plan */}
+          {preTools.map((s, i) => (
+            <ToolRow key={`pre${i}`} step={s} />
           ))}
-          {codeSteps.map((s, i) => (
-            <CodeStep key={i} code={s.args.code} output={(s.args as any).output} />
-          ))}
+
+          {/* the plan — each todo with the tools that ran while it was active */}
+          {todos.map((todo, i) => {
+            const tools = todo.content ? toolsByTodo.get(todo.content) ?? [] : []
+            // Once the answer starts streaming, show every todo as completed.
+            const done = !!answered || todo.status === 'completed'
+            const active = !answered && todo.status === 'in_progress'
+            return (
+              <div key={`td${i}`}>
+                <div className="flex items-start gap-2 text-[13px]">
+                  <span className="mt-0.5">
+                    <TodoIcon done={done} active={active} />
+                  </span>
+                  <span className={active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}>{todo.content}</span>
+                </div>
+                {tools.length > 0 && (
+                  <div className="ml-[7px] mt-1 mb-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
+                    {tools.map((s, k) => (
+                      <ToolRow key={k} step={s} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
           {drafting && (
             <div className="flex items-center gap-2 text-[13px] text-[var(--accent)]">
               <Loader2 size={14} className="animate-spin" />
