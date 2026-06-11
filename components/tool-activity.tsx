@@ -169,6 +169,13 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   const stepCount = todos.length || skills.length + preTools.length
   const hasSteps = stepCount > 0 || !!drafting
 
+  // Reveal the plan incrementally: show the completed steps plus the current one
+  // (the first not-yet-completed todo), and hide steps that haven't started. As
+  // the agent ticks each step off, the next one stacks in — and once the answer
+  // is streaming (answered) or every step is done, the whole checked-off list shows.
+  const firstIncomplete = todos.findIndex((t) => t.status !== 'completed')
+  const visibleTodos = answered || firstIncomplete === -1 ? todos : todos.slice(0, firstIncomplete + 1)
+
   // Thinking phase = streaming with no answer yet. Steps stay expanded while
   // thinking, then collapse to "Completed N steps" once the answer begins.
   const thinking = !!isStreaming && !answered
@@ -211,13 +218,13 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
           ))}
 
           {/* the plan — each todo with the tools that ran while it was active */}
-          {todos.map((todo, i) => {
+          {visibleTodos.map((todo, i) => {
             const tools = todo.content ? toolsByTodo.get(todo.content) ?? [] : []
             // Once the answer starts streaming, show every todo as completed.
             const done = !!answered || todo.status === 'completed'
             const active = !answered && todo.status === 'in_progress'
             return (
-              <div key={`td${i}`}>
+              <div key={`td${i}`} className="animate-fade-up">
                 <div className="flex items-start gap-2 text-[13px]">
                   <span className="mt-0.5">
                     <TodoIcon done={done} active={active} />
