@@ -17,6 +17,7 @@ import {
   Circle,
   CircleDot,
   Sparkles,
+  Blocks,
 } from 'lucide-react'
 import type { ToolStep } from '@/lib/types'
 
@@ -52,13 +53,24 @@ function buildPlan(steps: ToolStep[]) {
   let todos: Todo[] = []
   let activeContent: string | null = null
   const toolsByTodo = new Map<string, ToolStep[]>()
+  const skillsByTodo = new Map<string, string[]>()
   const preTools: ToolStep[] = []
-  const skills: string[] = []
+  const preSkills: string[] = []
 
   for (const s of steps) {
     const sk = skillOf(s)
     if (sk) {
-      if (!skills.includes(sk)) skills.push(sk)
+      // A loaded skill nests under the todo active when it was read (e.g. the
+      // "read … skill documentation" step), so it shows as that step's child
+      // rather than a separate top-level entry. Skills read before any plan
+      // stay at the top.
+      if (activeContent) {
+        const list = skillsByTodo.get(activeContent) ?? []
+        if (!list.includes(sk)) list.push(sk)
+        skillsByTodo.set(activeContent, list)
+      } else if (!preSkills.includes(sk)) {
+        preSkills.push(sk)
+      }
       continue
     }
     if (isTodo(s.tool)) {
@@ -77,7 +89,7 @@ function buildPlan(steps: ToolStep[]) {
       preTools.push(s)
     }
   }
-  return { todos, toolsByTodo, preTools, skills }
+  return { todos, toolsByTodo, skillsByTodo, preTools, preSkills }
 }
 
 // ── presentation ────────────────────────────────────────────────────────────
@@ -151,6 +163,17 @@ function ToolRow({ step }: { step: ToolStep }) {
   )
 }
 
+function SkillRow({ name }: { name: string }) {
+  return (
+    <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
+      <Blocks size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]" />
+      <span>
+        Using <span className="text-[var(--foreground)]">{name}</span> skill
+      </span>
+    </div>
+  )
+}
+
 function TodoIcon({ done, active }: { done: boolean; active: boolean }) {
   if (done) return <Check size={14} strokeWidth={2} className="shrink-0 text-[var(--muted-foreground)]" />
   if (active) return <CircleDot size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
@@ -165,8 +188,8 @@ interface ToolActivityProps {
 }
 
 export function ToolActivity({ steps = [], isStreaming, answered, drafting }: ToolActivityProps) {
-  const { todos, toolsByTodo, preTools, skills } = buildPlan(steps)
-  const stepCount = todos.length || skills.length + preTools.length
+  const { todos, toolsByTodo, skillsByTodo, preTools, preSkills } = buildPlan(steps)
+  const stepCount = todos.length || preSkills.length + preTools.length
   const hasSteps = stepCount > 0 || !!drafting
 
   // Reveal the plan incrementally: show the completed steps plus the current one
@@ -202,14 +225,9 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
 
       {showBody && (
         <div className="space-y-2 border-l-2 border-[var(--border-subtle)] pl-3.5">
-          {/* skills the agent loaded */}
-          {skills.map((sk, i) => (
-            <div key={`sk${i}`} className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-              <Sparkles size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
-              <span>
-                Using <span className="text-[var(--foreground)]">{sk}</span> skill
-              </span>
-            </div>
+          {/* skills loaded before any plan (no owning todo) */}
+          {preSkills.map((sk, i) => (
+            <SkillRow key={`sk${i}`} name={sk} />
           ))}
 
           {/* tool calls made before any plan */}
@@ -220,6 +238,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
           {/* the plan — each todo with the tools that ran while it was active */}
           {visibleTodos.map((todo, i) => {
             const tools = todo.content ? toolsByTodo.get(todo.content) ?? [] : []
+            const todoSkills = todo.content ? skillsByTodo.get(todo.content) ?? [] : []
             // Once the answer starts streaming, show every todo as completed.
             const done = !!answered || todo.status === 'completed'
             const active = !answered && todo.status === 'in_progress'
@@ -231,10 +250,13 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
                   </span>
                   <span className={active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}>{todo.content}</span>
                 </div>
-                {tools.length > 0 && (
+                {(todoSkills.length > 0 || tools.length > 0) && (
                   <div className="ml-[7px] mt-1 mb-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
+                    {todoSkills.map((sk, k) => (
+                      <SkillRow key={`s${k}`} name={sk} />
+                    ))}
                     {tools.map((s, k) => (
-                      <ToolRow key={k} step={s} />
+                      <ToolRow key={`t${k}`} step={s} />
                     ))}
                   </div>
                 )}
