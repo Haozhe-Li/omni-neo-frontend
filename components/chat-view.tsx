@@ -8,6 +8,7 @@ import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
+import { SourcesPanel } from '@/components/sources-panel'
 import { ToolActivity } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { StreamingText } from '@/components/streaming-text'
@@ -73,6 +74,14 @@ export function ChatView({
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
+
+  // Sources drawer (small right-hand panel, opened from an answer's footer).
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [activeSources, setActiveSources] = useState<Source[]>([])
+  const openSources = useCallback((s: Source[]) => {
+    setActiveSources(s)
+    setSourcesOpen(true)
+  }, [])
 
   // Open the panel and collapse the app sidebar (they compete for width).
   const openPanel = useCallback(
@@ -521,7 +530,7 @@ export function ChatView({
 
   // ── render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full w-full overflow-hidden bg-[var(--background)]">
+    <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
       {/* Main column */}
       <div className="flex flex-col h-full relative min-w-0 flex-1 transition-all duration-300">
         {/* Header */}
@@ -608,7 +617,7 @@ export function ChatView({
                         ) : null}
                         {/* footer: sources + actions, once the turn is complete */}
                         {parsed.text && !(i === streamingIndex && isLoading) ? (
-                          <AnswerFooter content={parsed.text} sources={msg.sources} />
+                          <AnswerFooter content={parsed.text} sources={msg.sources} onOpenSources={openSources} />
                         ) : null}
                       </div>
                     )
@@ -677,6 +686,9 @@ export function ChatView({
           </div>
         </div>
       )}
+
+      {/* Sources drawer — small overlay panel, slides in over the right edge */}
+      <SourcesPanel sources={activeSources} open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
     </div>
   )
 }

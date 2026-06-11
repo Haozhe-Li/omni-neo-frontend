@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Copy, Check, Share2, ThumbsUp, ThumbsDown, MoreHorizontal, ChevronDown } from 'lucide-react'
+import { Copy, Check, Share2, ThumbsUp, ThumbsDown, MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
-import { SourceItem } from '@/components/source-item'
 import type { Source } from '@/lib/types'
 
 function domainOf(url: string) {
@@ -29,11 +28,11 @@ function IconBtn({ onClick, title, children }: { onClick?: () => void; title: st
 interface AnswerFooterProps {
   content: string
   sources?: Source[]
+  onOpenSources?: (sources: Source[]) => void
 }
 
-export function AnswerFooter({ content, sources }: AnswerFooterProps) {
+export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
-  const [showSources, setShowSources] = useState(false)
   const hasSources = !!sources && sources.length > 0
 
   const handleCopy = () => {
@@ -45,15 +44,6 @@ export function AnswerFooter({ content, sources }: AnswerFooterProps) {
 
   return (
     <div className="mt-4">
-      {/* Sources — below the answer, Perplexity-style */}
-      {hasSources && showSources && (
-        <div className="mb-3 grid gap-2 sm:grid-cols-2">
-          {sources!.map((s, i) => (
-            <SourceItem key={i} source={s} index={i} />
-          ))}
-        </div>
-      )}
-
       <div className="flex items-center gap-0.5 border-t border-[var(--border-subtle)] pt-2">
         <IconBtn onClick={handleCopy} title="Copy">
           {copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}
@@ -64,7 +54,7 @@ export function AnswerFooter({ content, sources }: AnswerFooterProps) {
 
         {hasSources && (
           <button
-            onClick={() => setShowSources((v) => !v)}
+            onClick={() => onOpenSources?.(sources!)}
             className="ml-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors duration-200"
           >
             <span className="flex -space-x-1.5">
@@ -78,7 +68,6 @@ export function AnswerFooter({ content, sources }: AnswerFooterProps) {
             <span>
               {sources!.length} source{sources!.length > 1 ? 's' : ''}
             </span>
-            <ChevronDown size={13} className={`transition-transform ${showSources ? 'rotate-180' : ''}`} />
           </button>
         )}
 
