@@ -7,73 +7,77 @@ interface StreamingTextProps {
   /** The full (report-stripped) answer accumulated so far. */
   content: string
   /**
-   * When true, reveal the answer progressively as it streams. When false, render
-   * the whole thing immediately (e.g. messages loaded from history).
+   * When true, reveal the answer with the buffered typewriter. When false, render
+   * the whole thing immediately (e.g. messages loaded from history, or the turn
+   * just finished).
    */
   animate: boolean
 }
 
-// Split markdown into top-level blocks on blank lines, but never inside a ```
-// fenced block — so an echarts/JSON fence stays intact and renders as one unit.
-function splitBlocks(src: string): string[] {
-  const out: string[] = []
-  let cur: string[] = []
-  let inFence = false
-  for (const line of src.split('\n')) {
-    if (/^\s*```/.test(line)) inFence = !inFence
-    if (!inFence && line.trim() === '') {
-      if (cur.length) {
-        out.push(cur.join('\n'))
-        cur = []
-      }
-    } else {
-      cur.push(line)
-    }
-  }
-  if (cur.length) out.push(cur.join('\n'))
-  return out
-}
+// Reveal pacing. The cursor advances at a steady base rate, and faster when it's
+// fallen behind — so bursty token arrival drains smoothly instead of the answer
+// popping out a chunk at a time. CATCHUP keeps the lag small (~backlog / CATCHUP
+// seconds) so the typewriter never trails the real stream by much.
+const BASE_CPS = 80 // characters/sec revealed at minimum
+const CATCHUP = 4 // proportional drain: a bigger backlog reveals faster
 
 /**
- * Streams the answer in a buffered, block-at-a-time way instead of a per-token
- * typewriter: it reveals only whole lines (so words never pop in mid-token),
- * groups them into markdown blocks, and fades each new block in as it lands.
+ * Buffered typewriter: reveals the answer character-by-character at a smooth,
+ * self-pacing rate rather than dumping whole lines/blocks or jittering one token
+ * at a time. Driven by a single rAF loop that interpolates the shown length
+ * toward the content length each frame.
  */
 export function StreamingText({ content, animate }: StreamingTextProps) {
   if (!animate) return <MarkdownMessage content={content} />
-  return <BufferedReveal content={content} />
+  return <Typewriter content={content} />
 }
 
-function BufferedReveal({ content }: { content: string }) {
-  // Only complete lines are eligible to show; hold back the trailing partial line
-  // until its newline arrives (or `animate` flips off and the parent renders all).
-  const nl = content.lastIndexOf('\n')
-  const readyLines = nl >= 0 ? content.slice(0, nl).split('\n') : []
-  const targetRef = useRef(readyLines.length)
-  targetRef.current = readyLines.length
+// Never leave a fenced code block half-open mid-reveal: if the visible slice has
+// an odd number of ``` markers, pull back to just before the dangling fence so a
+// raw, unterminated code block doesn't flash while it types.
+function trimDanglingFence(s: string): string {
+  let count = 0
+  let lastIdx = -1
+  const re = /```/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(s))) {
+    count++
+    lastIdx = m.index
+  }
+  return count % 2 === 1 ? s.slice(0, lastIdx) : s
+}
 
+function Typewriter({ content }: { content: string }) {
+  // Latest content is read off a ref so the rAF loop can stay mounted once.
+  const contentRef = useRef(content)
+  contentRef.current = content
+  const shownRef = useRef(0)
   const [shown, setShown] = useState(0)
+
   useEffect(() => {
-    const id = setInterval(() => {
-      setShown((prev) => {
-        const target = targetRef.current
-        if (prev >= target) return prev
-        // Reveal roughly a line or two per tick; catch up faster when far behind.
-        const step = Math.max(1, Math.floor((target - prev) / 4))
-        return Math.min(target, prev + step)
-      })
-    }, 80)
-    return () => clearInterval(id)
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000) // seconds, clamped after a stall
+      last = now
+      const target = contentRef.current.length
+      let cur = shownRef.current
+      if (cur < target) {
+        const speed = Math.max(BASE_CPS, (target - cur) * CATCHUP)
+        cur = Math.min(target, cur + speed * dt)
+        shownRef.current = cur
+        setShown(Math.floor(cur))
+      } else if (cur > target) {
+        // Content shrank (e.g. a <report> block was just stripped out) — snap back.
+        shownRef.current = target
+        setShown(target)
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
   }, [])
 
-  const blocks = splitBlocks(readyLines.slice(0, shown).join('\n'))
-  return (
-    <div>
-      {blocks.map((b, i) => (
-        <div key={i} className="omni-block-in">
-          <MarkdownMessage content={b} />
-        </div>
-      ))}
-    </div>
-  )
+  const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
+  return <MarkdownMessage content={trimDanglingFence(slice)} />
 }

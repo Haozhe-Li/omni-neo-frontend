@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { Menu, ArrowUp, Mic, Square, Paperclip, BarChart3, FileText, PanelRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -31,6 +31,13 @@ interface ChatViewProps {
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+
+// Gap left above a query when it's pinned to the top of the viewport (matches the
+// `scroll-mt-20` on each message: 20 × 0.25rem = 80px).
+const PIN_TOP_GAP = 80
+
+// useLayoutEffect on the server warns; fall back to useEffect there.
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 function isUntitled(t?: string) {
   const n = (t || '').trim().toLowerCase()
@@ -88,6 +95,16 @@ export function ChatView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const initializedRef = useRef(false)
   const initialFilesSentRef = useRef(false)
+
+  // Scroll: pin each new query near the top, then stop following while the answer
+  // streams (no per-token autoscroll). A bottom spacer guarantees there's always
+  // enough room below the latest query for it to reach the top.
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
+  const spacerRef = useRef<HTMLDivElement>(null)
+  const [spacerH, setSpacerH] = useState(0)
+  const [pinTick, setPinTick] = useState(0)
+  const requestPin = useCallback(() => setPinTick((t) => t + 1), [])
 
   // Reports are streamed inline as <report> blocks. Parse them out of each
   // assistant message so they render in the side reader (and the inline answer
@@ -338,6 +355,7 @@ export function ChatView({
         content: query,
         ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}),
       }
+      requestPin() // pin the first query to the top
       await runQuery(query, [userMsg], fileIds)
     }
     init()
@@ -365,34 +383,62 @@ export function ChatView({
     }
   }, [query])
 
-  // ── auto-scroll: smoothly follow the newest content while it streams, but
-  //    release the moment the user scrolls up to read, and re-engage when they
-  //    return to the bottom. No manual scrolling, no per-token jank.
-  const stickRef = useRef(true)
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current
-    if (!el) return
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+  // ── scroll model ────────────────────────────────────────────────────────
+  // No autoscroll while streaming. Instead: when a query is sent we pin it near
+  // the top of the viewport and leave it there as the answer fills in below.
+  //
+  // `recomputeSpacer` sizes a bottom spacer so the latest query can always be
+  // scrolled to the top (there's a full viewport of room beneath it), and shrinks
+  // it as the answer grows so trailing whitespace stays minimal. It returns the
+  // scrollTop that lands the query at `PIN_TOP_GAP` from the top.
+  const recomputeSpacer = useCallback((): number | null => {
+    const container = scrollRef.current
+    if (!container) return null
+    const msgs = messagesRef.current
+    let idx = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') {
+        idx = i
+        break
+      }
+    }
+    if (idx < 0) {
+      setSpacerH(0)
+      return null
+    }
+    const el = container.querySelector(`[data-message-index="${idx}"]`) as HTMLElement | null
+    if (!el) {
+      setSpacerH(0)
+      return null
+    }
+    const curSpacer = spacerRef.current?.offsetHeight ?? 0
+    const naturalBottom = container.scrollHeight - curSpacer // content height sans spacer
+    const elTop =
+      el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+    const below = naturalBottom - elTop // content from the query's top to the end
+    const room = container.clientHeight - PIN_TOP_GAP
+    setSpacerH(Math.max(0, Math.round(room - below)))
+    return Math.max(0, Math.round(elTop - PIN_TOP_GAP))
   }, [])
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el || !stickRef.current) return
-    // Instant during a streaming turn (continuous, no jank); the content growing
-    // a few px per token reads as a smooth follow.
-    el.scrollTop = el.scrollHeight
-  }, [messages])
 
-  // The typewriter reveals text between token events (its own internal state),
-  // which wouldn't re-fire the effect above — so poll a gentle follow while a
-  // turn is streaming. Respects stickRef, so a manual scroll-up still pauses it.
-  useEffect(() => {
-    if (!isLoading) return
-    const id = setInterval(() => {
-      const el = scrollRef.current
-      if (el && stickRef.current) el.scrollTop = el.scrollHeight
-    }, 100)
-    return () => clearInterval(id)
-  }, [isLoading])
+  // Keep the spacer correctly sized as the answer streams in (does not scroll).
+  useIsoLayoutEffect(() => {
+    recomputeSpacer()
+  }, [messages, recomputeSpacer])
+
+  // A new query was sent → size the spacer, then smooth-scroll it to the top.
+  useIsoLayoutEffect(() => {
+    if (pinTick === 0) return
+    const container = scrollRef.current
+    if (!container) return
+    const target = recomputeSpacer()
+    // The spacer state re-renders synchronously (layout effect); scroll on the
+    // next frame once that taller spacer is in the DOM so the query can reach top.
+    const raf = requestAnimationFrame(() => {
+      container.scrollTo({ top: target ?? container.scrollHeight, behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [pinTick, recomputeSpacer])
 
   // ── send from composer ─────────────────────────────────────────────────
   const handleSend = async () => {
@@ -411,7 +457,7 @@ export function ChatView({
     // the UI updates instantly, before personalization/network work begins.
     setMessages([...baseHistory, { role: 'assistant', content: '' }])
     setStreamingIndex(baseHistory.length)
-    stickRef.current = true // follow the new turn
+    requestPin() // pin this new query to the top
     const fileIds = activeFiles.map((f) => ({ [f.id]: f.name }))
     await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined)
   }
@@ -510,7 +556,7 @@ export function ChatView({
         </header>
 
         {/* Messages */}
-        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
           <div className="max-w-2xl mx-auto space-y-8 pb-32">
             {messages.map((msg, i) => (
               <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -570,6 +616,8 @@ export function ChatView({
                 )}
               </div>
             ))}
+            {/* Bottom spacer: reserves room so the latest query can sit at the top. */}
+            {spacerH > 0 && <div ref={spacerRef} style={{ height: spacerH }} aria-hidden className="shrink-0" />}
           </div>
         </div>
 
