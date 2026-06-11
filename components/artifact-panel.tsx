@@ -105,7 +105,10 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         ) : active.report ? (
           <article>
             <h1 className="text-xl font-semibold text-foreground mb-4">{active.report.title}</h1>
-            <MarkdownMessage content={active.report.content} />
+            {active.report.content ? <MarkdownMessage content={active.report.content} /> : null}
+            {active.report.complete === false ? (
+              <span className="omni-shimmer-text text-sm font-medium">Writing…</span>
+            ) : null}
           </article>
         ) : null}
       </div>

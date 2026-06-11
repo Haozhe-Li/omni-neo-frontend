@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Menu, ArrowUp, Mic, Square, Paperclip, BarChart3, FileText, PanelRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -15,6 +15,7 @@ import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
 import { getMemories, appendQueryToMemoryQueue } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
+import { parseReports, type ParsedReport } from '@/lib/report-parser'
 import type { AgentMode, ChatMessage, ChartArtifact, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 
 interface ChatViewProps {
@@ -88,11 +89,41 @@ export function ChatView({
   const initializedRef = useRef(false)
   const initialFilesSentRef = useRef(false)
 
+  // Reports are streamed inline as <report> blocks. Parse them out of each
+  // assistant message so they render in the side reader (and the inline answer
+  // shows only the narration around them). Re-parsed live as content streams.
+  const parsedByIndex = useMemo(
+    () =>
+      messages.map((m, i) =>
+        m.role === 'assistant'
+          ? parseReports(m.content || '', `m${i}`)
+          : { text: m.content || '', reports: [] as ParsedReport[] }
+      ),
+    [messages]
+  )
+
   // Flatten artifacts/reports across the whole conversation for the panel.
   const allArtifacts: ChartArtifact[] = messages.flatMap((m) => m.artifacts ?? [])
-  const allReports: ReportArtifact[] = messages.flatMap((m) => m.reports ?? [])
-  const draftingReport = messages.some((m) => m.drafting === 'report')
+  const parsedReports: ParsedReport[] = parsedByIndex.flatMap((p) => p.reports)
+  // Older threads stored reports as a separate array (pre inline-streaming);
+  // keep rendering those so historical conversations don't lose their reports.
+  const legacyReports: ReportArtifact[] = messages.flatMap((m) => m.reports ?? [])
+  const allReports: ReportArtifact[] = [...parsedReports, ...legacyReports]
+  const draftingReport = parsedReports.some((r) => !r.complete)
   const hasPanelContent = allArtifacts.length > 0 || allReports.length > 0 || draftingReport
+
+  // When a report starts streaming inline, surface the reader and follow it.
+  const openedReportsRef = useRef<Set<string>>(new Set())
+  const reportIdsKey = parsedReports.map((r) => r.id).join('|')
+  useEffect(() => {
+    for (const r of parsedReports) {
+      if (!openedReportsRef.current.has(r.id)) {
+        openedReportsRef.current.add(r.id)
+        openPanel(r.id)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportIdsKey])
 
   // Pre-populate attachment chips passed from the home composer.
   useEffect(() => {
@@ -158,14 +189,14 @@ export function ChatView({
       let text = ''
       const widgets: WidgetData[] = []
       const artifacts: ChartArtifact[] = []
-      const reports: ReportArtifact[] = []
       let sources: Source[] = []
-      let drafting: 'report' | 'chart' | null = null
+      // Reports stream inline as text now; only charts are still tool-drafted.
+      let drafting: 'chart' | null = null
 
       const patchAssistant = () => {
         setMessages([
           ...baseHistory,
-          { role: 'assistant', content: text, steps: [...steps], widgets: [...widgets], artifacts: [...artifacts], reports: [...reports], sources, drafting },
+          { role: 'assistant', content: text, steps: [...steps], widgets: [...widgets], artifacts: [...artifacts], sources, drafting },
         ])
       }
 
@@ -198,13 +229,8 @@ export function ChatView({
               patchAssistant()
               break
             case 'drafting':
-              drafting = ev.tool === 'render_chart' ? 'chart' : 'report'
-              if (drafting === 'report') {
-                // Reveal the panel immediately so the user sees the report is
-                // being written (content arrives whole once the model finishes).
-                setPanelOpen(true)
-                setSidebarOpen?.(false)
-              }
+              // Only charts are tool-drafted; reports stream inline as text.
+              drafting = 'chart'
               patchAssistant()
               break
             case 'sources': {
@@ -219,39 +245,32 @@ export function ChatView({
               openPanel(ev.id)
               patchAssistant()
               break
-            case 'report':
-              reports.push({ id: ev.id, title: ev.title, content: ev.content })
-              drafting = null
-              openPanel(ev.id)
-              patchAssistant()
-              break
             case 'error':
               text += (text ? '\n\n' : '') + (ev.content || 'Something went wrong.')
               patchAssistant()
               break
             case 'done': {
-              // The agent should narrate; if it didn't, fall back to a friendly
-              // pointer to whatever it produced in the panel.
+              // The agent narrates inline (report blocks included); fall back to a
+              // friendly pointer only if it made a chart with no prose at all.
               const finalText =
-                text ||
-                (reports.length
-                  ? `I've put together **${reports[reports.length - 1].title}** for you — open it in the panel on the right.`
-                  : artifacts.length
-                    ? "I've prepared a chart for you — see the panel on the right."
-                    : 'No response.')
+                text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, widgets, artifacts, reports, sources, drafting: null },
+                { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, title)
               setIsLoading(false)
+              // Stop animating so the finished answer (incl. its last line, which
+              // has no trailing newline) renders in full rather than buffered.
+              setStreamingIndex(-1)
               return
             }
           }
         }
       }
       setIsLoading(false)
+      setStreamingIndex(-1)
     },
     [syncToBackend, title, openPanel]
   )
@@ -283,6 +302,7 @@ export function ChatView({
         const msg = e instanceof Error ? e.message : 'Request failed.'
         setMessages([...baseHistory, { role: 'assistant', content: msg }])
         setIsLoading(false)
+        setStreamingIndex(-1)
       }
     },
     [threadId, mode, buildPersonalization, fetchWithAuth, handleStream]
@@ -499,46 +519,54 @@ export function ChatView({
                     {msg.content}
                   </div>
                 ) : (
-                  <div className="w-full" data-selection-scope="assistant-message">
-                    <ToolActivity
-                      steps={msg.steps}
-                      isStreaming={i === streamingIndex && isLoading}
-                      answered={!!msg.content}
-                      drafting={msg.drafting}
-                    />
-                    <WidgetCards widgets={msg.widgets} />
-                    {/* answer text */}
-                    {msg.content ? <StreamingText content={msg.content} animate={i === streamingIndex} /> : null}
-                    {/* artifact / report chips */}
-                    {(msg.artifacts?.length || msg.reports?.length) ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {msg.reports?.map((r) => (
-                          <button
-                            key={r.id}
-                            onClick={() => openPanel(r.id)}
-                            className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          >
-                            <FileText size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
-                            <span className="max-w-[200px] truncate">{r.title}</span>
-                          </button>
-                        ))}
-                        {msg.artifacts?.map((a) => (
-                          <button
-                            key={a.id}
-                            onClick={() => openPanel(a.id)}
-                            className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          >
-                            <BarChart3 size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
-                            <span className="max-w-[200px] truncate">{a.title}</span>
-                          </button>
-                        ))}
+                  (() => {
+                    const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[] }
+                    // Inline <report> blocks → reader; show only the narration in chat.
+                    const msgReports: ReportArtifact[] = [...parsed.reports, ...(msg.reports ?? [])]
+                    const reportDrafting = parsed.reports.some((r) => !r.complete)
+                    return (
+                      <div className="w-full" data-selection-scope="assistant-message">
+                        <ToolActivity
+                          steps={msg.steps}
+                          isStreaming={i === streamingIndex && isLoading}
+                          answered={!!parsed.text}
+                          drafting={reportDrafting ? 'report' : msg.drafting}
+                        />
+                        <WidgetCards widgets={msg.widgets} />
+                        {/* answer text (report blocks stripped out) */}
+                        {parsed.text ? <StreamingText content={parsed.text} animate={i === streamingIndex} /> : null}
+                        {/* artifact / report chips */}
+                        {(msg.artifacts?.length || msgReports.length) ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {msgReports.map((r) => (
+                              <button
+                                key={r.id}
+                                onClick={() => openPanel(r.id)}
+                                className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                              >
+                                <FileText size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
+                                <span className="max-w-[200px] truncate">{r.title}</span>
+                              </button>
+                            ))}
+                            {msg.artifacts?.map((a) => (
+                              <button
+                                key={a.id}
+                                onClick={() => openPanel(a.id)}
+                                className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                              >
+                                <BarChart3 size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
+                                <span className="max-w-[200px] truncate">{a.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {/* footer: sources + actions, once the turn is complete */}
+                        {parsed.text && !(i === streamingIndex && isLoading) ? (
+                          <AnswerFooter content={parsed.text} sources={msg.sources} />
+                        ) : null}
                       </div>
-                    ) : null}
-                    {/* footer: sources + actions, once the turn is complete */}
-                    {msg.content && !(i === streamingIndex && isLoading) ? (
-                      <AnswerFooter content={msg.content} sources={msg.sources} />
-                    ) : null}
-                  </div>
+                    )
+                  })()
                 )}
               </div>
             ))}
