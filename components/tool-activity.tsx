@@ -12,11 +12,10 @@ import {
   Wrench,
   ChevronDown,
   Code2,
-  Loader2,
   Check,
   Circle,
   CircleDot,
-  Sparkles,
+  Blocks,
 } from 'lucide-react'
 import type { ToolStep } from '@/lib/types'
 
@@ -52,13 +51,24 @@ function buildPlan(steps: ToolStep[]) {
   let todos: Todo[] = []
   let activeContent: string | null = null
   const toolsByTodo = new Map<string, ToolStep[]>()
+  const skillsByTodo = new Map<string, string[]>()
   const preTools: ToolStep[] = []
-  const skills: string[] = []
+  const preSkills: string[] = []
 
   for (const s of steps) {
     const sk = skillOf(s)
     if (sk) {
-      if (!skills.includes(sk)) skills.push(sk)
+      // A loaded skill nests under the todo active when it was read (e.g. the
+      // "read … skill documentation" step), so it shows as that step's child
+      // rather than a separate top-level entry. Skills read before any plan
+      // stay at the top.
+      if (activeContent) {
+        const list = skillsByTodo.get(activeContent) ?? []
+        if (!list.includes(sk)) list.push(sk)
+        skillsByTodo.set(activeContent, list)
+      } else if (!preSkills.includes(sk)) {
+        preSkills.push(sk)
+      }
       continue
     }
     if (isTodo(s.tool)) {
@@ -77,19 +87,10 @@ function buildPlan(steps: ToolStep[]) {
       preTools.push(s)
     }
   }
-  return { todos, toolsByTodo, preTools, skills }
+  return { todos, toolsByTodo, skillsByTodo, preTools, preSkills }
 }
 
 // ── presentation ────────────────────────────────────────────────────────────
-function ThinkingIndicator() {
-  return (
-    <div className="flex items-center gap-2">
-      <Sparkles size={15} strokeWidth={1.75} className="text-[var(--accent)] animate-pulse" />
-      <span className="omni-shimmer-text text-[14px] font-medium">Thinking</span>
-    </div>
-  )
-}
-
 function singleStepInfo(tool: string, args: any) {
   const t = lc(tool)
   const a = args || {}
@@ -118,7 +119,7 @@ function singleStepInfo(tool: string, args: any) {
 function CodeStep({ code, output }: { code: string; output?: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
+    <div className="omni-step-in rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--secondary)]/50 transition-colors">
         <Code2 size={14} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
         <span>Ran code</span>
@@ -139,14 +140,27 @@ function CodeStep({ code, output }: { code: string; output?: string }) {
   )
 }
 
-function ToolRow({ step }: { step: ToolStep }) {
+// `active` = this is the step currently executing (the bottom-most row): its
+// label gets the same neutral shimmer the answer uses while thinking.
+function ToolRow({ step, active }: { step: ToolStep; active?: boolean }) {
   if (typeof step.args?.code === 'string') return <CodeStep code={step.args.code} output={(step.args as any).output} />
   const { Icon, label, chip } = singleStepInfo(step.tool, step.args)
   return (
-    <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
+    <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
       <Icon size={13} strokeWidth={1.75} className="shrink-0" />
-      <span className="shrink-0">{label}</span>
+      <span className={`shrink-0 ${active ? 'omni-shimmer-text' : ''}`}>{label}</span>
       {chip && <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[12px] text-[var(--foreground)]">{chip}</span>}
+    </div>
+  )
+}
+
+function SkillRow({ name }: { name: string }) {
+  return (
+    <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
+      <Blocks size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]" />
+      <span>
+        Using <span className="text-[var(--foreground)]">{name}</span> skill
+      </span>
     </div>
   )
 }
@@ -165,8 +179,8 @@ interface ToolActivityProps {
 }
 
 export function ToolActivity({ steps = [], isStreaming, answered, drafting }: ToolActivityProps) {
-  const { todos, toolsByTodo, preTools, skills } = buildPlan(steps)
-  const stepCount = todos.length || skills.length + preTools.length
+  const { todos, toolsByTodo, skillsByTodo, preTools, preSkills } = buildPlan(steps)
+  const stepCount = todos.length || preSkills.length + preTools.length
   const hasSteps = stepCount > 0 || !!drafting
 
   // Reveal the plan incrementally: show the completed steps plus the current one
@@ -182,13 +196,20 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   const [open, setOpen] = useState(false)
   const showBody = thinking ? hasSteps : open
 
-  if (!thinking && !hasSteps) return null
+  if (!hasSteps) return null
+
+  // The bottom-most row while thinking carries a subtle shimmer to mark the step
+  // currently executing: the active todo's latest tool (or the todo itself if it
+  // has no tools yet), the last pre-plan tool when there's no plan, or — taking
+  // priority — the drafting row when a report/chart is being written.
+  const activeTodoIdx = visibleTodos.findIndex((t) => !answered && t.status === 'in_progress')
+  const noPlan = visibleTodos.length === 0
 
   return (
     <div className="mb-3 space-y-2">
-      {thinking ? (
-        <ThinkingIndicator />
-      ) : (
+      {/* While thinking the steps speak for themselves — no separate indicator.
+          Once answered they collapse behind a toggle. */}
+      {!thinking && (
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
@@ -202,39 +223,49 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
 
       {showBody && (
         <div className="space-y-2 border-l-2 border-[var(--border-subtle)] pl-3.5">
-          {/* skills the agent loaded */}
-          {skills.map((sk, i) => (
-            <div key={`sk${i}`} className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-              <Sparkles size={14} strokeWidth={1.75} className="shrink-0 text-[var(--accent)]" />
-              <span>
-                Using <span className="text-[var(--foreground)]">{sk}</span> skill
-              </span>
-            </div>
+          {/* skills loaded before any plan (no owning todo) */}
+          {preSkills.map((sk, i) => (
+            <SkillRow key={`sk${i}`} name={sk} />
           ))}
 
           {/* tool calls made before any plan */}
           {preTools.map((s, i) => (
-            <ToolRow key={`pre${i}`} step={s} />
+            <ToolRow key={`pre${i}`} step={s} active={thinking && !drafting && noPlan && i === preTools.length - 1} />
           ))}
 
           {/* the plan — each todo with the tools that ran while it was active */}
           {visibleTodos.map((todo, i) => {
             const tools = todo.content ? toolsByTodo.get(todo.content) ?? [] : []
+            const todoSkills = todo.content ? skillsByTodo.get(todo.content) ?? [] : []
             // Once the answer starts streaming, show every todo as completed.
             const done = !!answered || todo.status === 'completed'
             const active = !answered && todo.status === 'in_progress'
+            const isCurrent = thinking && !drafting && i === activeTodoIdx
             return (
-              <div key={`td${i}`} className="animate-fade-up">
+              <div key={`td${i}`} className="omni-step-in">
                 <div className="flex items-start gap-2 text-[13px]">
                   <span className="mt-0.5">
                     <TodoIcon done={done} active={active} />
                   </span>
-                  <span className={active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}>{todo.content}</span>
+                  <span
+                    className={
+                      isCurrent && tools.length === 0
+                        ? 'omni-shimmer-text font-medium'
+                        : active
+                          ? 'text-[var(--foreground)]'
+                          : 'text-[var(--muted-foreground)]'
+                    }
+                  >
+                    {todo.content}
+                  </span>
                 </div>
-                {tools.length > 0 && (
+                {(todoSkills.length > 0 || tools.length > 0) && (
                   <div className="ml-[7px] mt-1 mb-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
+                    {todoSkills.map((sk, k) => (
+                      <SkillRow key={`s${k}`} name={sk} />
+                    ))}
                     {tools.map((s, k) => (
-                      <ToolRow key={k} step={s} />
+                      <ToolRow key={`t${k}`} step={s} active={isCurrent && k === tools.length - 1} />
                     ))}
                   </div>
                 )}
@@ -243,9 +274,10 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
           })}
 
           {drafting && (
-            <div className="flex items-center gap-2 text-[13px] text-[var(--accent)]">
-              <Loader2 size={14} className="animate-spin" />
-              <span>{drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}</span>
+            <div className="omni-step-in text-[13px]">
+              <span className="omni-shimmer-text font-medium">
+                {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
+              </span>
             </div>
           )}
         </div>
