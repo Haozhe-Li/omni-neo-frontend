@@ -56,7 +56,7 @@ function CopyButton({ getText }: { getText: () => string }) {
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       }}
-      className="absolute top-2.5 right-2.5 p-1.5 rounded-md border border-[var(--border-subtle)] bg-[var(--background)]/80 text-[var(--muted-foreground)] opacity-0 group-hover:opacity-100 transition-opacity"
+      className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] transition-all opacity-0 group-hover:opacity-100"
       title="Copy code"
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -76,12 +76,21 @@ const markdownComponents: Components = {
   pre: ({ children }: any) => {
     const cls = children?.props?.className || ''
     if (cls.includes('language-mermaid') || cls.includes('language-echarts')) return <>{children}</>
+    const match = /language-(\w+)/.exec(cls)
+    const language = match ? match[1] : ''
     return (
-      <div className="relative group my-4">
-        <pre className="rounded-xl bg-[color-mix(in_srgb,var(--foreground)_10%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_14%,var(--background))] p-4 overflow-x-auto text-sm leading-relaxed border border-[color-mix(in_srgb,var(--foreground)_22%,var(--background))]">
+      <div className="relative group my-4 rounded-xl border border-[color-mix(in_srgb,var(--foreground)_10%,var(--background))] bg-[color-mix(in_srgb,var(--foreground)_4%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_8%,var(--background))] overflow-hidden">
+        <div className="flex items-center justify-between px-3 pt-2 pb-0">
+          {language ? (
+            <span className="px-2 py-1 text-[11px] font-medium text-[var(--muted-foreground)] bg-[color-mix(in_srgb,var(--foreground)_6%,var(--background))] dark:bg-[color-mix(in_srgb,var(--foreground)_12%,var(--background))] rounded-md lowercase select-none">
+              {language}
+            </span>
+          ) : <span />}
+          <CopyButton getText={() => extractNodeText(children)} />
+        </div>
+        <pre className="px-4 pb-4 pt-2 overflow-x-auto text-[13px] leading-relaxed custom-scrollbar">
           {children}
         </pre>
-        <CopyButton getText={() => extractNodeText(children)} />
       </div>
     )
   },

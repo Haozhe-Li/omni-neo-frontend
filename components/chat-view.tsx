@@ -358,6 +358,7 @@ export function ChatView({
             setMessages(data.messages as ChatMessage[])
             if (data?.messages?.[0]?.mode) setMode(data.messages[0].mode)
             setIsLoading(false)
+            setTimeout(() => requestPin(), 50) // pin to the last user message after DOM update
             return
           }
         }

@@ -433,71 +433,113 @@
 
 /* ── highlight.js code theme ── */
 .hljs {
-  color: #cdd6f4;
+  color: #4a4c50;
 }
-
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-built_in {
-  color: #cba6f7;
+  color: #637792;
 }
-
 .hljs-string,
 .hljs-attr {
-  color: #a6e3a1;
+  color: #728470;
 }
-
 .hljs-number,
 .hljs-literal {
-  color: #fab387;
+  color: #9c7b64;
 }
-
 .hljs-comment {
-  color: #6c7086;
+  color: #9ca0a6;
   font-style: italic;
 }
-
 .hljs-function .hljs-title,
 .hljs-title.function_ {
-  color: #89b4fa;
+  color: #85748f;
 }
-
 .hljs-variable,
 .hljs-params {
-  color: #f5e0dc;
+  color: #68707a;
 }
-
 .hljs-type,
 .hljs-class .hljs-title {
-  color: #f9e2af;
+  color: #658585;
 }
-
 .hljs-meta,
 .hljs-tag {
-  color: #94e2d5;
+  color: #946969;
 }
-
 .hljs-punctuation,
 .hljs-operator {
-  color: #89dceb;
+  color: #858990;
 }
-
 .hljs-property {
-  color: #89b4fa;
+  color: #68707a;
 }
-
 .hljs-regexp {
-  color: #f38ba8;
+  color: #966b7a;
 }
-
 .hljs-deletion {
-  color: #f38ba8;
-  background: rgba(243, 139, 168, 0.1);
+  color: #946969;
+  background: rgba(148, 105, 105, 0.1);
+}
+.hljs-addition {
+  color: #728470;
+  background: rgba(114, 132, 112, 0.1);
 }
 
-.hljs-addition {
-  color: #a6e3a1;
-  background: rgba(166, 227, 161, 0.1);
+.dark .hljs {
+  color: #c1c5cc;
+}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-built_in {
+  color: #94a7c2;
+}
+.dark .hljs-string,
+.dark .hljs-attr {
+  color: #9db09a;
+}
+.dark .hljs-number,
+.dark .hljs-literal {
+  color: #c7a791;
+}
+.dark .hljs-comment {
+  color: #787d85;
+  font-style: italic;
+}
+.dark .hljs-function .hljs-title,
+.dark .hljs-title.function_ {
+  color: #b5a4bf;
+}
+.dark .hljs-variable,
+.dark .hljs-params {
+  color: #a4abb5;
+}
+.dark .hljs-type,
+.dark .hljs-class .hljs-title {
+  color: #91b5b5;
+}
+.dark .hljs-meta,
+.dark .hljs-tag {
+  color: #bd9595;
+}
+.dark .hljs-punctuation,
+.dark .hljs-operator {
+  color: #8c929c;
+}
+.dark .hljs-property {
+  color: #a4abb5;
+}
+.dark .hljs-regexp {
+  color: #c09ba8;
+}
+.dark .hljs-deletion {
+  color: #bd9595;
+  background: rgba(189, 149, 149, 0.1);
+}
+.dark .hljs-addition {
+  color: #9db09a;
+  background: rgba(157, 176, 154, 0.1);
 }
 
 /* ── Markdown body utilities ── */

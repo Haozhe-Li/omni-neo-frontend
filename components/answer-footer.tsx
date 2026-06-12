@@ -13,12 +13,14 @@ function domainOf(url: string) {
   }
 }
 
-function IconBtn({ onClick, title, children }: { onClick?: () => void; title: string; children: React.ReactNode }) {
+function IconBtn({ onClick, title, children, active }: { onClick?: () => void; title: string; children: React.ReactNode; active?: boolean }) {
   return (
     <button
       onClick={onClick}
       title={title}
-      className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors duration-200"
+      className={`p-1.5 rounded-full hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95 ${
+        active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+      }`}
     >
       {children}
     </button>
@@ -33,29 +35,40 @@ interface AnswerFooterProps {
 
 export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
+  const [liked, setLiked] = useState(false)
+  const [disliked, setDisliked] = useState(false)
   const hasSources = !!sources && sources.length > 0
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content)
     setCopied(true)
-    toast.success('Copied')
     setTimeout(() => setCopied(false), 1500)
+  }
+
+  const handleLike = () => {
+    setLiked(true)
+    setDisliked(false)
+  }
+
+  const handleDislike = () => {
+    setDisliked(true)
+    setLiked(false)
   }
 
   return (
     <div className="mt-4">
-      <div className="flex items-center gap-0.5 border-t border-[var(--border-subtle)] pt-2">
+      <div className="flex items-center gap-1 pt-2">
         <IconBtn onClick={handleCopy} title="Copy">
           {copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}
         </IconBtn>
-        <IconBtn onClick={() => toast.info('Sharing coming soon')} title="Share">
+        <IconBtn title="Share">
           <Share2 size={16} strokeWidth={1.75} />
         </IconBtn>
 
         {hasSources && (
           <button
             onClick={() => onOpenSources?.(sources!)}
-            className="ml-1 flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors duration-200"
+            className="ml-1 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95"
           >
             <span className="flex -space-x-1.5">
               {sources!.slice(0, 4).map((s, i) => (
@@ -71,14 +84,14 @@ export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterPr
           </button>
         )}
 
-        <div className="ml-auto flex items-center gap-0.5">
-          <IconBtn onClick={() => toast.success('Thanks for the feedback')} title="Good response">
-            <ThumbsUp size={16} strokeWidth={1.75} />
+        <div className="ml-auto flex items-center gap-1">
+          <IconBtn onClick={handleLike} active={liked} title="Good response">
+            <ThumbsUp size={16} strokeWidth={1.75} fill={liked ? 'currentColor' : 'none'} />
           </IconBtn>
-          <IconBtn onClick={() => toast.success('Thanks for the feedback')} title="Bad response">
-            <ThumbsDown size={16} strokeWidth={1.75} />
+          <IconBtn onClick={handleDislike} active={disliked} title="Bad response">
+            <ThumbsDown size={16} strokeWidth={1.75} fill={disliked ? 'currentColor' : 'none'} />
           </IconBtn>
-          <IconBtn onClick={() => toast.info('More options coming soon')} title="More">
+          <IconBtn title="More">
             <MoreHorizontal size={16} strokeWidth={1.75} />
           </IconBtn>
         </div>

@@ -312,10 +312,11 @@ export function AppSidebar({
             }
         }
 
-        // Check if current thread was deleted
-        if (currentThreadId && history.some(c => c.thread_id === currentThreadId)) {
-            if (onNewChat) onNewChat()
-        }
+        // Always go back to home after deleting all threads
+        if (onNewChat) onNewChat()
+        setIsSearchVisible(false)
+        setSearchQuery('')
+        if (isMobile && onToggle) onToggle()
 
         // Refresh list
         if (isSignedIn) {
