@@ -18,6 +18,8 @@ import { getUserLocation } from '@/lib/location'
 import { getMemories, appendQueryToMemoryQueue } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport } from '@/lib/report-parser'
+import { parseQuestion } from '@/lib/question-parser'
+import { QuestionBlock } from '@/components/question-block'
 import type { AgentMode, ChatMessage, ChartArtifact, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 
 interface ChatViewProps {
@@ -122,16 +124,16 @@ export function ChatView({
   const [pinTick, setPinTick] = useState(0)
   const requestPin = useCallback(() => setPinTick((t) => t + 1), [])
 
-  // Reports are streamed inline as <report> blocks. Parse them out of each
-  // assistant message so they render in the side reader (and the inline answer
-  // shows only the narration around them). Re-parsed live as content streams.
+  // Reports stream inline as <report> blocks; questions appear as <question>
+  // blocks. Both are stripped from the displayed text and rendered separately.
   const parsedByIndex = useMemo(
     () =>
-      messages.map((m, i) =>
-        m.role === 'assistant'
-          ? parseReports(m.content || '', `m${i}`)
-          : { text: m.content || '', reports: [] as ParsedReport[] }
-      ),
+      messages.map((m, i) => {
+        if (m.role !== 'assistant') return { text: m.content || '', reports: [] as ParsedReport[], question: null }
+        const withReports = parseReports(m.content || '', `m${i}`)
+        const { text, question } = parseQuestion(withReports.text)
+        return { text, reports: withReports.reports, question }
+      }),
     [messages]
   )
 
@@ -461,6 +463,19 @@ export function ChatView({
     return () => cancelAnimationFrame(raf)
   }, [pinTick, recomputeSpacer])
 
+  // ── submit a question-block answer ────────────────────────────────────
+  const handleQuestionSubmit = useCallback(
+    async (formattedAnswer: string) => {
+      const userMsg: ChatMessage = { role: 'user', content: formattedAnswer }
+      const baseHistory = [...messages, userMsg]
+      setMessages([...baseHistory, { role: 'assistant', content: '' }])
+      setStreamingIndex(baseHistory.length)
+      requestPin()
+      await runQuery(formattedAnswer, baseHistory)
+    },
+    [messages, runQuery, requestPin]
+  )
+
   // ── send from composer ─────────────────────────────────────────────────
   const handleSend = async () => {
     const readyFiles = attachedFiles.filter((f) => f.status === 'ready')
@@ -588,9 +603,32 @@ export function ChatView({
                           answered={!!parsed.text}
                           drafting={reportDrafting ? 'report' : msg.drafting}
                         />
-                        {/* answer text (report blocks stripped out) */}
+                        {/* answer text (report + question blocks stripped out) */}
                         {parsed.text ? <StreamingText content={parsed.text} animate={i === streamingIndex} /> : null}
-                        
+
+                        {/* question block
+                            Guard: skip mount only while THIS message is still
+                            streaming (avoids stale useState(answered) init).
+                            Already-answered blocks on older messages remain
+                            visible even while a later response is loading. */}
+                        {parsed.question && !(i === streamingIndex && isLoading) && (() => {
+                          const hasUserAfter = messages.slice(i + 1).some((m) => m.role === 'user')
+                          const isLastAssistant = i === messages.length - 1
+                          const isInteractive = isLastAssistant && !hasUserAfter && !isLoading
+                          const answeredText = !isInteractive
+                            ? messages.slice(i + 1).find((m) => m.role === 'user')?.content
+                            : undefined
+                          return (
+                            <QuestionBlock
+                              key={`q-${i}`}
+                              question={parsed.question}
+                              onSubmit={handleQuestionSubmit}
+                              answered={!isInteractive}
+                              answeredText={answeredText}
+                            />
+                          )
+                        })()}
+
                         {/* report blocks */}
                         {msgReports.length > 0 && (
                           <div className="mt-4 flex flex-col gap-3 w-full">

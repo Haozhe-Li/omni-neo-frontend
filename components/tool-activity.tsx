@@ -12,6 +12,7 @@ import {
   Wrench,
   ChevronDown,
   Code2,
+  Terminal,
   Check,
   Blocks,
 } from 'lucide-react'
@@ -111,6 +112,7 @@ function singleStepInfo(tool: string, args: any) {
   if (t.includes('currency'))
     return { Icon: DollarSign, label: 'Currency', chip: [a.base_currency || a.base, a.target_currency || a.target].filter(Boolean).join(' → ') }
   if (t.includes('document') || t.includes('read_user')) return { Icon: FileText, label: 'Reading your file', chip: undefined }
+  if (t === 'run_python' || t.includes('run_python')) return { Icon: Terminal, label: 'Running Python', chip: undefined }
   // deepagents builtin file/system tools — shown faithfully.
   const base = (p: any) => (typeof p === 'string' ? p.split('/').pop() : undefined)
   if (t === 'read_file') return { Icon: FileText, label: 'Reading file', chip: base(a.file_path) }
@@ -124,32 +126,57 @@ function singleStepInfo(tool: string, args: any) {
   return { Icon: Wrench, label: tool || 'Working', chip: undefined }
 }
 
-function CodeStep({ code, output }: { code: string; output?: string }) {
+function CodeStep({ code, isRunning }: { code: string; isRunning?: boolean }) {
   const [open, setOpen] = useState(false)
+  // Show first non-empty line as preview chip in the header.
+  const preview = code.split('\n').find((l) => l.trim()) ?? ''
+
   return (
     <div className="omni-step-in rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--secondary)]/50 transition-colors">
-        <Code2 size={14} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
-        <span>Ran code</span>
-        <ChevronDown size={14} className={`ml-auto text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`} />
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--secondary)]/50 transition-colors"
+      >
+        {/* icon: pulses while running */}
+        <Terminal
+          size={14}
+          strokeWidth={1.75}
+          className={isRunning ? 'text-[var(--accent)] animate-pulse' : 'text-[var(--muted-foreground)]'}
+        />
+
+        <span className={isRunning ? 'omni-shimmer-text-accent font-medium' : 'text-[var(--muted-foreground)]'}>
+          {isRunning ? 'Running Python…' : 'Python'}
+        </span>
+
+        {/* code preview chip */}
+        {preview && !isRunning && (
+          <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[11px] font-mono text-[var(--foreground)] max-w-[260px]">
+            {preview.length > 48 ? preview.slice(0, 48) + '…' : preview}
+          </span>
+        )}
+
+        <ChevronDown
+          size={14}
+          className={`ml-auto shrink-0 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`}
+        />
       </button>
+
       {open && (
         <div className="border-t border-[var(--border-subtle)]">
-          <pre className="p-3 overflow-x-auto text-[12px] leading-relaxed font-mono text-[var(--foreground)]">{code}</pre>
-          {output && (
-            <div className="border-t border-[var(--border-subtle)] bg-[var(--secondary)]/30 p-3">
-              <div className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] mb-1">Output</div>
-              <pre className="overflow-x-auto text-[12px] leading-relaxed font-mono text-[var(--muted-foreground)] whitespace-pre-wrap">{output}</pre>
-            </div>
-          )}
+          <pre className="p-3 overflow-x-auto text-[12px] leading-relaxed font-mono text-[var(--foreground)] bg-[color-mix(in_srgb,var(--foreground)_3%,var(--background))]">
+            {code}
+          </pre>
         </div>
       )}
     </div>
   )
 }
 
-function ToolRow({ step }: { step: ToolStep }) {
-  if (typeof step.args?.code === 'string') return <CodeStep code={step.args.code} output={(step.args as any).output} />
+function ToolRow({ step, isActive }: { step: ToolStep; isActive?: boolean }) {
+  // run_python (and any tool whose sole arg is `code`) → rich CodeStep.
+  if (typeof step.args?.code === 'string') {
+    return <CodeStep code={step.args.code} isRunning={isActive} />
+  }
   const { Icon, label, chip } = singleStepInfo(step.tool, step.args)
   return (
     <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
@@ -250,7 +277,7 @@ function GroupRow({ group, thinking, isLast }: { group: Group; thinking: boolean
             <SkillRow key={`s${k}`} name={sk} />
           ))}
           {group.tools.map((s, k) => (
-            <ToolRow key={`t${k}`} step={s} />
+            <ToolRow key={`t${k}`} step={s} isActive={active && k === group.tools.length - 1} />
           ))}
         </div>
       )}
@@ -332,7 +359,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
                 <SkillRow key={`sk${i}`} name={sk} />
               ))}
               {looseTools.map((s, i) => (
-                <ToolRow key={`pre${i}`} step={s} />
+                <ToolRow key={`pre${i}`} step={s} isActive={thinking && i === looseTools.length - 1} />
               ))}
             </div>
           )}

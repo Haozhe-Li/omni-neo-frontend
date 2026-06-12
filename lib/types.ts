@@ -96,3 +96,21 @@ export interface TodoItem {
   content: string
   status: 'completed' | 'in_progress' | 'pending'
 }
+
+// ── Question block ─────────────────────────────────────────────────────────
+export interface QuestionOption {
+  id: string
+  label: string
+  /** When true, selecting this option reveals a free-text input beneath it. */
+  has_text_input?: boolean
+}
+
+export interface QuestionBlock {
+  /** Selection mechanic: radio / checkbox / plain text input. */
+  type: 'single' | 'multiple' | 'text'
+  prompt: string
+  options: QuestionOption[]
+  text_placeholder?: string | null
+  /** Filled for quiz mode; null for genuine survey questions. */
+  correct_answer?: string | string[] | null
+}
