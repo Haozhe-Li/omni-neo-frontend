@@ -49,32 +49,46 @@ interface SourcesPanelProps {
 export function SourcesPanel({ sources, open, onClose }: SourcesPanelProps) {
   return (
     <>
-      {/* Backdrop — dismisses on click, fades with the drawer. */}
-      <div
-        onClick={onClose}
-        className={`absolute inset-0 z-40 bg-black/10 transition-opacity duration-300 ${
-          open ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        aria-hidden
-      />
-      {/* Drawer */}
-      <div
-        className={`absolute right-0 top-0 z-50 flex h-full w-full max-w-[400px] flex-col border-l border-[var(--border)] bg-[var(--background)] shadow-lg transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-          open ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
-          <span className="text-sm font-medium text-[var(--foreground)]">
-            {sources.length} source{sources.length === 1 ? '' : 's'}
-          </span>
-          <button onClick={onClose} className="rounded-md p-2 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]" title="Close">
-            <X size={16} />
-          </button>
+      {/* Mobile: Full-screen overlay */}
+      {open && (
+        <div className="fixed inset-0 z-50 bg-[var(--background)] flex flex-col sm:hidden animate-in fade-in slide-in-from-bottom-8 duration-300">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
+            <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
+              {sources.length} source{sources.length === 1 ? '' : 's'}
+            </span>
+            <button onClick={onClose} className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Close">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
+            {sources.map((s, i) => (
+              <SourceCard key={i} source={s} index={i} />
+            ))}
+          </div>
         </div>
-        <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto p-3">
-          {sources.map((s, i) => (
-            <SourceCard key={i} source={s} index={i} />
-          ))}
+      )}
+
+      {/* Desktop: Flex child that animates width to squeeze content */}
+      <div
+        className={`
+          hidden sm:block relative z-auto translate-x-0 shadow-none transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] flex-shrink-0 overflow-hidden bg-transparent h-full
+          ${open ? 'w-[320px] lg:w-[360px] border-l border-[var(--border-subtle)]' : 'w-0 border-transparent'}
+        `}
+      >
+        <div className="flex h-full w-[320px] lg:w-[360px] flex-col bg-[var(--background)]">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
+            <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
+              {sources.length} source{sources.length === 1 ? '' : 's'}
+            </span>
+            <button onClick={onClose} className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Close">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
+            {sources.map((s, i) => (
+              <SourceCard key={i} source={s} index={i} />
+            ))}
+          </div>
         </div>
       </div>
     </>

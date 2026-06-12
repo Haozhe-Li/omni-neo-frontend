@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, Mic, Square, Paperclip, BarChart3, FileText, PanelRight } from 'lucide-react'
+import { Menu, ArrowUp, Mic, Square, Paperclip, BarChart3, FileText, Copy, Maximize2, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -11,6 +11,7 @@ import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesPanel } from '@/components/sources-panel'
 import { ToolActivity } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
+import { MarkdownMessage } from '@/components/markdown-message'
 import { StreamingText } from '@/components/streaming-text'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
@@ -74,6 +75,8 @@ export function ChatView({
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
+  
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = useState<string | null>(null)
 
   // Sources drawer (small right-hand panel, opened from an answer's footer).
   const [sourcesOpen, setSourcesOpen] = useState(false)
@@ -145,11 +148,15 @@ export function ChatView({
     for (const r of parsedReports) {
       if (!openedReportsRef.current.has(r.id)) {
         openedReportsRef.current.add(r.id)
-        openPanel(r.id)
+        // Auto-open only if it's actively drafting. Fully completed reports 
+        // loaded from history should require a manual click to open.
+        if (!r.complete) {
+          openPanel(r.id)
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportIdsKey])
+  }, [reportIdsKey, parsedReports])
 
   // Pre-populate attachment chips passed from the home composer.
   useEffect(() => {
@@ -546,21 +553,6 @@ export function ChatView({
             {title || query}
           </span>
           <div className="flex items-center gap-1">
-            {(allArtifacts.length > 0 || allReports.length > 0) && (
-              <button
-                onClick={() => {
-                  if (panelOpen) {
-                    setPanelOpen(false)
-                  } else {
-                    openPanel(activeArtifactId || allReports[0]?.id || allArtifacts[0]?.id || '')
-                  }
-                }}
-                className={`p-2 rounded-md transition-colors ${panelOpen ? 'bg-[var(--secondary)] text-foreground' : 'text-muted-foreground hover:bg-[var(--secondary)]'}`}
-                title="Toggle panel"
-              >
-                <PanelRight size={18} />
-              </button>
-            )}
           </div>
         </header>
 
@@ -581,29 +573,119 @@ export function ChatView({
                     const reportDrafting = parsed.reports.some((r) => !r.complete)
                     return (
                       <div className="w-full" data-selection-scope="assistant-message">
+                        <WidgetCards widgets={msg.widgets} />
                         <ToolActivity
                           steps={msg.steps}
                           isStreaming={i === streamingIndex && isLoading}
                           answered={!!parsed.text}
                           drafting={reportDrafting ? 'report' : msg.drafting}
                         />
-                        <WidgetCards widgets={msg.widgets} />
                         {/* answer text (report blocks stripped out) */}
                         {parsed.text ? <StreamingText content={parsed.text} animate={i === streamingIndex} /> : null}
-                        {/* artifact / report chips */}
-                        {(msg.artifacts?.length || msgReports.length) ? (
+                        
+                        {/* report blocks */}
+                        {msgReports.length > 0 && (
+                          <div className="mt-4 flex flex-col gap-3 w-full">
+                            {msgReports.map((r) => {
+                              const isReportStreaming = !r.complete
+                              return (
+                                <div
+                                  key={r.id}
+                                  onClick={() => {
+                                    if (!isReportStreaming) openPanel(r.id)
+                                  }}
+                                  className={`group relative flex w-full max-w-[800px] flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-[0_1px_4px_rgba(0,0,0,0.02)] transition-all overflow-hidden ${isReportStreaming ? 'cursor-default' : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]'}`}
+                                >
+                                  {/* Hover Overlay */}
+                                  {!isReportStreaming && (
+                                    <div className="absolute inset-0 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--background)]/10 backdrop-blur-[1px] pointer-events-none">
+                                      <div className="bg-[var(--foreground)] text-[var(--background)] px-5 py-2.5 rounded-full text-[14px] font-medium shadow-lg pointer-events-auto transition-transform scale-95 group-hover:scale-100 duration-200">
+                                        {panelOpen && activeArtifactId === r.id ? 'Currently opened' : `Open ${r.title}`}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Top Action Bar (Perplexity style) */}
+                                  <div className="flex w-full items-center justify-between px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--background)]/40 relative z-20">
+                                    <div className="flex items-center gap-2.5 text-[var(--muted-foreground)] min-w-0 pr-4">
+                                      <FileText size={15} strokeWidth={1.75} className="shrink-0" />
+                                      <span className="text-[13px] font-medium truncate opacity-90">{r.title}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <button 
+                                        disabled={isReportStreaming}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
+                                          toast.success('Copied full text')
+                                        }}
+                                        className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                                      >
+                                        <Copy size={13} strokeWidth={2} />
+                                      </button>
+                                      <button 
+                                        disabled={isReportStreaming}
+                                        className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+                                      >
+                                        <Maximize2 size={13} strokeWidth={2} />
+                                      </button>
+                                      <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                        <button 
+                                          disabled={isReportStreaming}
+                                          onClick={() => setDownloadDropdownOpen(downloadDropdownOpen === r.id ? null : r.id)}
+                                          className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                        >
+                                          Download <ChevronDown size={13} strokeWidth={2} className="text-[var(--muted-foreground)]" />
+                                        </button>
+                                        {downloadDropdownOpen === r.id && (
+                                          <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setDownloadDropdownOpen(null)} />
+                                            <div className="absolute right-0 top-full mt-1.5 w-36 bg-[var(--card)] border border-[var(--border-subtle)] rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-50 py-1 overflow-hidden">
+                                              <button 
+                                                onClick={() => {
+                                                  setDownloadDropdownOpen(null)
+                                                  const blob = new Blob([`# ${r.title}\n\n${r.content}`], { type: 'text/markdown' })
+                                                  const url = URL.createObjectURL(blob)
+                                                  const a = document.createElement('a')
+                                                  a.href = url
+                                                  a.download = `${r.title || 'report'}.md`
+                                                  a.click()
+                                                  URL.revokeObjectURL(url)
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                              >
+                                                Markdown
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Body Preview */}
+                                  <div className="relative p-5 sm:p-7 pb-10 max-h-[360px] overflow-hidden w-full bg-[var(--background)]">
+                                    <h1 className="text-[24px] leading-tight font-semibold text-[var(--foreground)] mb-5 tracking-tight opacity-90">
+                                      {r.title}
+                                    </h1>
+                                    
+                                    <div className="text-[15px] leading-relaxed text-[var(--foreground)] opacity-90">
+                                      <MarkdownMessage content={r.content || 'Drafting report...'} />
+                                    </div>
+                                    
+                                    {/* Gradient Fade-out at the bottom */}
+                                    <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent pointer-events-none z-10" />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* artifact chips */}
+                        {msg.artifacts?.length ? (
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {msgReports.map((r) => (
-                              <button
-                                key={r.id}
-                                onClick={() => openPanel(r.id)}
-                                className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                              >
-                                <FileText size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
-                                <span className="max-w-[200px] truncate">{r.title}</span>
-                              </button>
-                            ))}
-                            {msg.artifacts?.map((a) => (
+                            {msg.artifacts.map((a) => (
                               <button
                                 key={a.id}
                                 onClick={() => openPanel(a.id)}
@@ -666,15 +748,30 @@ export function ChatView({
         </div>
       </div>
 
-      {/* Artifact side panel — kept mounted so it slides open AND closed */}
+      {/* Artifact side panel — kept mounted so it slides open AND closed (Desktop) */}
       {hasPanelContent && (
         <div
           className={`hidden sm:block h-full flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
             panelOpen ? 'w-[62%] max-w-[1240px]' : 'w-0'
           }`}
         >
-          {/* fixed inner width so the content slides in rather than squishing */}
-          <div className="h-full w-[62vw] max-w-[1240px]">
+          <div className="h-full w-full">
+            <ArtifactPanel
+              artifacts={allArtifacts}
+              reports={allReports}
+              drafting={draftingReport}
+              activeId={activeArtifactId}
+              onSelect={setActiveArtifactId}
+              onClose={() => setPanelOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Artifact Panel - Full Screen Overlay */}
+      {hasPanelContent && panelOpen && (
+        <div className="fixed inset-0 z-50 bg-[var(--background)] flex flex-col sm:hidden animate-in fade-in slide-in-from-bottom-8 duration-300">
+          <div className="h-full w-full">
             <ArtifactPanel
               artifacts={allArtifacts}
               reports={allReports}

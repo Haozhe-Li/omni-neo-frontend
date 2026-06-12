@@ -51,19 +51,23 @@ function WeatherCard({ data }: { data: any }) {
   const humidity = num(data?.humidity)
   const wind = num(data?.wind?.speed)
   return (
-    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3 min-w-[200px]">
-      <div className="flex items-center gap-2 text-[13px] font-medium text-[var(--foreground)]">
-        <Cloud size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />
-        <span className="truncate">{location || 'Weather'}</span>
+    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        <div className="p-3.5 bg-[var(--secondary)]/50 rounded-xl shrink-0">
+          <Cloud size={24} strokeWidth={1.5} className="text-[var(--foreground)] opacity-80" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[15px] font-medium text-[var(--foreground)] opacity-90 truncate">{location || 'Weather'}</div>
+          <div className="text-[13px] text-[var(--muted-foreground)] mt-0.5 capitalize truncate">{status}</div>
+        </div>
       </div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold text-[var(--foreground)]">{temp}</span>
-        <span className="text-xs capitalize text-[var(--muted-foreground)]">{status}</span>
-      </div>
-      <div className="mt-1 text-[11px] text-[var(--muted-foreground)]">
-        {[humidity != null ? `${humidity}% humidity` : null, wind != null ? `${wind.toFixed(1)} m/s wind` : null]
-          .filter(Boolean)
-          .join(' · ')}
+      <div className="flex flex-col sm:items-end shrink-0">
+        <div className="text-3xl font-medium tracking-tight text-[var(--foreground)]">{temp}</div>
+        <div className="text-[12px] font-medium text-[var(--muted-foreground)] mt-1 flex items-center gap-1.5 opacity-80">
+          {[humidity != null ? `H: ${humidity}%` : null, wind != null ? `W: ${wind.toFixed(1)}m/s` : null]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
       </div>
     </div>
   )
@@ -88,19 +92,24 @@ function StockCard({ data }: { data: any }) {
         })()
       : '--'
   return (
-    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3 min-w-[200px]">
-      <div className="flex items-center gap-2 text-[13px] font-medium text-[var(--foreground)]">
-        {up ? <TrendingUp size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" /> : <TrendingDown size={15} strokeWidth={1.75} className="text-[var(--muted-foreground)]" />}
-        <span className="truncate">{symbol}</span>
-      </div>
-      <div className="mt-1 text-2xl font-semibold text-[var(--foreground)]">{priceStr}</div>
-      {change != null && changePct != null && (
-        <div className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
-          {up ? '+' : ''}
-          {change.toFixed(2)} ({up ? '+' : ''}
-          {changePct.toFixed(2)}%)
+    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
+        <div className={`p-3.5 rounded-xl shrink-0 ${up ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
+          {up ? <TrendingUp size={24} strokeWidth={1.5} className="text-emerald-600 dark:text-emerald-400" /> : <TrendingDown size={24} strokeWidth={1.5} className="text-rose-600 dark:text-rose-400" />}
         </div>
-      )}
+        <div className="min-w-0">
+          <div className="text-[15px] font-medium text-[var(--foreground)] opacity-90 truncate">{symbol}</div>
+          <div className="text-[13px] text-[var(--muted-foreground)] mt-0.5 truncate">Stock Quote</div>
+        </div>
+      </div>
+      <div className="flex flex-col sm:items-end shrink-0">
+        <div className="text-3xl font-medium tracking-tight text-[var(--foreground)]">{priceStr}</div>
+        {change != null && changePct != null && (
+          <div className={`text-[12px] font-medium mt-1 flex items-center gap-1.5 opacity-90 ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+            {up ? '+' : ''}{change.toFixed(2)} ({up ? '+' : ''}{changePct.toFixed(2)}%)
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -126,7 +135,7 @@ function PlaceCard({ data }: { data: any }) {
 
   if (points.length > 0) {
     return (
-      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden w-full max-w-md">
+      <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col">
         <LightChatMiniMap points={points} />
       </div>
     )
@@ -134,16 +143,18 @@ function PlaceCard({ data }: { data: any }) {
   // Fallback list when no coordinates are available.
   if (list.length === 0) return null
   return (
-    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3 w-full max-w-md space-y-2">
+    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-4">
       {list.slice(0, 4).map((item, i) => (
-        <div key={i} className="flex items-start gap-2 text-[13px]">
-          <MapPin size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
-          <div className="min-w-0">
-            <div className="truncate font-medium text-[var(--foreground)]">{str(item?.name) || str(item?.title) || 'Place'}</div>
-            {str(item?.address) && <div className="truncate text-[11px] text-[var(--muted-foreground)]">{item.address}</div>}
+        <div key={i} className="flex items-start gap-3.5">
+          <div className="p-2.5 bg-[var(--secondary)]/50 rounded-xl shrink-0">
+            <MapPin size={18} strokeWidth={1.5} className="text-[var(--foreground)] opacity-80" />
+          </div>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="text-[15px] font-medium text-[var(--foreground)] opacity-90 truncate">{str(item?.name) || str(item?.title) || 'Place'}</div>
+            {str(item?.address) && <div className="text-[13px] text-[var(--muted-foreground)] mt-1 truncate">{item.address}</div>}
             {num(item?.rating) != null && (
-              <div className="flex items-center gap-1 text-[11px] text-[var(--muted-foreground)]">
-                <Star size={11} className="fill-current" /> {num(item?.rating)!.toFixed(1)}
+              <div className="flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)] mt-1.5 opacity-80">
+                <Star size={12} className="fill-[var(--muted-foreground)]" /> {num(item?.rating)!.toFixed(1)}
               </div>
             )}
           </div>
@@ -171,7 +182,7 @@ function CurrencyCard({ data }: { data: any }) {
 export function WidgetCards({ widgets }: { widgets?: WidgetData[] }) {
   if (!widgets || widgets.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-3 mb-3">
+    <div className="flex flex-col gap-3 mb-3 w-full">
       {widgets.map((w, i) => {
         switch (w.widget) {
           case 'weather':

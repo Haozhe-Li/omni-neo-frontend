@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Search,
   Globe,
@@ -208,19 +208,44 @@ function synthesizeGroups(tools: ToolStep[], thinking: boolean): Group[] {
 // One step (todo): a check once done, otherwise just its text — the active one
 // shimmers (the same neutral effect the answer uses while thinking). Its tools
 // and skills nest beneath it.
-function GroupRow({ group, thinking }: { group: Group; thinking: boolean }) {
+function GroupRow({ group, thinking, isLast }: { group: Group; thinking: boolean; isLast?: boolean }) {
   const done = group.status === 'completed'
   const active = thinking && group.status === 'in_progress'
+  const [isExpanded, setIsExpanded] = useState(active)
+
+  useEffect(() => {
+    if (done) setIsExpanded(false)
+    else if (active) setIsExpanded(true)
+  }, [done, active])
+
+  const hasTools = group.skills.length > 0 || group.tools.length > 0
+
   return (
-    <div className="omni-step-in">
-      <div className="flex items-start gap-2 text-[13px]">
-        {done && <Check size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />}
-        <span className={active ? 'omni-shimmer-text font-medium' : done ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}>
-          {group.content}
-        </span>
+    <div className="omni-step-in relative pl-[20px]">
+      {!isLast && (
+        <div className="absolute left-[3px] top-[11px] w-[2px] bg-[var(--border-subtle)]" style={{ height: 'calc(100% + 16px)' }} />
+      )}
+      <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+        <div className={`h-full w-full rounded-full ${active ? 'bg-[var(--foreground)] animate-pulse' : 'bg-[var(--border-subtle)]'}`} />
       </div>
-      {(group.skills.length > 0 || group.tools.length > 0) && (
-        <div className="ml-[7px] mt-1 mb-1 border-l border-[var(--border-subtle)] pl-4 space-y-1">
+      
+      <div className="flex items-start gap-2 text-[13px]">
+        {hasTools ? (
+          <button 
+            onClick={() => setIsExpanded(e => !e)}
+            className={`flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity ${active ? 'omni-shimmer-text font-medium' : done ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}`}
+          >
+            <span>{group.content}</span>
+            <ChevronDown size={14} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-[var(--muted-foreground)]`} />
+          </button>
+        ) : (
+          <span className={active ? 'omni-shimmer-text font-medium' : done ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}>
+            {group.content}
+          </span>
+        )}
+      </div>
+      {hasTools && isExpanded && (
+        <div className="mt-2 space-y-1.5">
           {group.skills.map((sk, k) => (
             <SkillRow key={`s${k}`} name={sk} />
           ))}
@@ -280,21 +305,13 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
 
   const hasContent = groups.length > 0 || looseTools.length > 0 || looseSkills.length > 0 || !!drafting
   const stepCount = groups.length || looseTools.length + looseSkills.length
-  const showBody = thinking ? hasContent : open
+  const showBody = thinking || open
 
   if (!thinking && !hasContent) return null
 
   return (
     <div className="mb-3 space-y-2">
-      {thinking ? (
-        // Until the first todo/tool arrives, hold the spot with a "Thinking" line
-        // carrying the same active shimmer; after that the steps speak for themselves.
-        !hasContent ? (
-          <div className="omni-step-in text-[13px]">
-            <span className="omni-shimmer-text font-medium">Thinking</span>
-          </div>
-        ) : null
-      ) : (
+      {!thinking && (
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
@@ -307,25 +324,47 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
       )}
 
       {showBody && (
-        <div className="space-y-2 border-l-2 border-[var(--border-subtle)] pl-3.5">
+        <div className="space-y-4 ml-1.5 mt-2 py-1">
           {/* loose skills/tools that ran before any real plan */}
-          {looseSkills.map((sk, i) => (
-            <SkillRow key={`sk${i}`} name={sk} />
-          ))}
-          {looseTools.map((s, i) => (
-            <ToolRow key={`pre${i}`} step={s} />
-          ))}
+          {(looseSkills.length > 0 || looseTools.length > 0) && (
+            <div className="pl-[20px] space-y-4">
+              {looseSkills.map((sk, i) => (
+                <SkillRow key={`sk${i}`} name={sk} />
+              ))}
+              {looseTools.map((s, i) => (
+                <ToolRow key={`pre${i}`} step={s} />
+              ))}
+            </div>
+          )}
 
           {/* the plan — real todos or synthesized groups */}
-          {groups.map((g) => (
-            <GroupRow key={g.key} group={g} thinking={thinking} />
-          ))}
+          {groups.map((g, i) => {
+            const hasMore = !!drafting || (thinking && !drafting);
+            const isLast = i === groups.length - 1 && !hasMore;
+            return <GroupRow key={g.key} group={g} thinking={thinking} isLast={isLast} />
+          })}
 
           {drafting && (
-            <div className="omni-step-in text-[13px]">
-              <span className="omni-shimmer-text font-medium">
-                {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
-              </span>
+            <div className="omni-step-in relative pl-[20px]">
+              <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+                <div className="h-full w-full rounded-full bg-[var(--accent)] animate-pulse" />
+              </div>
+              <div className="flex items-start gap-2 text-[13px]">
+                <span className="omni-shimmer-text-accent font-medium">
+                  {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {thinking && !drafting && (
+            <div className="omni-step-in relative pl-[20px]">
+              <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+                <div className="h-full w-full rounded-full bg-[var(--accent)] animate-pulse" />
+              </div>
+              <div className="flex items-start gap-2 text-[13px]">
+                <span className="omni-shimmer-text-accent font-medium">Thinking</span>
+              </div>
             </div>
           )}
         </div>

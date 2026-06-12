@@ -84,9 +84,9 @@ export function LightChatMiniMap({ points }: { points: LightChatMapPoint[] }) {
   const center: [number, number] = [ordered[0].lat, ordered[0].lng]
 
   return (
-    <div className="w-full rounded-xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--background)]">
+    <div className="w-full flex flex-col bg-transparent">
       {/* ── map ── */}
-      <div className="relative h-52 sm:h-60 md:h-64">
+      <div className="relative h-64 sm:h-80 shrink-0 border-b border-[var(--border-subtle)]/40">
         <MapContainer
           center={center}
           zoom={13}
@@ -122,7 +122,7 @@ export function LightChatMiniMap({ points }: { points: LightChatMapPoint[] }) {
       </div>
 
       {/* ── place list ── */}
-      <div ref={listRef} className="max-h-72 overflow-y-auto divide-y divide-[var(--border-subtle)]">
+      <div ref={listRef} className="max-h-96 overflow-y-auto divide-y divide-[var(--border-subtle)] bg-[var(--card)]">
         {ordered.map((p, i) => {
           const num = p.position ?? i + 1
           const isActive = activeId === p.id
