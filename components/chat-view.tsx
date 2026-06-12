@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, Mic, Square, Paperclip, BarChart3, FileText, Copy, Maximize2, ChevronDown } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -71,6 +71,10 @@ export function ChatView({
   const [isRecording, setIsRecording] = useState(false)
   // Index of the assistant message currently being streamed (typewriter).
   const [streamingIndex, setStreamingIndex] = useState(-1)
+  const [isFocused, setIsFocused] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
@@ -469,6 +473,9 @@ export function ChatView({
     const baseHistory = [...messages, userMsg]
     const queryText = input
     setInput('')
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto'
+    }
     // Optimistically render the user's message + an empty assistant bubble so
     // the UI updates instantly, before personalization/network work begins.
     setMessages([...baseHistory, { role: 'assistant', content: '' }])
@@ -713,35 +720,213 @@ export function ChatView({
         </div>
 
         {/* Composer */}
-        <div className="flex-shrink-0 border-t border-[var(--border-subtle)] bg-[var(--background)] p-3 sm:p-4">
-          <div className="max-w-2xl mx-auto">
-            {attachedFiles.length > 0 && <FileUploadArea files={attachedFiles} onRemove={removeFile} className="mb-2" />}
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 transition-colors focus-within:border-[var(--accent)]/40">
+        <div className="flex-shrink-0 border-t border-[var(--border-subtle)] bg-[var(--background)] p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="max-w-[800px] mx-auto w-full">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+              onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const files = Array.from(e.dataTransfer.files || []);
+                for (const f of files) uploadFile(f, threadId);
+              }}
+              className={`
+                relative rounded-2xl transition-all duration-300 flex flex-col
+                ${isFocused || isDragging
+                  ? 'shadow-[0_0_0_1px_var(--accent),0_4px_24px_rgba(32,178,170,0.08)] bg-[var(--card)]'
+                  : 'shadow-[0_0_0_1px_var(--border),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_var(--border),0_4px_16px_rgba(0,0,0,0.06)] bg-card'
+                }
+                ${isDragging ? 'ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--background)]' : ''}
+              `}
+            >
+              {attachedFiles.length > 0 && (
+                <div className="px-5 pt-4 pb-0">
+                  <FileUploadArea files={attachedFiles} onRemove={removeFile} />
+                </div>
+              )}
               <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything…"
+                ref={inputRef}
                 rows={1}
-                className="w-full resize-none bg-transparent px-2 py-1.5 text-[15px] text-foreground outline-none placeholder:text-muted-foreground max-h-40"
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 300)}px`
+                }}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                onKeyDown={handleKeyDown}
+                placeholder={isRecording ? 'Listening...' : "Ask anything..."}
+                className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-[15px] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
+                style={{ minHeight: '52px' }}
               />
-              <div className="flex items-center justify-between px-1 pt-1">
-                <div className="flex items-center gap-1">
-                  <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Attach">
-                    <Paperclip size={17} strokeWidth={1.75} />
+
+              {/* Bottom bar */}
+              <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                {/* Left side: Upload Button */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading}
+                    className={`
+                      flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      ${!isLoading
+                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      }
+                    `}
+                    aria-label="Upload files"
+                  >
+                    <Plus className="h-4 w-4" />
                   </button>
                   <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
-                  <button onClick={handleSst} className={`p-1.5 rounded-md ${isRecording ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'} hover:bg-[var(--secondary)] transition-colors`} title="Voice">
-                    {isRecording ? <Square size={16} /> : <Mic size={17} strokeWidth={1.75} />}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Mode dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setModelDropdownOpen(prev => !prev)}
+                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
+                    >
+                      <span>{mode === 'pro' ? 'Pro' : 'Fast'}</span>
+                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {modelDropdownOpen && (
+                      <>
+                        {/* Desktop Dropdown */}
+                        <div className="hidden md:block absolute bottom-full right-0 mb-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                          {[
+                            { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
+                            { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
+                          ].map((opt) => {
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setMode(opt.value)
+                                  setModelDropdownOpen(false)
+                                }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--secondary)]/50 ${mode === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-[14px] font-semibold leading-none">
+                                      {opt.label}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-[var(--muted-foreground)] leading-snug line-clamp-2">
+                                    {opt.desc}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 flex items-center justify-center w-5">
+                                  {mode === opt.value && (
+                                    <Check className="h-4 w-4 text-[var(--accent)]" strokeWidth={2.5} />
+                                  )}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        {/* Mobile Modal/Drawer */}
+                        <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
+                          <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
+                              <button
+                                type="button"
+                                onClick={() => setModelDropdownOpen(false)}
+                                className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <div className="flex flex-col gap-2.5">
+                              {[
+                                { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
+                                { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
+                              ].map((opt) => {
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => {
+                                      setMode(opt.value)
+                                      setModelDropdownOpen(false)
+                                    }}
+                                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${mode === opt.value ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}
+                                  >
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="text-[15px] font-medium flex items-center gap-1.5">
+                                        {opt.label}
+                                      </span>
+                                      <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
+                                        {opt.desc}
+                                      </span>
+                                    </div>
+                                    <div className="ml-3 shrink-0 flex items-center gap-2">
+                                      {mode === opt.value ? (
+                                        <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
+                                          <Check className="h-3.5 w-3.5" />
+                                        </div>
+                                      ) : (
+                                        <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
+                                      )}
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSst}
+                    disabled={isLoading}
+                    className={`
+                      relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      ${!isLoading
+                        ? isRecording
+                          ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
+                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      }
+                    `}
+                    aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
+                  >
+                    {isRecording && (
+                      <span className="absolute inset-0 rounded-full border border-[var(--accent-foreground)]/35 animate-ping" aria-hidden="true" />
+                    )}
+                    <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={(!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || isLoading}
+                    className={`
+                      flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      ${(input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0) && !isLoading
+                          ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      }
+                    `}
+                    aria-label="Submit message"
+                  >
+                    <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>
-                <button
-                  onClick={handleSend}
-                  disabled={isLoading || (!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-30"
-                >
-                  <ArrowUp size={17} />
-                </button>
               </div>
             </div>
           </div>

@@ -311,6 +311,9 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       onSearch(query.trim(), activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined)
       clearFiles()
       setQuery('')
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto'
+      }
     }
   }
 
@@ -817,7 +820,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 ref={inputRef}
                 rows={1}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = `${e.target.scrollHeight}px`
+                }}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
@@ -831,7 +838,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         ? "Connecting to brain..."
                         : "Backend is not ready, please wait..."
                 }
-                className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar`}
+                className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
                 style={{ minHeight: '52px' }}
               />
 

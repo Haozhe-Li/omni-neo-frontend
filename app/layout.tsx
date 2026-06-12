@@ -17,7 +17,7 @@ const ibmPlexSans = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Omni Knows - Advanced AI Research Agent',
+    default: 'Omni Knows',
     template: '%s | Omni Knows',
   },
   description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   creator: 'Haozhe Li',
   metadataBase: new URL('https://omniknows.xyz'),
   openGraph: {
-    title: 'Omni Knows - Advanced AI Research Agent',
+    title: 'Omni Knows',
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
     url: 'https://omniknows.xyz',
     siteName: 'Omni Knows',
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
         url: '/omniknows_main.png',
         width: 1200,
         height: 630,
-        alt: 'Omni Knows - Advanced AI Research Agent',
+        alt: 'Omni Knows',
       },
     ],
     locale: 'en_US',
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Omni Knows - Advanced AI Research Agent',
+    title: 'Omni Knows',
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
     images: ['/omniknows_main.png'],
     creator: '@omniknows',
