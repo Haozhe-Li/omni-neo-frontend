@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -76,7 +76,11 @@ export function ChatView({
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  // Inline edit state for user messages
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editText, setEditText] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const editRef = useRef<HTMLTextAreaElement>(null)
 
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
@@ -218,7 +222,7 @@ export function ChatView({
 
   // ── streaming handler (new wire protocol) ──────────────────────────────
   const handleStream = useCallback(
-    async (response: Response, baseHistory: ChatMessage[]) => {
+    async (response: Response, baseHistory: ChatMessage[], regenTag?: Pick<ChatMessage, 'regeneratedWith'>) => {
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No stream reader')
       const decoder = new TextDecoder()
@@ -235,7 +239,7 @@ export function ChatView({
       const patchAssistant = () => {
         setMessages([
           ...baseHistory,
-          { role: 'assistant', content: text, steps: [...steps], widgets: [...widgets], artifacts: [...artifacts], sources, drafting },
+          { role: 'assistant', content: text, steps: [...steps], widgets: [...widgets], artifacts: [...artifacts], sources, drafting, ...regenTag },
         ])
       }
 
@@ -295,7 +299,7 @@ export function ChatView({
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null },
+                { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, title)
@@ -476,6 +480,69 @@ export function ChatView({
     [messages, runQuery, requestPin]
   )
 
+  // ── rewind: regenerate or edit-and-resend ─────────────────────────────
+  const handleRewind = useCallback(
+    async (newQuery?: string, rewindMode?: AgentMode) => {
+      const effectiveMode = rewindMode ?? mode
+
+      // Always close any open edit box first
+      setEditingIndex(null)
+
+      // Compute trimmed history for UI.
+      // For regenerate: drop the last assistant message.
+      // For edit: drop the last assistant + last user, then add new user message.
+      let baseHistory: ChatMessage[]
+      if (newQuery !== undefined) {
+        let lastUserIdx = -1
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'user') { lastUserIdx = i; break }
+        }
+        baseHistory = lastUserIdx > 0 ? messages.slice(0, lastUserIdx) : []
+        baseHistory = [...baseHistory, { role: 'user', content: newQuery }]
+      } else {
+        let lastAiIdx = -1
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === 'assistant') { lastAiIdx = i; break }
+        }
+        baseHistory = lastAiIdx >= 0 ? messages.slice(0, lastAiIdx) : messages
+      }
+
+      // Tag the incoming assistant message as regenerated so we can show the label
+      const regenTag: Pick<ChatMessage, 'regeneratedWith'> = { regeneratedWith: effectiveMode }
+
+      setMessages([...baseHistory, { role: 'assistant', content: '', ...regenTag }])
+      setStreamingIndex(baseHistory.length)
+      setIsLoading(true)
+      requestPin()
+
+      try {
+        const personalization = await buildPersonalization()
+        const payload: any = { mode: effectiveMode }
+        if (newQuery !== undefined) payload.new_query = newQuery
+        if (Object.keys(personalization).length) payload.personalization = personalization
+
+        const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/rewind`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) {
+          const msg = getAiRequestErrorMessage(res.status)
+          toast.error(msg)
+          throw new Error(msg)
+        }
+        // handleStream builds the final message from scratch; we need to carry
+        // the regenTag into it. We wrap patchAssistant to merge the tag in.
+        await handleStream(res, baseHistory, regenTag)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Request failed.'
+        setMessages([...baseHistory, { role: 'assistant', content: msg, ...regenTag }])
+        setIsLoading(false)
+        setStreamingIndex(-1)
+      }
+    },
+    [messages, mode, threadId, buildPersonalization, fetchWithAuth, handleStream, requestPin]
+  )
+
   // ── send from composer ─────────────────────────────────────────────────
   const handleSend = async () => {
     const readyFiles = attachedFiles.filter((f) => f.status === 'ready')
@@ -582,11 +649,84 @@ export function ChatView({
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
           <div className="max-w-2xl mx-auto space-y-8 pb-32">
-            {messages.map((msg, i) => (
+            {(() => {
+              // Index of the last user message (edit only applies to that one)
+              let lastUserIdx = -1
+              for (let i = messages.length - 1; i >= 0; i--) {
+                if (messages[i].role === 'user') { lastUserIdx = i; break }
+              }
+              return messages.map((msg, i) => (
               <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
-                  <div className="max-w-[85%] rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[15px] text-foreground whitespace-pre-wrap break-words">
-                    {msg.content}
+                  <div className="group relative flex flex-row items-end gap-1 max-w-[85%]">
+                    {/* Hover action row — left of bubble */}
+                    {editingIndex !== i && (
+                      <div className="flex items-center gap-0.5 mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+                        <button
+                          title="Copy"
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content)
+                            toast.success('Copied')
+                          }}
+                          className="p-1.5 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-150 active:scale-95"
+                        >
+                          <Copy size={14} strokeWidth={1.75} />
+                        </button>
+                        {i === lastUserIdx && !isLoading && (
+                          <button
+                            title="Edit message"
+                            onClick={() => { setEditingIndex(i); setEditText(msg.content); setTimeout(() => editRef.current?.focus(), 0) }}
+                            className="p-1.5 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-150 active:scale-95"
+                          >
+                            <Pencil size={14} strokeWidth={1.75} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {editingIndex === i ? (
+                      /* Inline edit area */
+                      <div className="w-full min-w-[260px] max-w-[560px] rounded-2xl bg-[var(--secondary)] px-4 py-3 flex flex-col gap-2">
+                        <textarea
+                          ref={editRef}
+                          value={editText}
+                          onChange={(e) => {
+                            setEditText(e.target.value)
+                            e.target.style.height = 'auto'
+                            e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') setEditingIndex(null)
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault()
+                              if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) }
+                            }
+                          }}
+                          rows={1}
+                          className="w-full resize-none bg-transparent text-[15px] text-[var(--foreground)] leading-relaxed focus:outline-none custom-scrollbar"
+                          style={{ minHeight: '28px' }}
+                        />
+                        <div className="flex justify-end items-center gap-2">
+                          <button
+                            onClick={() => setEditingIndex(null)}
+                            className="px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] rounded-lg hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            disabled={!editText.trim()}
+                            onClick={() => { if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) } }}
+                            className="px-3 py-1.5 text-[12px] font-medium rounded-lg bg-[var(--accent)] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                          >
+                            Send
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[15px] text-foreground whitespace-pre-wrap break-words">
+                        {msg.content}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   (() => {
@@ -745,14 +885,21 @@ export function ChatView({
                         ) : null}
                         {/* footer: sources + actions, once the turn is complete */}
                         {parsed.text && !(i === streamingIndex && isLoading) ? (
-                          <AnswerFooter content={parsed.text} sources={msg.sources} onOpenSources={openSources} />
+                          <AnswerFooter
+                            content={parsed.text}
+                            sources={msg.sources}
+                            onOpenSources={openSources}
+                            isLastMessage={i === messages.length - 1}
+                            onRegenerate={(rewindMode) => handleRewind(undefined, rewindMode)}
+                            regeneratedWith={msg.regeneratedWith}
+                          />
                         ) : null}
                       </div>
                     )
                   })()
                 )}
               </div>
-            ))}
+            ))})()}
             {/* Bottom spacer: reserves room so the latest query can sit at the top. */}
             {spacerH > 0 && <div ref={spacerRef} style={{ height: spacerH }} aria-hidden className="shrink-0" />}
           </div>

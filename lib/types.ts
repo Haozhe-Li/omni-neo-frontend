@@ -88,6 +88,8 @@ export interface ChatMessage {
   // 'report' | 'chart' while the agent is drafting an artifact (not yet finished)
   drafting?: 'report' | 'chart' | null
   mode?: AgentMode
+  /** Set when this assistant message was produced by a rewind/regenerate. */
+  regeneratedWith?: AgentMode
 }
 
 export type PublishDuration = '7d' | '30d' | 'permanent'

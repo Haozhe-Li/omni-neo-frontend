@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { Copy, Check, Share2, ThumbsUp, ThumbsDown, MoreHorizontal } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw, Zap, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Source } from '@/lib/types'
+import type { AgentMode, Source } from '@/lib/types'
 
 function domainOf(url: string) {
   try {
@@ -13,7 +13,17 @@ function domainOf(url: string) {
   }
 }
 
-function IconBtn({ onClick, title, children, active }: { onClick?: () => void; title: string; children: React.ReactNode; active?: boolean }) {
+function IconBtn({
+  onClick,
+  title,
+  children,
+  active,
+}: {
+  onClick?: () => void
+  title: string
+  children: React.ReactNode
+  active?: boolean
+}) {
   return (
     <button
       onClick={onClick}
@@ -31,13 +41,30 @@ interface AnswerFooterProps {
   content: string
   sources?: Source[]
   onOpenSources?: (sources: Source[]) => void
+  onRegenerate?: (mode: AgentMode) => void
+  isLastMessage?: boolean
+  regeneratedWith?: AgentMode
 }
 
-export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterProps) {
+export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, isLastMessage, regeneratedWith }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
+  const [regenOpen, setRegenOpen] = useState(false)
+  const regenRef = useRef<HTMLDivElement>(null)
   const hasSources = !!sources && sources.length > 0
+
+  // Close regen dropdown on outside click
+  useEffect(() => {
+    if (!regenOpen) return
+    const handler = (e: MouseEvent) => {
+      if (regenRef.current && !regenRef.current.contains(e.target as Node)) {
+        setRegenOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [regenOpen])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content)
@@ -45,18 +72,16 @@ export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterPr
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const handleLike = () => {
-    setLiked(true)
-    setDisliked(false)
-  }
-
-  const handleDislike = () => {
-    setDisliked(true)
-    setLiked(false)
-  }
+  const handleLike = () => { setLiked(true); setDisliked(false) }
+  const handleDislike = () => { setDisliked(true); setLiked(false) }
 
   return (
     <div className="mt-4">
+      {regeneratedWith && (
+        <p className="mb-1.5 text-[11px] text-[var(--muted-foreground)]/60 select-none">
+          Regenerated with {regeneratedWith === 'pro' ? 'Pro' : 'Fast'} mode
+        </p>
+      )}
       <div className="flex items-center gap-1 pt-2">
         <IconBtn onClick={handleCopy} title="Copy">
           {copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}
@@ -64,6 +89,38 @@ export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterPr
         <IconBtn title="Share">
           <Share2 size={16} strokeWidth={1.75} />
         </IconBtn>
+
+        {/* Regenerate — only on the last assistant message */}
+        {isLastMessage && onRegenerate && (
+          <div className="relative" ref={regenRef}>
+            <IconBtn onClick={() => setRegenOpen((v) => !v)} title="Regenerate">
+              <RotateCcw size={16} strokeWidth={1.75} />
+            </IconBtn>
+            {regenOpen && (
+              <div className="absolute left-0 bottom-full mb-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <p className="px-3 pt-1 pb-2 text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
+                  Regenerate with
+                </p>
+                {([
+                  { value: 'fast' as AgentMode, label: 'Fast', desc: 'Quick · unlimited', Icon: Zap },
+                  { value: 'pro' as AgentMode, label: 'Pro', desc: 'Deep agent · charts & reports', Icon: Sparkles },
+                ] as const).map(({ value, label, desc, Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => { setRegenOpen(false); onRegenerate(value) }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors"
+                  >
+                    <Icon size={15} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]" />
+                    <div>
+                      <div className="text-[13px] font-medium text-[var(--foreground)] leading-none mb-0.5">{label}</div>
+                      <div className="text-[11px] text-[var(--muted-foreground)]">{desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {hasSources && (
           <button
@@ -90,9 +147,6 @@ export function AnswerFooter({ content, sources, onOpenSources }: AnswerFooterPr
           </IconBtn>
           <IconBtn onClick={handleDislike} active={disliked} title="Bad response">
             <ThumbsDown size={16} strokeWidth={1.75} fill={disliked ? 'currentColor' : 'none'} />
-          </IconBtn>
-          <IconBtn title="More">
-            <MoreHorizontal size={16} strokeWidth={1.75} />
           </IconBtn>
         </div>
       </div>
