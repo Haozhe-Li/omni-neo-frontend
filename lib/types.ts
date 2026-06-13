@@ -1,7 +1,7 @@
 // ── Wire protocol (mirrors backend core/stream.py) ─────────────────────────
 export type AgentMode = 'fast' | 'pro'
 
-export type WidgetKind = 'weather' | 'stock' | 'place' | 'currency'
+export type WidgetKind = 'weather' | 'stock' | 'place' | 'currency' | 'entity'
 
 export interface SSEEvent {
   type:

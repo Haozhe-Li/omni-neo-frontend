@@ -264,7 +264,9 @@ export function ChatView({
               patchAssistant()
               break
             case 'widget':
+              console.log('[widget] received:', ev.widget, ev.data)
               widgets.push({ widget: ev.widget, data: ev.data })
+              console.log('[widget] widgets array now:', widgets)
               patchAssistant()
               break
             case 'tool_call':

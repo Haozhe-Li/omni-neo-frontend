@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { Cloud, TrendingUp, TrendingDown, MapPin, Star } from 'lucide-react'
+import { Cloud, TrendingUp, TrendingDown, MapPin, Star, ExternalLink } from 'lucide-react'
 import type { WidgetData } from '@/lib/types'
 
 const CurrencyWidget = dynamic(
@@ -164,6 +164,36 @@ function PlaceCard({ data }: { data: any }) {
   )
 }
 
+function EntityCard({ data }: { data: any }) {
+  const title = str(data?.title) || str(data?.name) || 'Entity'
+  const type = str(data?.type)
+  const imageUrl = str(data?.image_url)
+  const sourceLink = str(data?.source_link)
+
+  return (
+    <a
+      href={sourceLink || undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex items-center gap-4 p-4 ${sourceLink ? 'hover:bg-[var(--secondary)]/30 transition-colors cursor-pointer' : ''}`}
+    >
+      {imageUrl && (
+        <div className="shrink-0 w-[56px] h-[56px] rounded-xl overflow-hidden bg-[var(--secondary)]/40">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="text-[15px] font-semibold text-[var(--foreground)] leading-tight truncate">{title}</div>
+        {type && <div className="text-[12px] text-[var(--muted-foreground)] mt-0.5 truncate">{type}</div>}
+      </div>
+      {sourceLink && (
+        <ExternalLink size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]/50" />
+      )}
+    </a>
+  )
+}
+
 function CurrencyCard({ data }: { data: any }) {
   const payload = data?.currency && typeof data.currency === 'object' ? data.currency : data
   const base = str(payload?.base)
@@ -193,6 +223,8 @@ export function WidgetCards({ widgets }: { widgets?: WidgetData[] }) {
             return <PlaceCard key={i} data={w.data} />
           case 'currency':
             return <CurrencyCard key={i} data={w.data} />
+          case 'entity':
+            return <EntityCard key={i} data={w.data} />
           default:
             return null
         }
