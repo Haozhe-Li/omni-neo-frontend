@@ -334,6 +334,18 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
       tools: t.content ? toolsByTodo.get(t.content) ?? [] : [],
       skills: t.content ? skillsByTodo.get(t.content) ?? [] : [],
     }))
+    // Fallback: tools/skills that ran before the first `write_todos` would otherwise
+    // render as bare standalone rows at the top — they briefly appeared under a
+    // synthetic "Searching…" step, then lost that wrapper the moment the real plan
+    // arrived. Fold them into the first todo so they stay grouped instead of
+    // orphaning. (The first todo is always visible — visibleTodos slices from 0.)
+    if ((preTools.length || preSkills.length) && groups.length > 0) {
+      groups[0] = {
+        ...groups[0],
+        tools: [...preTools, ...groups[0].tools],
+        skills: [...preSkills, ...groups[0].skills],
+      }
+    }
   } else {
     groups = synthesizeGroups(preTools, thinking)
     // Any skills read before a plan (rare without todos) lead the first group.
@@ -343,9 +355,10 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
     }
   }
 
-  // Loose tools that ran before a real plan keep showing above it.
-  const looseSkills = todos.length > 0 ? preSkills : []
-  const looseTools = todos.length > 0 ? preTools : []
+  // Pre-plan tools/skills are now folded into the first todo (above), so nothing
+  // renders loose once a real plan exists.
+  const looseSkills: string[] = []
+  const looseTools: ToolStep[] = []
 
   const hasContent = groups.length > 0 || looseTools.length > 0 || looseSkills.length > 0 || !!drafting
   const stepCount = groups.length || looseTools.length + looseSkills.length

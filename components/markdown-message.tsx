@@ -13,8 +13,28 @@ import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
 
+// A quiet, neutral block placeholder shown while an ```echarts block is still
+// streaming in (its JSON is incomplete and won't parse yet): just a muted canvas
+// with an understated "Drawing chart…" label.
+function ChartDrawingPlaceholder() {
+  return (
+    <div className="my-4 h-[360px] w-full overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--foreground)_2.5%,var(--background))] relative">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5">
+        <BarChart3
+          size={20}
+          strokeWidth={1.5}
+          className="text-[var(--muted-foreground)] opacity-40 animate-pulse"
+        />
+        <span className="omni-shimmer-text text-[12.5px] font-medium tracking-wide opacity-70">
+          Drawing chart…
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // Renders an ```echarts fenced block inline. While the block is still streaming
-// in, its JSON is incomplete and won't parse — show a placeholder until it does.
+// in, its JSON is incomplete and won't parse — show the placeholder until it does.
 function InlineEcharts({ source }: { source: string }) {
   let option: any = null
   try {
@@ -23,12 +43,7 @@ function InlineEcharts({ source }: { source: string }) {
     option = null
   }
   if (!option || typeof option !== 'object' || Array.isArray(option)) {
-    return (
-      <div className="my-4 flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3 text-[13px] text-[var(--muted-foreground)]">
-        <BarChart3 size={15} strokeWidth={1.75} className="animate-pulse" />
-        Rendering chart…
-      </div>
-    )
+    return <ChartDrawingPlaceholder />
   }
   return (
     <div className="my-4 h-[360px] w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] p-2">

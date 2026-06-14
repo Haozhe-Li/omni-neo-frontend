@@ -314,7 +314,7 @@ export function ChatView({
                 { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
               ]
               setMessages(finalMessages)
-              syncToBackend(finalMessages, title)
+              syncToBackend(finalMessages, titleRef.current)
               activeReaderRef.current = null
               setIsLoading(false)
               setStreamingIndex(-1)
@@ -328,7 +328,7 @@ export function ChatView({
                 { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null, ...regenTag },
               ]
               setMessages(finalMessages)
-              syncToBackend(finalMessages, title)
+              syncToBackend(finalMessages, titleRef.current)
               activeReaderRef.current = null
               setIsLoading(false)
               setStreamingIndex(-1)
@@ -343,7 +343,7 @@ export function ChatView({
           { role: 'assistant', content: text, steps, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
         ]
         setMessages(stoppedMessages)
-        syncToBackend(stoppedMessages, title)
+        syncToBackend(stoppedMessages, titleRef.current)
       }
       activeReaderRef.current = null
       setIsLoading(false)
@@ -483,13 +483,27 @@ export function ChatView({
       .then((d) => {
         if (cancelled || !d) return
         const newTitle = typeof d === 'string' ? d : d?.title
-        if (newTitle && !isUntitled(newTitle)) setTitle(newTitle)
+        if (!newTitle || isUntitled(newTitle)) return
+        setTitle(newTitle)
+        // Persist the generated title directly. The answer may finish streaming
+        // before /get_title returns, in which case the `done` sync already wrote
+        // the raw query — so push the real title independently here, and tell the
+        // sidebar to swap its live entry over from the query.
+        if (threadId) {
+          fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/title`, {
+            method: 'PATCH',
+            body: JSON.stringify({ title: newTitle }),
+          }).catch(() => {})
+          window.dispatchEvent(
+            new CustomEvent('omni:title', { detail: { threadId, title: newTitle } })
+          )
+        }
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [query])
+  }, [query, threadId, fetchWithAuth])
 
   // ── scroll model ────────────────────────────────────────────────────────
   // No autoscroll while streaming. Instead: when a query is sent we pin it near

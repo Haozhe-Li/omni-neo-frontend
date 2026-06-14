@@ -204,11 +204,32 @@ export function AppSidebar({
             // entry takes over from the optimistic one.
             if (isSignedIn) syncFromBackend()
         }
+        // The LLM-generated title arrived — swap the live entry over from the raw query.
+        const onTitle = (e: Event) => {
+            const { threadId, title } = (e as CustomEvent<{ threadId: string; title?: string }>).detail
+            if (!title || !title.trim()) return
+            setOptimisticThreads(prev => {
+                if (!prev.has(threadId)) return prev
+                const next = new Map(prev)
+                next.set(threadId, { ...next.get(threadId)!, query: title })
+                return next
+            })
+            setHistory(prev => {
+                let changed = false
+                const updated = prev.map(c => {
+                    if (c.thread_id === threadId && c.query !== title) { changed = true; return { ...c, query: title } }
+                    return c
+                })
+                return changed ? updated : prev
+            })
+        }
         window.addEventListener('omni:gen:start', onStart)
         window.addEventListener('omni:gen:stop', onStop)
+        window.addEventListener('omni:title', onTitle)
         return () => {
             window.removeEventListener('omni:gen:start', onStart)
             window.removeEventListener('omni:gen:stop', onStop)
+            window.removeEventListener('omni:title', onTitle)
         }
     }, [isSignedIn, syncFromBackend])
 

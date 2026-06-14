@@ -33,8 +33,10 @@ export function StreamingText({ content, animate }: StreamingTextProps) {
 }
 
 // Never leave a fenced code block half-open mid-reveal: if the visible slice has
-// an odd number of ``` markers, pull back to just before the dangling fence so a
-// raw, unterminated code block doesn't flash while it types.
+// an odd number of ``` markers, there's a dangling open fence. For a chart
+// (```echarts) still streaming in, synthesize a closing fence so it renders as
+// the "drawing chart" placeholder instead of vanishing. For any other language,
+// pull back to just before the fence so raw, unterminated code doesn't flash.
 function trimDanglingFence(s: string): string {
   let count = 0
   let lastIdx = -1
@@ -44,7 +46,10 @@ function trimDanglingFence(s: string): string {
     count++
     lastIdx = m.index
   }
-  return count % 2 === 1 ? s.slice(0, lastIdx) : s
+  if (count % 2 === 0) return s
+  const lang = /^```([a-zA-Z0-9_-]*)/.exec(s.slice(lastIdx))?.[1]?.toLowerCase() ?? ''
+  if (lang === 'echarts') return s + '\n```'
+  return s.slice(0, lastIdx)
 }
 
 function Typewriter({ content }: { content: string }) {
