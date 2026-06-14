@@ -60,6 +60,10 @@ export function AppSidebar({
     const { fetchWithAuth } = useApi()
     const [mounted, setMounted] = useState(false)
     const [history, setHistory] = useState<StoredChat[]>([])
+    const [generatingThreadIds, setGeneratingThreadIds] = useState<Set<string>>(new Set())
+    // Threads optimistically shown while generating, before the backend list has
+    // them (a brand-new thread has no title yet, so /api/threads filters it out).
+    const [optimisticThreads, setOptimisticThreads] = useState<Map<string, StoredChat>>(new Map())
     const [searchQuery, setSearchQuery] = useState('')
     const [isSearchVisible, setIsSearchVisible] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
@@ -69,6 +73,28 @@ export function AppSidebar({
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
 
     useEffect(() => { setMounted(true) }, [])
+
+    // Scan localStorage on mount for any threads that were generating when the
+    // user left. The marker value holds the thread's title, so we can rebuild an
+    // optimistic sidebar entry and keep it visible across reloads.
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const ids = new Set<string>()
+        const opt = new Map<string, StoredChat>()
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i)
+            if (!k?.startsWith('omni:gen:')) continue
+            const id = k.slice(9)
+            ids.add(id)
+            const stored = localStorage.getItem(k)
+            const title = !stored || stored === '1' ? 'New thread' : stored
+            opt.set(id, { thread_id: id, query: title, timestamp: Date.now(), model: 'auto' })
+        }
+        if (ids.size > 0) {
+            setGeneratingThreadIds(ids)
+            setOptimisticThreads(opt)
+        }
+    }, [])
 
     useEffect(() => {
         setLoadingAction(null)
@@ -103,7 +129,13 @@ export function AppSidebar({
             } catch { }
         }
         items.sort((a, b) => b.timestamp - a.timestamp)
-        setHistory(items)
+        setHistory(prev => {
+            if (
+                prev.length === items.length &&
+                prev.every((p, i) => p.thread_id === items[i].thread_id && p.timestamp === items[i].timestamp)
+            ) return prev
+            return items
+        })
     }, [])
 
     // ── 2. Backend sync (runs once on mount + on auth change) ────────
@@ -132,10 +164,67 @@ export function AppSidebar({
                 }))
 
             remoteItems.sort((a, b) => b.timestamp - a.timestamp)
-            setHistory(remoteItems)
+            // Persist for instant render on next mount (eliminates blank-flash).
+            try { localStorage.setItem('omni:threadlist', JSON.stringify(remoteItems)) } catch {}
+            setHistory(prev => {
+                if (
+                    prev.length === remoteItems.length &&
+                    prev.every((p, i) => p.thread_id === remoteItems[i].thread_id && p.timestamp === remoteItems[i].timestamp)
+                ) return prev
+                return remoteItems
+            })
         } catch { }
         finally { setIsSyncing(false) }
     }, [isSignedIn, fetchWithAuth])
+
+    // Listen for gen:start / gen:stop events from the chat view.
+    // gen:start optimistically inserts the thread so it shows immediately (a
+    // brand-new thread isn't in the backend list yet). gen:stop refreshes the
+    // list so the now-persisted, titled thread replaces the optimistic entry.
+    useEffect(() => {
+        const onStart = (e: Event) => {
+            const { threadId, title } = (e as CustomEvent<{ threadId: string; title?: string; mode?: string }>).detail
+            setGeneratingThreadIds(prev => new Set([...prev, threadId]))
+            setOptimisticThreads(prev => {
+                if (prev.has(threadId)) return prev
+                const next = new Map(prev)
+                next.set(threadId, {
+                    thread_id: threadId,
+                    query: title && title.trim() ? title : 'New thread',
+                    timestamp: Date.now(),
+                    model: 'auto',
+                })
+                return next
+            })
+        }
+        const onStop = (e: Event) => {
+            const { threadId } = (e as CustomEvent<{ threadId: string }>).detail
+            setGeneratingThreadIds(prev => { const s = new Set(prev); s.delete(threadId); return s })
+            // Pull the freshly-completed thread (title now persisted) so the real
+            // entry takes over from the optimistic one.
+            if (isSignedIn) syncFromBackend()
+        }
+        window.addEventListener('omni:gen:start', onStart)
+        window.addEventListener('omni:gen:stop', onStop)
+        return () => {
+            window.removeEventListener('omni:gen:start', onStart)
+            window.removeEventListener('omni:gen:stop', onStop)
+        }
+    }, [isSignedIn, syncFromBackend])
+
+    // Drop optimistic entries once the real history contains them.
+    useEffect(() => {
+        setOptimisticThreads(prev => {
+            if (prev.size === 0) return prev
+            const ids = new Set(history.map(h => h.thread_id))
+            let changed = false
+            const next = new Map(prev)
+            for (const id of next.keys()) {
+                if (ids.has(id)) { next.delete(id); changed = true }
+            }
+            return changed ? next : prev
+        })
+    }, [history])
 
     // Poll localStorage every 2 s (cheap, no network)
     useEffect(() => {
@@ -150,10 +239,16 @@ export function AppSidebar({
         }
     }, [isSignedIn, loadLocalHistory])
 
-    // Sync from backend once on mount and whenever auth state changes
+    // Sync from backend once on mount and whenever auth state changes.
+    // For signed-in users, pre-populate from cache so there's no blank flash
+    // while the network request is in flight.
     useEffect(() => {
         if (!mounted) return
         if (isSignedIn) {
+            try {
+                const cached = localStorage.getItem('omni:threadlist')
+                if (cached) setHistory(JSON.parse(cached))
+            } catch {}
             syncFromBackend()
         } else {
             loadLocalHistory()
@@ -339,7 +434,17 @@ export function AppSidebar({
     // On desktop, it follows the collapsed/expanded state.
     const isExpanded = isMobile ? true : isOpen
 
-    const filteredHistory = history.filter(chat =>
+    // Merge optimistic (currently-generating) threads that aren't in the backend
+    // list yet, so a freshly-sent thread shows in the sidebar immediately.
+    const displayHistory = useMemo(() => {
+        if (optimisticThreads.size === 0) return history
+        const ids = new Set(history.map(h => h.thread_id))
+        const extra = [...optimisticThreads.values()].filter(o => !ids.has(o.thread_id))
+        if (extra.length === 0) return history
+        return [...extra, ...history].sort((a, b) => b.timestamp - a.timestamp)
+    }, [history, optimisticThreads])
+
+    const filteredHistory = displayHistory.filter(chat =>
         chat.query.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
@@ -554,12 +659,18 @@ export function AppSidebar({
                                     )}
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1 pr-5">
-                                    <div className="flex items-center justify-between w-full">
-                                        <span className="text-sm truncate w-full">
+                                    <div className="flex items-center gap-1.5 w-full min-w-0">
+                                        <span className="text-sm truncate flex-1">
                                             {chat.query}
                                         </span>
+                                        {generatingThreadIds.has(chat.thread_id) && (
+                                            <span className="relative flex h-2 w-2 shrink-0">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
+                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-400" />
+                                            </span>
+                                        )}
                                         {loadingAction === `thread_${chat.thread_id}` && (
-                                            <Loader2 size={12} className="animate-spin text-[var(--muted-foreground)] flex-shrink-0 ml-2" />
+                                            <Loader2 size={12} className="animate-spin text-[var(--muted-foreground)] shrink-0" />
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2 mt-0.5">

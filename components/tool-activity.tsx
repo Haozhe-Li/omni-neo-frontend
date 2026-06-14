@@ -91,7 +91,16 @@ function buildPlan(steps: ToolStep[]) {
           else merged.push(t)
         }
         todos = merged
-        activeContent = todos.find((t) => t.status === 'in_progress')?.content ?? activeContent
+        // Advance the active step from THIS snapshot (the latest full plan state),
+        // not the accumulated `merged` list — otherwise a stale in_progress left
+        // over from an earlier snapshot keeps `find` pinned to the first todo, and
+        // every later tool wrongly nests under it. Take the last in_progress in the
+        // snapshot (the most recently started step) and only fall back if none.
+        let latestActive: string | null = null
+        for (const t of incoming) {
+          if (t.status === 'in_progress' && t.content) latestActive = t.content
+        }
+        activeContent = latestActive ?? activeContent
       }
       continue
     }

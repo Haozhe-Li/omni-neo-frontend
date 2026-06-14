@@ -119,6 +119,10 @@ export function ChatView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const initializedRef = useRef(false)
   const initialFilesSentRef = useRef(false)
+  // Always-current best display title for this thread (used when announcing
+  // generation to the sidebar so it can optimistically show the thread).
+  const titleRef = useRef(title)
+  titleRef.current = title || query
 
   // Scroll: pin each new query near the top, then stop following while the answer
   // streams (no per-token autoscroll). A bottom spacer guarantees there's always
@@ -354,6 +358,18 @@ export function ChatView({
       setIsLoading(true)
       // The assistant reply will be appended right after baseHistory.
       setStreamingIndex(baseHistory.length)
+      if (threadId) {
+        localStorage.setItem(`omni:gen:${threadId}`, titleRef.current || '1')
+        window.dispatchEvent(
+          new CustomEvent('omni:gen:start', {
+            detail: { threadId, title: titleRef.current, mode },
+          })
+        )
+        // Persist the user's message immediately. If the user leaves before the
+        // answer finishes, a reconnect rebuilds history from the backend — without
+        // this early sync the just-asked question would be missing.
+        syncToBackend(baseHistory, titleRef.current)
+      }
       try {
         const personalization = await buildPersonalization()
         const payload: any = { query: queryText, thread_id: threadId, mode }
@@ -376,9 +392,14 @@ export function ChatView({
         setMessages([...baseHistory, { role: 'assistant', content: msg }])
         setIsLoading(false)
         setStreamingIndex(-1)
+      } finally {
+        if (threadId) {
+          localStorage.removeItem(`omni:gen:${threadId}`)
+          window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
+        }
       }
     },
-    [threadId, mode, buildPersonalization, fetchWithAuth, handleStream]
+    [threadId, mode, buildPersonalization, fetchWithAuth, handleStream, syncToBackend]
   )
 
   // ── initial load: backend history, else fire the first query ───────────
@@ -393,8 +414,38 @@ export function ChatView({
           if (Array.isArray(data?.messages) && data.messages.length > 0) {
             setMessages(data.messages as ChatMessage[])
             if (data?.messages?.[0]?.mode) setMode(data.messages[0].mode)
-            setIsLoading(false)
-            setTimeout(() => requestPin(), 50) // pin to the last user message after DOM update
+
+            if (data.is_generating) {
+              // A background generation is in progress — reconnect to it.
+              setIsLoading(true)
+              setStreamingIndex((data.messages as ChatMessage[]).length)
+              requestPin()
+              localStorage.setItem(`omni:gen:${threadId}`, titleRef.current || '1')
+              window.dispatchEvent(
+                new CustomEvent('omni:gen:start', {
+                  detail: { threadId, title: titleRef.current, mode },
+                })
+              )
+              try {
+                const streamRes = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/stream`)
+                if (streamRes.ok) {
+                  await handleStream(streamRes, data.messages as ChatMessage[])
+                } else {
+                  setIsLoading(false)
+                }
+              } catch {
+                setIsLoading(false)
+              } finally {
+                localStorage.removeItem(`omni:gen:${threadId}`)
+                window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
+              }
+            } else {
+              // Clear any stale generating marker from a previous session.
+              localStorage.removeItem(`omni:gen:${threadId}`)
+              window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
+              setIsLoading(false)
+              setTimeout(() => requestPin(), 50)
+            }
             return
           }
         }
