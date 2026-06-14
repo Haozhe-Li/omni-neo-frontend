@@ -90,6 +90,8 @@ export interface ChatMessage {
   mode?: AgentMode
   /** Set when this assistant message was produced by a rewind/regenerate. */
   regeneratedWith?: AgentMode
+  /** Set when the user manually stopped generation mid-stream. */
+  stoppedByUser?: boolean
 }
 
 export type PublishDuration = '7d' | '30d' | 'permanent'

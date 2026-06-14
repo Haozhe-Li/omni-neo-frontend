@@ -383,12 +383,18 @@ export function AppSidebar({
                 {isExpanded ? (
                     <>
                         <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity group">
-                            <div className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-[var(--border-subtle)]">
+                            <div className="relative w-8 h-8 shrink-0">
                                 <Image
-                                    src="/android-chrome-512x512.png"
+                                    src="/omni-logo-light.png"
                                     alt="Omni Logo"
                                     fill
-                                    className="object-cover"
+                                    className="object-contain dark:hidden"
+                                />
+                                <Image
+                                    src="/omni-logo-dark.png"
+                                    alt="Omni Logo"
+                                    fill
+                                    className="object-contain hidden dark:block"
                                 />
                             </div>
                         </Link>
@@ -415,18 +421,24 @@ export function AppSidebar({
                 ) : (
                     <button
                         onClick={onToggle}
-                        className="relative w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-sm border border-[var(--border-subtle)] group hover:border-[var(--muted-foreground)] transition-all"
+                        className="relative w-8 h-8 shrink-0 group transition-all"
                         title="Expand sidebar"
                     >
                         <div className="absolute inset-0 transition-opacity duration-200 group-hover:opacity-0">
                             <Image
-                                src="/android-chrome-512x512.png"
+                                src="/omni-logo-light.png"
                                 alt="Omni Logo"
                                 fill
-                                className="object-cover"
+                                className="object-contain dark:hidden"
+                            />
+                            <Image
+                                src="/omni-logo-dark.png"
+                                alt="Omni Logo"
+                                fill
+                                className="object-contain hidden dark:block"
                             />
                         </div>
-                        <div className="absolute inset-0 flex items-center justify-center bg-[var(--secondary)] opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[var(--foreground)]">
+                        <div className="absolute inset-0 flex items-center justify-center bg-[var(--secondary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[var(--foreground)]">
                             <PanelLeftOpen size={18} />
                         </div>
                     </button>

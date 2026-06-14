@@ -82,7 +82,15 @@ function buildPlan(steps: ToolStep[]) {
     }
     if (isTodo(s.tool)) {
       if (Array.isArray(s.args?.todos)) {
-        todos = s.args.todos
+        const incoming: Todo[] = s.args.todos
+        // Merge: update status of existing items, append new ones — never drop.
+        const merged = [...todos]
+        for (const t of incoming) {
+          const idx = merged.findIndex((m) => m.content === t.content)
+          if (idx >= 0) merged[idx] = t
+          else merged.push(t)
+        }
+        todos = merged
         activeContent = todos.find((t) => t.status === 'in_progress')?.content ?? activeContent
       }
       continue

@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Search, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus } from 'lucide-react'
+import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus } from 'lucide-react'
+import Image from 'next/image'
 import { useApi } from '@/hooks/useApi'
-import { SignUpButton, useAuth, useClerk } from '@clerk/nextjs'
+import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
-import { useAutocomplete } from '@/hooks/useAutocomplete'
 
 import { toast } from 'sonner'
+
 
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[]) => void
@@ -35,15 +36,37 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const [isSstPending, setIsSstPending] = useState(false)
   const [sstPrompt, setSstPrompt] = useState('')
   const { isSignedIn } = useAuth()
+  const { user, isLoaded: userLoaded } = useUser()
+  const firstName = user?.firstName ?? null
   const clerk = useClerk()
+
+  const [greeting, setGreeting] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem('omni_greeting')
+      if (cached) setGreeting(cached)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    if (!userLoaded) return
+    if (!firstName || firstName.length > 10) {
+      try { localStorage.removeItem('omni_greeting') } catch {}
+      setGreeting(null)
+      return
+    }
+    const options = [`Hey ${firstName}!`, `${firstName} returns!`]
+    const chosen = options[Math.floor(Math.random() * options.length)]
+    try { localStorage.setItem('omni_greeting', chosen) } catch {}
+    setGreeting(chosen)
+  }, [firstName, userLoaded])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { attachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
 
-  const { suggestions, setSuggestions } = useAutocomplete(query, 300, !isMobile && query.length <= 10)
-
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const suggestionContainerRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
@@ -135,19 +158,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [modelDropdownOpen])
-
-  // Close suggestions on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (suggestionContainerRef.current && !suggestionContainerRef.current.contains(e.target as Node)) {
-        setSuggestions([])
-      }
-    }
-    if (suggestions.length > 0) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [suggestions.length, setSuggestions])
 
   const [backendStatus, setBackendStatus] = useState<'unknown' | 'ready' | 'not-ready'>('unknown')
   const [isCheckPending, setIsCheckPending] = useState(true)
@@ -757,19 +767,24 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
         {/* Brand */}
         <div className="flex-1 md:flex-none flex flex-col items-center justify-center relative z-10 w-full md:mb-12">
-          <div className="animate-fade-up text-center">
-            <h1 className="text-[2.5rem] sm:text-5xl font-light tracking-tight text-foreground lowercase font-[family-name:var(--font-plex)]">
-              omni{" "}
-              <span
-                className="font-normal"
-                style={{ color: '#20B2AA' }}
-              >
-                knows
+          <div className="animate-fade-up">
+            <h1 className="flex items-center justify-center gap-3 text-[2.5rem] sm:text-5xl font-[450] tracking-tight text-foreground font-[family-name:var(--font-plex)]">
+              <span className="relative block h-[1em] w-[1em] shrink-0">
+                <Image
+                  src="/omni-logo-light.png"
+                  alt=""
+                  fill
+                  className="object-contain dark:hidden"
+                />
+                <Image
+                  src="/omni-logo-dark.png"
+                  alt=""
+                  fill
+                  className="object-contain hidden dark:block"
+                />
               </span>
+              {greeting ?? 'Meet Omni'}
             </h1>
-            <p className="mt-3 text-muted-foreground text-sm tracking-wide">
-              Research anything. Get answers with sources.
-            </p>
           </div>
         </div>
 
@@ -841,31 +856,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
                 style={{ minHeight: '52px' }}
               />
-
-              {/* Suggestions Dropdown */}
-              {!isMobile && suggestions.length > 0 && (
-                <div
-                  ref={suggestionContainerRef}
-                  className="absolute left-0 right-0 top-full mt-2 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-2 z-[60] animate-in fade-in slide-in-from-top-1 duration-200"
-                >
-                  {suggestions.map((text, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setQuery(text)
-                        setSuggestions([])
-                        // Focus back to input
-                        inputRef.current?.focus()
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/50 transition-colors"
-                    >
-                      <Search className="h-4 w-4 text-[var(--muted-foreground)]/60 shrink-0" />
-                      <span className="truncate">{text}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {/* Bottom bar — separate row, never overlaps text */}
               <div className="flex items-center justify-between px-3 pb-3 pt-1">

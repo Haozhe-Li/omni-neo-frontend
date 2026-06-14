@@ -114,6 +114,8 @@ export function ChatView({
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<any>(null)
+  const activeReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null)
+  const isStoppingRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const initializedRef = useRef(false)
   const initialFilesSentRef = useRef(false)
@@ -225,6 +227,8 @@ export function ChatView({
     async (response: Response, baseHistory: ChatMessage[], regenTag?: Pick<ChatMessage, 'regeneratedWith'>) => {
       const reader = response.body?.getReader()
       if (!reader) throw new Error('No stream reader')
+      activeReaderRef.current = reader
+      isStoppingRef.current = false
       const decoder = new TextDecoder()
       let buffer = ''
 
@@ -244,7 +248,12 @@ export function ChatView({
       }
 
       while (true) {
-        const { done, value } = await reader.read()
+        let done: boolean, value: Uint8Array | undefined
+        try {
+          ;({ done, value } = await reader.read())
+        } catch {
+          break
+        }
         if (done) break
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
@@ -294,9 +303,20 @@ export function ChatView({
               text += (text ? '\n\n' : '') + (ev.content || 'Something went wrong.')
               patchAssistant()
               break
+            case 'stopped': {
+              const finalText = text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
+              const finalMessages: ChatMessage[] = [
+                ...baseHistory,
+                { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+              ]
+              setMessages(finalMessages)
+              syncToBackend(finalMessages, title)
+              activeReaderRef.current = null
+              setIsLoading(false)
+              setStreamingIndex(-1)
+              return
+            }
             case 'done': {
-              // The agent narrates inline (report blocks included); fall back to a
-              // friendly pointer only if it made a chart with no prose at all.
               const finalText =
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
               const finalMessages: ChatMessage[] = [
@@ -305,15 +325,23 @@ export function ChatView({
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, title)
+              activeReaderRef.current = null
               setIsLoading(false)
-              // Stop animating so the finished answer (incl. its last line, which
-              // has no trailing newline) renders in full rather than buffered.
               setStreamingIndex(-1)
               return
             }
           }
         }
       }
+      if (isStoppingRef.current) {
+        const stoppedMessages: ChatMessage[] = [
+          ...baseHistory,
+          { role: 'assistant', content: text, steps, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+        ]
+        setMessages(stoppedMessages)
+        syncToBackend(stoppedMessages, title)
+      }
+      activeReaderRef.current = null
       setIsLoading(false)
       setStreamingIndex(-1)
     },
@@ -619,6 +647,14 @@ export function ChatView({
     }
   }, [isLoading, isRecording])
 
+  const handleStop = useCallback(() => {
+    isStoppingRef.current = true
+    if (threadId) {
+      fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/stop`, { method: 'POST' }).catch(() => {})
+    }
+    activeReaderRef.current?.cancel().catch(() => {})
+  }, [threadId, fetchWithAuth])
+
   useEffect(() => () => recognitionRef.current?.stop?.(), [])
 
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -885,8 +921,16 @@ export function ChatView({
                             ))}
                           </div>
                         ) : null}
+                        {/* stopped-by-user label */}
+                        {msg.stoppedByUser && !(i === streamingIndex && isLoading) && (
+                          <div className={`flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]/55 select-none${parsed.text ? ' mt-4' : ' mt-1'}`}>
+                            <Square className="h-2.5 w-2.5 fill-current shrink-0" />
+                            <span>Answer skipped by user</span>
+                          </div>
+                        )}
+
                         {/* footer: sources + actions, once the turn is complete */}
-                        {parsed.text && !(i === streamingIndex && isLoading) ? (
+                        {(parsed.text || msg.stoppedByUser) && !(i === streamingIndex && isLoading) ? (
                           <AnswerFooter
                             content={parsed.text}
                             sources={msg.sources}
@@ -1099,21 +1143,32 @@ export function ChatView({
                     <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleSend}
-                    disabled={(!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || isLoading}
-                    className={`
-                      flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                      ${(input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0) && !isLoading
-                          ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                          : 'bg-muted text-muted-foreground cursor-not-allowed'
-                      }
-                    `}
-                    aria-label="Submit message"
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
+                  {isLoading ? (
+                    <button
+                      type="button"
+                      onClick={handleStop}
+                      className="flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200 bg-accent text-accent-foreground hover:opacity-90 active:scale-95 cursor-pointer"
+                      aria-label="Stop generation"
+                    >
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      disabled={!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0}
+                      className={`
+                        flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                        ${(input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0)
+                            ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
+                            : 'bg-muted text-muted-foreground cursor-not-allowed'
+                        }
+                      `}
+                      aria-label="Submit message"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

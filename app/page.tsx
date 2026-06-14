@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { SearchHome } from '@/components/search-home'
 import { ChatView } from '@/components/chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -27,9 +27,27 @@ export default function Home() {
   const isMobileCheck = useIsMobile()
   const isMobile = isMobileCheck === undefined ? true : isMobileCheck
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const sidebarInitializedRef = useRef(false)
 
   useEffect(() => {
-    setSidebarOpen(!isMobile)
+    if (isMobile === undefined) return
+    if (isMobile) {
+      setSidebarOpen(false)
+      sidebarInitializedRef.current = true
+      return
+    }
+    const saved = localStorage.getItem('omni_sidebar_open')
+    const shouldOpen = saved !== '0' // default open on desktop if no preference
+    if (!sidebarInitializedRef.current) {
+      sidebarInitializedRef.current = true
+      if (shouldOpen) {
+        setSidebarOpen(false)
+        const t = setTimeout(() => setSidebarOpen(true), 200)
+        return () => clearTimeout(t)
+      }
+    } else {
+      setSidebarOpen(shouldOpen)
+    }
   }, [isMobile])
 
   useEffect(() => {
@@ -126,7 +144,13 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchWithAuth])
 
-  const toggleSidebar = useCallback(() => setSidebarOpen((p) => !p), [])
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((p) => {
+      const next = !p
+      localStorage.setItem('omni_sidebar_open', next ? '1' : '0')
+      return next
+    })
+  }, [])
 
   return (
     <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
