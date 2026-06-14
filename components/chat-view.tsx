@@ -761,7 +761,7 @@ export function ChatView({
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[15px] text-foreground whitespace-pre-wrap break-words">
+                      <div className="rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[15px] text-foreground whitespace-pre-wrap break-words min-w-0 overflow-hidden">
                         {msg.content}
                       </div>
                     )}

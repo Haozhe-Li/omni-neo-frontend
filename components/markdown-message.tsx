@@ -69,7 +69,7 @@ function CopyButton({ getText }: { getText: () => string }) {
 // same as the legacy canvas/light answers.
 const markdownComponents: Components = {
   a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline underline-offset-2 decoration-accent/40 transition-colors">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
       {children}
     </a>
   ),
