@@ -12,6 +12,29 @@ import { FileUploadArea } from '@/components/file-upload-area'
 import { toast } from 'sonner'
 
 
+const SUGGESTED_QUERIES = [
+  "Is it rainy today?",
+  "What is the difference between sea lions and seals?",
+  "How do black holes form?",
+  "What should I cook for dinner tonight?",
+  "Explain quantum entanglement in simple terms",
+  "What are the best habits for better sleep?",
+  "How does GPS actually work?",
+  "Why is the sky blue?",
+  "What are the health benefits of coffee?",
+  "How does the internet work?",
+  "What causes the northern lights?",
+  "Explain compound interest like I'm five",
+  "What's the tallest mountain on Earth?",
+  "How do bees make honey?",
+  "Why do we dream?",
+  "What is the speed of light?",
+  "How do vaccines work?",
+  "What's the difference between affect and effect?",
+  "How do I learn a new language quickly?",
+  "What is the largest animal that ever lived?",
+]
+
 interface SearchHomeProps {
   onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[]) => void
   isAutoDetecting?: boolean
@@ -41,6 +64,13 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const clerk = useClerk()
 
   const [greeting, setGreeting] = useState<string | null>(null)
+  const [suggestionIndex, setSuggestionIndex] = useState(0)
+  const [suggestionVisible, setSuggestionVisible] = useState(true)
+  const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [fillAnim, setFillAnim] = useState<{ text: string; submit: boolean } | null>(null)
+  const fillAnimRef = useRef<{ text: string; submit: boolean } | null>(null)
+  const fillDivRef = useRef<HTMLDivElement>(null)
+  const fillRafRef = useRef<number | null>(null)
 
   useEffect(() => {
     try {
@@ -61,6 +91,20 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     try { localStorage.setItem('omni_greeting', chosen) } catch {}
     setGreeting(chosen)
   }, [firstName, userLoaded])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSuggestionVisible(false)
+      suggestionTimeoutRef.current = setTimeout(() => {
+        setSuggestionIndex(prev => (prev + 1) % SUGGESTED_QUERIES.length)
+        setSuggestionVisible(true)
+      }, 400)
+    }, 5000)
+    return () => {
+      clearInterval(interval)
+      if (suggestionTimeoutRef.current) clearTimeout(suggestionTimeoutRef.current)
+    }
+  }, [])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -301,9 +345,83 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }, [query])
 
+  const handleFillEnd = useCallback(async () => {
+    const current = fillAnimRef.current
+    if (!current) return
+    fillAnimRef.current = null
+    setFillAnim(null)
+
+    if (!current.submit) {
+      setQuery(current.text)
+      inputRef.current?.focus()
+      return
+    }
+
+    if (backendStatus !== 'ready') return
+    const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+    if (!activeThreadId) return
+    console.log('[SearchHome] handleFillEnd submit — thread_id:', activeThreadId)
+    onSearch(current.text, activeThreadId)
+    setQuery('')
+    if (inputRef.current) inputRef.current.style.height = 'auto'
+  }, [backendStatus, threadId, fetchThreadId, createLocalFallbackThreadId, onSearch])
+
+  const triggerFillAnimation = useCallback((text: string, submit: boolean) => {
+    const payload = { text, submit }
+    fillAnimRef.current = payload
+    setFillAnim(payload)
+
+    // Cancel any in-flight animation
+    if (fillRafRef.current !== null) {
+      cancelAnimationFrame(fillRafRef.current)
+      fillRafRef.current = null
+    }
+
+    // Wait one frame for React to mount the overlay div, then start the rAF loop
+    requestAnimationFrame(() => {
+      const duration = 520
+      const start = performance.now()
+
+      const tick = (now: number) => {
+        const t = Math.min((now - start) / duration, 1)
+        // cubic ease-in-out
+        const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+        const p = eased * 100
+        const shimW = 18 // shimmer zone width in %
+
+        if (fillDivRef.current) {
+          fillDivRef.current.style.backgroundImage = [
+            'linear-gradient(90deg,',
+            `  var(--foreground) ${Math.max(0, p - shimW)}%,`,
+            `  rgb(32,178,170) ${p}%,`,
+            `  transparent ${Math.min(100, p + shimW)}%`,
+            ')',
+          ].join('')
+        }
+
+        if (t < 1) {
+          fillRafRef.current = requestAnimationFrame(tick)
+        } else {
+          fillRafRef.current = null
+          void handleFillEnd()
+        }
+      }
+
+      fillRafRef.current = requestAnimationFrame(tick)
+    })
+  }, [handleFillEnd])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (backendStatus !== 'ready') return
+
+    const showingSuggestion = !query && !isRecording && !sstPrompt
+
+    // Trigger fill animation for suggestion submit; handleFillEnd will do the actual search
+    if (showingSuggestion && attachedFiles.length === 0) {
+      triggerFillAnimation(SUGGESTED_QUERIES[suggestionIndex], true)
+      return
+    }
 
     // Read from ref first (always the latest, avoids stale-closure reads from state)
     const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
@@ -311,14 +429,16 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
     console.log('[SearchHome] handleSubmit — thread_id being sent to chat:', activeThreadId)
 
-    if (query.trim() || attachedFiles.length > 0) {
+    const effectiveQuery = query.trim()
+
+    if (effectiveQuery || attachedFiles.length > 0) {
       // Filter out files that are not ready
       const readyFileIds = attachedFiles.filter((f) => f.status === 'ready').map((f) => f.id)
       const readyFileMeta = attachedFiles.filter((f) => f.status === 'ready').map((f) => ({ id: f.id, name: f.name, type: f.type }))
       if (readyFileIds.length > 0) {
         console.log('[SearchHome] handleSubmit — attached_file_ids:', readyFileIds)
       }
-      onSearch(query.trim(), activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined)
+      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined)
       clearFiles()
       setQuery('')
       if (inputRef.current) {
@@ -328,6 +448,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab' && !query && backendStatus === 'ready' && !isRecording && !sstPrompt) {
+      e.preventDefault()
+      triggerFillAnimation(SUGGESTED_QUERIES[suggestionIndex], false)
+      return
+    }
     if (!shouldSubmitOnEnter(e, { isMenuOpen: modelDropdownOpen })) return
     e.preventDefault()
     void handleSubmit(e as unknown as React.FormEvent)
@@ -471,6 +596,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       clearSstPromptTimer()
       stopVadMonitoring()
       stopMediaTracks()
+      if (fillRafRef.current !== null) cancelAnimationFrame(fillRafRef.current)
     }
   }, [clearSstPromptTimer, stopMediaTracks, stopVadMonitoring])
 
@@ -831,31 +957,68 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
                 </div>
               )}
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value)
-                  e.target.style.height = 'auto'
-                  e.target.style.height = `${e.target.scrollHeight}px`
-                }}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                onKeyDown={handleKeyDown}
-                disabled={backendStatus !== 'ready' || isCheckPending}
-                placeholder={
-                  (isRecording || !!sstPrompt)
-                    ? (sstPrompt || 'listening...')
-                    : backendStatus === 'ready'
-                      ? "Ask anything..."
-                      : isCheckPending
-                        ? "Connecting to brain..."
-                        : "Backend is not ready, please wait..."
-                }
-                className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
-                style={{ minHeight: '52px' }}
-              />
+              <div className="relative">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value)
+                    e.target.style.height = 'auto'
+                    e.target.style.height = `${e.target.scrollHeight}px`
+                  }}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  onKeyDown={handleKeyDown}
+                  disabled={backendStatus !== 'ready' || isCheckPending}
+                  placeholder={
+                    (isRecording || !!sstPrompt)
+                      ? (sstPrompt || 'listening...')
+                      : backendStatus === 'ready'
+                        ? ''
+                        : isCheckPending
+                          ? "Connecting to brain..."
+                          : "Backend is not ready, please wait..."
+                  }
+                  className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
+                  style={{ minHeight: '52px' }}
+                />
+                {fillAnim ? (
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                    {/* Ghost base text */}
+                    <div className={`absolute inset-0 px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed text-[var(--muted-foreground)]/50`}>
+                      {fillAnim.text}
+                    </div>
+                    {/* Shimmer fill layer — background updated each rAF frame */}
+                    <div
+                      ref={fillDivRef}
+                      className={`absolute inset-0 px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed`}
+                      style={{
+                        backgroundClip: 'text',
+                        WebkitBackgroundClip: 'text',
+                        color: 'transparent',
+                      }}
+                    >
+                      {fillAnim.text}
+                    </div>
+                  </div>
+                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt ? (
+                  <div
+                    className={`absolute inset-0 pointer-events-none px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed overflow-hidden`}
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="text-[var(--muted-foreground)]/50"
+                      style={{
+                        opacity: suggestionVisible ? 1 : 0,
+                        transition: 'opacity 0.4s ease-in-out',
+                      }}
+                    >
+                      {SUGGESTED_QUERIES[suggestionIndex]}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
 
               {/* Bottom bar — separate row, never overlaps text */}
               <div className="flex items-center justify-between px-3 pb-3 pt-1">
@@ -1038,12 +1201,14 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
                   <button
                     type="submit"
-                    disabled={!query.trim() || backendStatus !== 'ready'}
+                    disabled={backendStatus !== 'ready' || (!!isRecording || !!sstPrompt ? !query.trim() : false)}
                     className={`
                     flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                    ${query.trim() && backendStatus === 'ready'
+                    ${backendStatus === 'ready' && !isRecording && !sstPrompt
                         ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                        : query.trim() && backendStatus === 'ready'
+                          ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'
                       }
                   `}
                     aria-label="Submit search"
