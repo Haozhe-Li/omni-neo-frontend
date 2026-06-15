@@ -1098,8 +1098,8 @@ export function ChatView({
                         {/* Desktop Dropdown */}
                         <div className="hidden md:block absolute bottom-full right-0 mb-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
                           {[
-                            { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
-                            { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
+                            { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
+                            { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
                           ].map((opt) => {
                             return (
                               <button
@@ -1134,8 +1134,10 @@ export function ChatView({
                         {/* Mobile Modal/Drawer */}
                         <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
                           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
-                          <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
-                            <div className="flex items-center justify-between mb-4">
+                          <div className="relative bg-[var(--background)] rounded-t-3xl px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
+                            {/* grabber */}
+                            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--border)]" />
+                            <div className="flex items-center justify-between mb-3">
                               <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
                               <button
                                 type="button"
@@ -1145,11 +1147,12 @@ export function ChatView({
                                 <X className="h-4 w-4" />
                               </button>
                             </div>
-                            <div className="flex flex-col gap-2.5">
+                            <div className="flex flex-col gap-2">
                               {[
-                                { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
-                                { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
+                                { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
+                                { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
                               ].map((opt) => {
+                                const selected = mode === opt.value
                                 return (
                                   <button
                                     key={opt.value}
@@ -1158,23 +1161,23 @@ export function ChatView({
                                       setMode(opt.value)
                                       setModelDropdownOpen(false)
                                     }}
-                                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${mode === opt.value ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}
+                                    className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl text-left border transition-colors ${selected ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]' : 'border-[var(--border-subtle)] bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60'}`}
                                   >
                                     <div className="flex flex-col min-w-0">
-                                      <span className="text-[15px] font-medium flex items-center gap-1.5">
+                                      <span className={`text-[15px] font-medium ${selected ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
                                         {opt.label}
                                       </span>
                                       <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
                                         {opt.desc}
                                       </span>
                                     </div>
-                                    <div className="ml-3 shrink-0 flex items-center gap-2">
-                                      {mode === opt.value ? (
+                                    <div className="ml-1 shrink-0">
+                                      {selected ? (
                                         <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
                                           <Check className="h-3.5 w-3.5" />
                                         </div>
                                       ) : (
-                                        <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
+                                        <div className="h-5 w-5 rounded-full border-2 border-[var(--border)]" />
                                       )}
                                     </div>
                                   </button>

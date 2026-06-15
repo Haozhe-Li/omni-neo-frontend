@@ -1069,8 +1069,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         {/* Desktop Dropdown */}
                         <div className="hidden md:block absolute top-full right-0 mt-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                           {[
-                            { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
-                            { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
+                            { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
+                            { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
                           ].map((opt) => {
                             const isLocked = quotaExceeded && opt.value === 'pro'
                             const showRemaining = opt.value === 'pro' && !quotaExceeded && remainingQuota !== null
@@ -1128,8 +1128,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                             </div>
                             <div className="flex flex-col gap-2.5">
                               {[
-                                { value: 'fast' as const, label: 'Fast', desc: 'Quick answers · unlimited' },
-                                { value: 'pro' as const, label: 'Pro', desc: 'Deep agent with charts & reports' },
+                                { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
+                                { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
                               ].map((opt) => {
                                 const isLocked = quotaExceeded && opt.value === 'pro'
                                 const showRemaining = opt.value === 'pro' && !quotaExceeded && remainingQuota !== null
