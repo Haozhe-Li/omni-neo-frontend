@@ -291,23 +291,98 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
   const handleDownload = async (format: 'markdown' | 'txt' | 'pdf') => {
     if (format === 'markdown') {
-      let contentToDownload = initialAnswer
-      if (sources && sources.length > 0) {
-        contentToDownload += '\n\n------\n\n## References\n'
-        sources.forEach((source, index) => {
-          contentToDownload += `${index + 1}. [${source.title}](${source.url})\n`
-        })
+      try {
+        let contentToDownload = initialAnswer
+        if (sources && sources.length > 0) {
+          contentToDownload += '\n\n------\n\n## References\n'
+          sources.forEach((source, index) => {
+            contentToDownload += `${index + 1}. [${source.title}](${source.url})\n`
+          })
+        }
+
+        const echartsRegex = /```echarts\s+([\s\S]*?)```/g
+        
+        if (echartsRegex.test(contentToDownload)) {
+          toast.loading('Preparing ZIP with images...', { id: 'download-zip' })
+          const [JSZip, echarts] = await Promise.all([
+            import('jszip').then(m => m.default),
+            import('echarts')
+          ])
+
+          const zip = new JSZip()
+          echartsRegex.lastIndex = 0
+          
+          let modifiedContent = contentToDownload
+          const matches = [...contentToDownload.matchAll(echartsRegex)]
+          let chartIndex = 1
+
+          for (const m of matches) {
+            const specStr = m[1]
+            try {
+              const spec = JSON.parse(specStr)
+              
+              const div = document.createElement('div')
+              div.style.width = '800px'
+              div.style.height = '600px'
+              div.style.position = 'absolute'
+              div.style.left = '-9999px'
+              document.body.appendChild(div)
+
+              const chart = echarts.init(div)
+              if (spec.animation !== undefined) {
+                spec.animation = false
+              } else {
+                spec.animation = false
+              }
+              chart.setOption(spec)
+
+              const dataUrl = chart.getDataURL({ type: 'png', backgroundColor: '#fff' })
+              const base64Data = dataUrl.split(',')[1]
+
+              const imageName = `chart-${chartIndex}.png`
+              zip.file(imageName, base64Data, { base64: true })
+
+              modifiedContent = modifiedContent.replace(m[0], `![Chart ${chartIndex}](./${imageName})`)
+
+              chart.dispose()
+              document.body.removeChild(div)
+              chartIndex++
+            } catch (err) {
+              console.error('Failed to parse or render chart', err)
+            }
+          }
+
+          zip.file(`${normalizeFilename(title || 'answer')}.md`, modifiedContent)
+
+          const blob = await zip.generateAsync({ type: 'blob' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${normalizeFilename(title || 'answer')}.zip`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          
+          toast.dismiss('download-zip')
+          toast.success('Downloaded as ZIP')
+        } else {
+          const blob = new Blob([contentToDownload], { type: 'text/markdown' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${normalizeFilename(title || 'answer')}.md`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+          URL.revokeObjectURL(url)
+          toast.success('Downloaded as Markdown')
+        }
+      } catch (err) {
+        console.error('Download error:', err)
+        toast.dismiss('download-zip')
+        toast.error('Failed to download markdown')
       }
-      const blob = new Blob([contentToDownload], { type: 'text/markdown' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${normalizeFilename(title || 'answer')}.md`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      toast.success('Downloaded as Markdown')
     } else if (format === 'txt') {
       let plainText = stripMarkdown(initialAnswer)
       if (sources && sources.length > 0) {
@@ -329,8 +404,30 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
     } else if (format === 'pdf') {
       setIsPdfLoading(true)
       try {
-        // 1. Get the content
-        const contentHtml = containerRef.current?.innerHTML || ''
+        // 1. Get the content and convert canvases to images for printing
+        const containerClone = containerRef.current?.cloneNode(true) as HTMLElement
+        if (!containerClone) throw new Error('No content')
+
+        const originalCanvases = containerRef.current?.querySelectorAll('canvas') || []
+        const clonedCanvases = containerClone.querySelectorAll('canvas')
+
+        originalCanvases.forEach((canvas, index) => {
+          try {
+            const dataUrl = canvas.toDataURL('image/png')
+            const img = document.createElement('img')
+            img.src = dataUrl
+            img.style.width = canvas.style.width || `${canvas.width}px`
+            img.style.height = canvas.style.height || `${canvas.height}px`
+            img.style.maxWidth = '100%'
+            
+            const clonedCanvas = clonedCanvases[index]
+            clonedCanvas?.parentNode?.replaceChild(img, clonedCanvas)
+          } catch (e) {
+            console.error('Error extracting canvas data', e)
+          }
+        })
+
+        const contentHtml = containerClone.innerHTML
 
         // 2. Create a hidden iframe for printing
         const iframe = document.createElement('iframe')

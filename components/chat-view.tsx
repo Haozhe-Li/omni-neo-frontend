@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -48,6 +48,277 @@ function isUntitled(t?: string) {
   return !n || n === 'untitled' || n === 'untitled chat'
 }
 
+const handleInlineDownload = async (r: ParsedReport, format: 'markdown' | 'pdf' | 'html') => {
+  const title = r.title || 'report'
+  const content = `# ${title}\n\n${r.content || ''}`
+  const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+
+  if (format === 'markdown') {
+    try {
+      const echartsRegex = /```echarts\s+([\s\S]*?)```/g
+      if (echartsRegex.test(content)) {
+        toast.loading('Preparing ZIP with images...', { id: 'download-zip' })
+        const [JSZip, echarts] = await Promise.all([
+          import('jszip').then(m => m.default),
+          import('echarts')
+        ])
+
+        const zip = new JSZip()
+        echartsRegex.lastIndex = 0
+        
+        let modifiedContent = content
+        const matches = [...content.matchAll(echartsRegex)]
+        let chartIndex = 1
+
+        for (const m of matches) {
+          const specStr = m[1]
+          try {
+            const spec = JSON.parse(specStr)
+            const div = document.createElement('div')
+            div.style.width = '800px'
+            div.style.height = '600px'
+            div.style.position = 'absolute'
+            div.style.left = '-9999px'
+            document.body.appendChild(div)
+
+            const chart = echarts.init(div)
+            if (spec.animation !== undefined) {
+              spec.animation = false
+            } else {
+              spec.animation = false
+            }
+            chart.setOption(spec)
+
+            const dataUrl = chart.getDataURL({ type: 'png', backgroundColor: '#fff' })
+            const base64Data = dataUrl.split(',')[1]
+            const imageName = `chart-${chartIndex}.png`
+            zip.file(imageName, base64Data, { base64: true })
+
+            modifiedContent = modifiedContent.replace(m[0], `![Chart ${chartIndex}](./${imageName})`)
+
+            chart.dispose()
+            document.body.removeChild(div)
+            chartIndex++
+          } catch (err) {
+            console.error('Failed to parse or render chart', err)
+          }
+        }
+
+        zip.file(`${normalizeFilename(title)}.md`, modifiedContent)
+
+        const blob = await zip.generateAsync({ type: 'blob' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${normalizeFilename(title)}.zip`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        
+        toast.dismiss('download-zip')
+        toast.success('Downloaded as ZIP')
+      } else {
+        const blob = new Blob([content], { type: 'text/markdown' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${normalizeFilename(title)}.md`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success('Downloaded as Markdown')
+      }
+    } catch (err) {
+      console.error('Download error:', err)
+      toast.dismiss('download-zip')
+      toast.error('Failed to download markdown')
+    }
+  } else if (format === 'html' || format === 'pdf') {
+    const toastId = toast.loading(format === 'pdf' ? 'Preparing PDF...' : 'Preparing HTML...')
+    try {
+      const containerNode = document.getElementById(`inline-report-${r.id}`)
+      if (!containerNode) throw new Error('No content')
+      const containerClone = containerNode.cloneNode(true) as HTMLElement
+      // Remove cropping classes so the PDF prints the full report
+      containerClone.classList.remove('max-h-[360px]', 'overflow-hidden')
+
+      const originalCanvases = containerNode.querySelectorAll('canvas') || []
+      const clonedCanvases = containerClone.querySelectorAll('canvas')
+
+      originalCanvases.forEach((canvas, index) => {
+        try {
+          const dataUrl = canvas.toDataURL('image/png')
+          const img = document.createElement('img')
+          img.src = dataUrl
+          img.style.width = canvas.style.width || `${canvas.width}px`
+          img.style.height = canvas.style.height || `${canvas.height}px`
+          img.style.maxWidth = '100%'
+          const clonedCanvas = clonedCanvases[index]
+          clonedCanvas?.parentNode?.replaceChild(img, clonedCanvas)
+        } catch (e) {
+          console.error('Error extracting canvas data', e)
+        }
+      })
+
+      const contentHtml = containerClone.innerHTML
+
+      if (format === 'html') {
+        const htmlOutput = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'media',
+      theme: {
+        extend: {
+          colors: {
+            background: 'var(--background)',
+            foreground: 'var(--foreground)',
+            card: 'var(--card)',
+            secondary: 'var(--secondary)',
+            border: 'var(--border)',
+            accent: 'var(--accent)',
+          }
+        }
+      }
+    }
+  </script>
+  <style type="text/tailwindcss">
+    @layer base {
+      :root {
+        --background: #f3f3ee;
+        --foreground: #1a1a1a;
+        --card: #ffffff;
+        --secondary: #eaeae5;
+        --border: rgba(0,0,0,0.08);
+        --border-subtle: rgba(0,0,0,0.05);
+        --accent: #20B2AA;
+        --muted: #eaeae5;
+        --muted-foreground: #6b6b6b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #191A1A;
+          --foreground: #ffffff;
+          --card: #222323;
+          --secondary: #2a2b2b;
+          --border: rgba(255,255,255,0.08);
+          --border-subtle: rgba(255,255,255,0.05);
+          --muted: #2a2b2b;
+          --muted-foreground: #8b8b8b;
+        }
+      }
+      body {
+        background-color: theme('colors.background');
+        color: theme('colors.foreground');
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      .report-content {
+        max-width: 48rem;
+        margin: 0 auto;
+      }
+      .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
+      h1 { @apply text-3xl font-bold mb-4 mt-8; }
+      h2 { @apply text-2xl font-semibold mt-8 mb-4 border-b border-[var(--border-subtle)] pb-2; }
+      h3 { @apply text-xl font-semibold mt-6 mb-3; }
+      p { @apply mb-4 leading-relaxed; }
+      ul { @apply list-disc pl-6 mb-4; }
+      ol { @apply list-decimal pl-6 mb-4; }
+      li { @apply mb-1; }
+      blockquote { @apply border-l-4 border-accent pl-4 italic text-[var(--muted-foreground)] my-4; }
+      pre { @apply bg-secondary p-4 rounded-lg overflow-x-auto mb-4; }
+      code { @apply font-mono text-sm; }
+      table { @apply w-full mb-4 border-collapse; }
+      th, td { @apply border border-border p-2 text-left; }
+      th { @apply bg-secondary; }
+      img { @apply rounded-lg my-4 max-w-full h-auto; }
+      a { @apply text-accent hover:underline; }
+    }
+  </style>
+</head>
+<body>
+  <div class="report-content">
+    ${contentHtml}
+  </div>
+</body>
+</html>
+`.trim()
+
+        const blob = new Blob([htmlOutput], { type: 'text/html;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${normalizeFilename(title)}.html`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.dismiss(toastId)
+        toast.success('Downloaded as HTML')
+      } else {
+        const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+      document.body.appendChild(iframe)
+
+      const doc = iframe.contentWindow?.document
+      if (!doc) throw new Error('Could not create print document')
+
+      doc.write(`
+        <html lang="zh-CN">
+          <head>
+            <title>${title}</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #1a1a18; padding: 20mm; }
+              .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
+              h1 { font-size: 24pt; margin-bottom: 10pt; color: #1a1a18; }
+              h2 { font-size: 18pt; margin-top: 20pt; border-bottom: 1px solid #eee; padding-bottom: 5pt; }
+              img { max-width: 100%; height: auto; border-radius: 8px; margin: 10pt 0; }
+              pre { background: #f5f4ef; padding: 10pt; border-radius: 5pt; overflow-x: auto; font-family: monospace; font-size: 10pt; }
+              blockquote { border-left: 4px solid #20B2AA; padding-left: 10pt; font-style: italic; color: #666; }
+              table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
+              th, td { border: 1px solid #eee; padding: 8pt; text-align: left; }
+              a { color: #20B2AA; text-decoration: none; }
+              @page { size: A4; margin: 0; }
+              @media print { body { padding: 15mm; } .page-break { page-break-before: always; } }
+            </style>
+          </head>
+          <body>
+            <div class="report-content">${contentHtml}</div>
+            <script>
+              window.onload = () => {
+                window.print();
+                setTimeout(() => { window.frameElement.remove(); }, 100);
+              }
+            </script>
+          </body>
+        </html>
+      `)
+        doc.close()
+        toast.dismiss(toastId)
+        toast.success('Print dialog opened. Choose "Save as PDF".')
+      }
+    } catch (e) {
+      console.error('Export error:', e)
+      toast.dismiss(toastId)
+      toast.error(format === 'pdf' ? 'Failed to open print dialog' : 'Failed to download HTML')
+    }
+  }
+}
+
 export function ChatView({
   query,
   threadId,
@@ -86,7 +357,8 @@ export function ChatView({
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
   
-  const [downloadDropdownOpen, setDownloadDropdownOpen] = useState<string | null>(null)
+  const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null)
+  const [shareCopied, setShareCopied] = useState<string | null>(null)
 
   // Sources drawer (small right-hand panel, opened from an answer's footer).
   const [sourcesOpen, setSourcesOpen] = useState(false)
@@ -903,47 +1175,71 @@ export function ChatView({
                                     <div className="flex items-center gap-2 shrink-0">
                                       <button 
                                         disabled={isReportStreaming}
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
-                                          toast.success('Copied full text')
-                                        }}
-                                        className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                                      >
-                                        <Copy size={13} strokeWidth={2} />
-                                      </button>
-                                      <button 
-                                        disabled={isReportStreaming}
                                         className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
                                       >
                                         <Maximize2 size={13} strokeWidth={2} />
                                       </button>
                                       <div className="relative" onClick={(e) => e.stopPropagation()}>
-                                        <button 
-                                          disabled={isReportStreaming}
-                                          onClick={() => setDownloadDropdownOpen(downloadDropdownOpen === r.id ? null : r.id)}
-                                          className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                        >
-                                          Download <ChevronDown size={13} strokeWidth={2} className="text-[var(--muted-foreground)]" />
-                                        </button>
-                                        {downloadDropdownOpen === r.id && (
+                                        {isReportStreaming ? (
+                                          <div className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] opacity-70">
+                                            <Loader2 size={13} strokeWidth={2} className="animate-spin text-[var(--muted-foreground)]" />
+                                            Generating
+                                          </div>
+                                        ) : (
+                                          <button 
+                                            onClick={() => setShareDropdownOpen(shareDropdownOpen === r.id ? null : r.id)}
+                                            className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                          >
+                                            Share <ChevronDown size={13} strokeWidth={2} className="text-[var(--muted-foreground)]" />
+                                          </button>
+                                        )}
+                                        {shareDropdownOpen === r.id && (
                                           <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setDownloadDropdownOpen(null)} />
-                                            <div className="absolute right-0 top-full mt-1.5 w-36 bg-[var(--card)] border border-[var(--border-subtle)] rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.1)] z-50 py-1 overflow-hidden">
+                                            <div className="fixed inset-0 z-40" onClick={() => setShareDropdownOpen(null)} />
+                                            <div className="absolute right-0 top-full mt-1.5 w-48 bg-[var(--card)] border border-[var(--border-subtle)] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] z-50 py-1.5 overflow-hidden">
                                               <button 
                                                 onClick={() => {
-                                                  setDownloadDropdownOpen(null)
-                                                  const blob = new Blob([`# ${r.title}\n\n${r.content}`], { type: 'text/markdown' })
-                                                  const url = URL.createObjectURL(blob)
-                                                  const a = document.createElement('a')
-                                                  a.href = url
-                                                  a.download = `${r.title || 'report'}.md`
-                                                  a.click()
-                                                  URL.revokeObjectURL(url)
+                                                  navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
+                                                  setShareCopied(r.id)
+                                                  toast.success('Copied full text')
+                                                  setTimeout(() => setShareCopied(null), 1500)
+                                                  setShareDropdownOpen(null)
                                                 }}
-                                                className="w-full text-left px-3 py-2 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
                                               >
-                                                Markdown
+                                                {shareCopied === r.id ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
+                                                {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
+                                              </button>
+                                              <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+                                              <button 
+                                                onClick={() => {
+                                                  setShareDropdownOpen(null)
+                                                  handleInlineDownload(r, 'markdown')
+                                                }}
+                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                                              >
+                                                <Download size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                                                Download Markdown
+                                              </button>
+                                              <button 
+                                                onClick={() => {
+                                                  setShareDropdownOpen(null)
+                                                  handleInlineDownload(r, 'html')
+                                                }}
+                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                                              >
+                                                <Code2 size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                                                Download HTML
+                                              </button>
+                                              <button 
+                                                onClick={() => {
+                                                  setShareDropdownOpen(null)
+                                                  handleInlineDownload(r, 'pdf')
+                                                }}
+                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                                              >
+                                                <FileText size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                                                Download PDF
                                               </button>
                                             </div>
                                           </>
@@ -953,7 +1249,7 @@ export function ChatView({
                                   </div>
                                   
                                   {/* Body Preview */}
-                                  <div className="relative p-5 sm:p-7 pb-10 max-h-[360px] overflow-hidden w-full bg-[var(--background)]">
+                                  <div id={`inline-report-${r.id}`} className="relative p-5 sm:p-7 pb-10 max-h-[360px] overflow-hidden w-full bg-[var(--background)]">
                                     <h1 className="text-[24px] leading-tight font-semibold text-[var(--foreground)] mb-5 tracking-tight opacity-90">
                                       {r.title}
                                     </h1>
