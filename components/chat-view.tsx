@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2 } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -20,7 +20,7 @@ import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock } from '@/components/question-block'
-import type { AgentMode, ChatMessage, ChartArtifact, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
+import type { AgentMode, ChatMessage, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 
 interface ChatViewProps {
   query: string
@@ -508,6 +508,23 @@ export function ChatView({
       const decoder = new TextDecoder()
       let buffer = ''
 
+      // If nothing has streamed back after a few seconds, give a quiet nudge
+      // that it's safe to leave and check back later — cleared the moment any
+      // text arrives (or the turn finishes first).
+      const slowHintId = 'slow-stream-hint'
+      const slowHintTimer = setTimeout(() => {
+        toast('Still working on this one', {
+          id: slowHintId,
+          description: "Feel free to step away — your answer will be here when you're back.",
+          icon: <Clock size={15} strokeWidth={1.75} />,
+          duration: 8000,
+        })
+      }, 3000)
+      const clearSlowHint = () => {
+        clearTimeout(slowHintTimer)
+        toast.dismiss(slowHintId)
+      }
+
       const steps: ToolStep[] = []
       let text = ''
       const widgets: WidgetData[] = []
@@ -516,10 +533,35 @@ export function ChatView({
       // Reports stream inline as text now; only charts are still tool-drafted.
       let drafting: 'chart' | null = null
 
+      // Preserve arrival order of text vs. tool calls so the UI can render
+      // them interleaved (text, then tools, then more text, etc.) instead of
+      // always showing all tool activity before all text.
+      const blocks: MessageBlock[] = []
+      const appendText = (chunk: string) => {
+        const last = blocks[blocks.length - 1]
+        if (last && last.type === 'text') last.content += chunk
+        else blocks.push({ type: 'text', content: chunk })
+      }
+      const appendToolStep = (step: ToolStep) => {
+        const last = blocks[blocks.length - 1]
+        if (last && last.type === 'tools') last.steps.push(step)
+        else blocks.push({ type: 'tools', steps: [step] })
+      }
+
       const patchAssistant = () => {
         setMessages([
           ...baseHistory,
-          { role: 'assistant', content: text, steps: [...steps], widgets: [...widgets], artifacts: [...artifacts], sources, drafting, ...regenTag },
+          {
+            role: 'assistant',
+            content: text,
+            steps: [...steps],
+            blocks: blocks.map((b) => (b.type === 'text' ? { ...b } : { ...b, steps: [...b.steps] })),
+            widgets: [...widgets],
+            artifacts: [...artifacts],
+            sources,
+            drafting,
+            ...regenTag,
+          },
         ])
       }
 
@@ -545,7 +587,9 @@ export function ChatView({
           }
           switch (ev.type) {
             case 'text':
+              if (ev.content) clearSlowHint()
               text += ev.content || ''
+              if (ev.content) appendText(ev.content)
               patchAssistant()
               break
             case 'widget':
@@ -554,10 +598,13 @@ export function ChatView({
               console.log('[widget] widgets array now:', widgets)
               patchAssistant()
               break
-            case 'tool_call':
-              steps.push({ tool: ev.tool, args: ev.args, timestamp: Date.now() })
+            case 'tool_call': {
+              const step = { tool: ev.tool, args: ev.args, timestamp: Date.now() }
+              steps.push(step)
+              appendToolStep(step)
               patchAssistant()
               break
+            }
             case 'drafting':
               // Only charts are tool-drafted; reports stream inline as text.
               drafting = 'chart'
@@ -575,15 +622,20 @@ export function ChatView({
               openPanel(ev.id)
               patchAssistant()
               break
-            case 'error':
-              text += (text ? '\n\n' : '') + (ev.content || 'Something went wrong.')
+            case 'error': {
+              clearSlowHint()
+              const chunk = (text ? '\n\n' : '') + (ev.content || 'Something went wrong.')
+              text += chunk
+              appendText(chunk)
               patchAssistant()
               break
+            }
             case 'stopped': {
+              clearSlowHint()
               const finalText = text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -593,11 +645,12 @@ export function ChatView({
               return
             }
             case 'done': {
+              clearSlowHint()
               const finalText =
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, widgets, artifacts, sources, drafting: null, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -609,10 +662,11 @@ export function ChatView({
           }
         }
       }
+      clearSlowHint()
       if (isStoppingRef.current) {
         const stoppedMessages: ChatMessage[] = [
           ...baseHistory,
-          { role: 'assistant', content: text, steps, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+          { role: 'assistant', content: text, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
         ]
         setMessages(stoppedMessages)
         syncToBackend(stoppedMessages, titleRef.current)
@@ -1112,14 +1166,43 @@ export function ChatView({
                     return (
                       <div className="w-full" data-selection-scope="assistant-message">
                         <WidgetCards widgets={msg.widgets} />
-                        <ToolActivity
-                          steps={msg.steps}
-                          isStreaming={i === streamingIndex && isLoading}
-                          answered={!!parsed.text}
-                          drafting={reportDrafting ? 'report' : msg.drafting}
-                        />
-                        {/* answer text (report + question blocks stripped out) */}
-                        {parsed.text ? <StreamingText content={parsed.text} animate={i === streamingIndex} /> : null}
+                        {/* Text and tool activity can arrive interleaved (text, then
+                            tools, then more text, ...). When we have ordered blocks,
+                            render them in that order so a tool box that's followed by
+                            more text collapses instead of always sitting above all text. */}
+                        {msg.blocks && msg.blocks.length > 0 ? (
+                          msg.blocks.map((block, bi) => {
+                            const isLastBlock = bi === msg.blocks!.length - 1
+                            const isCurrentlyStreaming = i === streamingIndex && isLoading
+                            if (block.type === 'tools') {
+                              const followedByText = msg.blocks!.slice(bi + 1).some((b) => b.type === 'text' && b.content.trim())
+                              return (
+                                <ToolActivity
+                                  key={`tools-${i}-${bi}`}
+                                  steps={block.steps}
+                                  isStreaming={isCurrentlyStreaming && isLastBlock}
+                                  answered={followedByText || !isCurrentlyStreaming}
+                                  drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
+                                />
+                              )
+                            }
+                            const blockText = parseQuestion(parseReports(block.content, `m${i}-b${bi}`).text).text
+                            return blockText ? (
+                              <StreamingText key={`text-${i}-${bi}`} content={blockText} animate={isCurrentlyStreaming && isLastBlock} />
+                            ) : null
+                          })
+                        ) : (
+                          <>
+                            <ToolActivity
+                              steps={msg.steps}
+                              isStreaming={i === streamingIndex && isLoading}
+                              answered={!!parsed.text}
+                              drafting={reportDrafting ? 'report' : msg.drafting}
+                            />
+                            {/* answer text (report + question blocks stripped out) */}
+                            {parsed.text ? <StreamingText content={parsed.text} animate={i === streamingIndex} /> : null}
+                          </>
+                        )}
 
                         {/* question block
                             Guard: skip mount only while THIS message is still

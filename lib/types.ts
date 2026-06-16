@@ -75,6 +75,11 @@ export interface WidgetData {
   data: any
 }
 
+// The model can talk, then invoke tools, then talk again. `blocks` preserves
+// that arrival order so the UI can render text/tool sections interleaved
+// instead of always showing all tool activity before all text.
+export type MessageBlock = { type: 'text'; content: string } | { type: 'tools'; steps: ToolStep[] }
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -82,6 +87,7 @@ export interface ChatMessage {
   follow_up_content?: string
   sources?: Source[]
   steps?: ToolStep[]
+  blocks?: MessageBlock[]
   widgets?: WidgetData[]
   artifacts?: ChartArtifact[]
   reports?: ReportArtifact[]
