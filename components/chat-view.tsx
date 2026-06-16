@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2 } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -508,6 +508,23 @@ export function ChatView({
       const decoder = new TextDecoder()
       let buffer = ''
 
+      // If nothing has streamed back after a few seconds, give a quiet nudge
+      // that it's safe to leave and check back later — cleared the moment any
+      // text arrives (or the turn finishes first).
+      const slowHintId = 'slow-stream-hint'
+      const slowHintTimer = setTimeout(() => {
+        toast('Still working on this one', {
+          id: slowHintId,
+          description: "Feel free to step away — your answer will be here when you're back.",
+          icon: <Clock size={15} strokeWidth={1.75} />,
+          duration: 8000,
+        })
+      }, 3000)
+      const clearSlowHint = () => {
+        clearTimeout(slowHintTimer)
+        toast.dismiss(slowHintId)
+      }
+
       const steps: ToolStep[] = []
       let text = ''
       const widgets: WidgetData[] = []
@@ -570,6 +587,7 @@ export function ChatView({
           }
           switch (ev.type) {
             case 'text':
+              if (ev.content) clearSlowHint()
               text += ev.content || ''
               if (ev.content) appendText(ev.content)
               patchAssistant()
@@ -605,6 +623,7 @@ export function ChatView({
               patchAssistant()
               break
             case 'error': {
+              clearSlowHint()
               const chunk = (text ? '\n\n' : '') + (ev.content || 'Something went wrong.')
               text += chunk
               appendText(chunk)
@@ -612,6 +631,7 @@ export function ChatView({
               break
             }
             case 'stopped': {
+              clearSlowHint()
               const finalText = text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
@@ -625,6 +645,7 @@ export function ChatView({
               return
             }
             case 'done': {
+              clearSlowHint()
               const finalText =
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
               const finalMessages: ChatMessage[] = [
@@ -641,6 +662,7 @@ export function ChatView({
           }
         }
       }
+      clearSlowHint()
       if (isStoppingRef.current) {
         const stoppedMessages: ChatMessage[] = [
           ...baseHistory,
