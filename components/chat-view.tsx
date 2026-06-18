@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -17,7 +17,7 @@ import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
 import { getMemories, appendQueryToMemoryQueue } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
-import { parseReports, type ParsedReport } from '@/lib/report-parser'
+import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock } from '@/components/question-block'
 import type { AgentMode, ChatMessage, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
@@ -48,7 +48,7 @@ function isUntitled(t?: string) {
   return !n || n === 'untitled' || n === 'untitled chat'
 }
 
-const handleInlineDownload = async (r: ParsedReport, format: 'markdown' | 'pdf' | 'html') => {
+const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf' | 'html') => {
   const title = r.title || 'report'
   const content = `# ${title}\n\n${r.content || ''}`
   const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
@@ -384,6 +384,128 @@ export function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sidebarOpen])
 
+  const renderReportCard = (r: ReportArtifact) => {
+    const isReportStreaming = !r.complete
+    return (
+      <div
+        key={r.id}
+        onClick={() => {
+          if (!isReportStreaming) openPanel(r.id)
+        }}
+        className={`group relative flex w-full max-w-[800px] flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-[0_1px_4px_rgba(0,0,0,0.02)] transition-all overflow-hidden ${isReportStreaming ? 'cursor-default' : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]'}`}
+      >
+        {/* Hover Overlay */}
+        {!isReportStreaming && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--background)]/10 backdrop-blur-[1px] pointer-events-none">
+            <div className="bg-[var(--foreground)] text-[var(--background)] px-5 py-2.5 rounded-full text-[14px] font-medium shadow-lg pointer-events-auto transition-transform scale-95 group-hover:scale-100 duration-200">
+              {panelOpen && activeArtifactId === r.id ? 'Currently opened' : `Open ${r.title}`}
+            </div>
+          </div>
+        )}
+
+        {/* Top Action Bar (Perplexity style) */}
+        <div className="flex w-full items-center justify-between px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--background)]/40 relative z-20">
+          <div className="flex items-center gap-2.5 text-[var(--muted-foreground)] min-w-0 pr-4">
+            <FileText size={15} strokeWidth={1.75} className="shrink-0" />
+            <span className="text-[13px] font-medium truncate opacity-90">{r.title}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              disabled={isReportStreaming}
+              className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+            >
+              <Maximize2 size={13} strokeWidth={2} />
+            </button>
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              {isReportStreaming ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] opacity-70">
+                  <Loader2 size={13} strokeWidth={2} className="animate-spin text-[var(--muted-foreground)]" />
+                  Generating
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShareDropdownOpen(shareDropdownOpen === r.id ? null : r.id)}
+                  className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                >
+                  Share <ChevronDown size={13} strokeWidth={2} className="text-[var(--muted-foreground)]" />
+                </button>
+              )}
+              {shareDropdownOpen === r.id && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShareDropdownOpen(null)} />
+                  <div className="absolute right-0 top-full mt-1.5 w-48 bg-[var(--card)] border border-[var(--border-subtle)] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] z-50 py-1.5 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
+                        setShareCopied(r.id)
+                        toast.success('Copied full text')
+                        setTimeout(() => setShareCopied(null), 1500)
+                        setShareDropdownOpen(null)
+                      }}
+                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                    >
+                      {shareCopied === r.id ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
+                      {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
+                    </button>
+                    <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+                    <button
+                      onClick={() => {
+                        setShareDropdownOpen(null)
+                        handleInlineDownload(r, 'markdown')
+                      }}
+                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                    >
+                      <Download size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                      Download Markdown
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShareDropdownOpen(null)
+                        handleInlineDownload(r, 'html')
+                      }}
+                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                    >
+                      <Code2 size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                      Download HTML
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShareDropdownOpen(null)
+                        handleInlineDownload(r, 'pdf')
+                      }}
+                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                    >
+                      <FileText size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                      Download PDF
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Body Preview. `isolate` pins this as its own stacking context so the
+            gradient fade (z-10) always paints above the text below, even if a
+            descendant inside the markdown (e.g. a table wrapper) sets its own
+            z-index — without it, mobile browsers were rendering the text on
+            top of the fade instead of fading under it. */}
+        <div id={`inline-report-${r.id}`} className="relative isolate p-5 sm:p-7 pb-10 max-h-[360px] overflow-hidden w-full bg-[var(--background)]">
+          <h1 className="relative z-0 text-[24px] leading-tight font-semibold text-[var(--foreground)] mb-5 tracking-tight opacity-90">
+            {r.title}
+          </h1>
+
+          <div className="relative z-0 text-[15px] leading-relaxed text-[var(--foreground)] opacity-90">
+            <MarkdownMessage content={r.content || 'Drafting report...'} />
+          </div>
+
+          {/* Gradient Fade-out at the bottom */}
+          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent pointer-events-none z-10" />
+        </div>
+      </div>
+    )
+  }
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recognitionRef = useRef<any>(null)
   const activeReaderRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null)
@@ -411,10 +533,22 @@ export function ChatView({
   const parsedByIndex = useMemo(
     () =>
       messages.map((m, i) => {
-        if (m.role !== 'assistant') return { text: m.content || '', reports: [] as ParsedReport[], question: null }
+        if (m.role !== 'assistant')
+          return { text: m.content || '', reports: [] as ParsedReport[], question: null, segments: [] as ParsedSegment[] }
         const withReports = parseReports(m.content || '', `m${i}`)
-        const { text, question } = parseQuestion(withReports.text)
-        return { text, reports: withReports.reports, question }
+        const { text, question: textQuestion } = parseQuestion(withReports.text)
+        // <question> only ever appears in narration text, never inside a
+        // report, so strip it out of whichever text segment holds it.
+        let question = textQuestion
+        const segments: ParsedSegment[] = withReports.segments
+          .map((seg) => {
+            if (seg.type !== 'text') return seg
+            const pq = parseQuestion(seg.content)
+            if (pq.question) question = pq.question
+            return { type: 'text' as const, content: pq.text }
+          })
+          .filter((seg) => seg.type !== 'text' || seg.content.trim())
+        return { text, reports: withReports.reports, question, segments }
       }),
     [messages]
   )
@@ -1159,9 +1293,7 @@ export function ChatView({
                   </div>
                 ) : (
                   (() => {
-                    const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[] }
-                    // Inline <report> blocks → reader; show only the narration in chat.
-                    const msgReports: ReportArtifact[] = [...parsed.reports, ...(msg.reports ?? [])]
+                    const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[], segments: [] as ParsedSegment[] }
                     const reportDrafting = parsed.reports.some((r) => !r.complete)
                     return (
                       <div className="w-full" data-selection-scope="assistant-message">
@@ -1186,10 +1318,29 @@ export function ChatView({
                                 />
                               )
                             }
-                            const blockText = parseQuestion(parseReports(block.content, `m${i}-b${bi}`).text).text
-                            return blockText ? (
-                              <StreamingText key={`text-${i}-${bi}`} content={blockText} animate={isCurrentlyStreaming && isLastBlock} />
-                            ) : null
+                            // Render text and any inline <report> blocks in the order
+                            // they appeared, so narration after a report's closing
+                            // tag shows below the report card instead of above it.
+                            const { segments: blockSeg } = parseReports(block.content, `m${i}-b${bi}`)
+                            return (
+                              <Fragment key={`block-${i}-${bi}`}>
+                                {blockSeg.map((seg, si) =>
+                                  seg.type === 'text' ? (
+                                    parseQuestion(seg.content).text ? (
+                                      <StreamingText
+                                        key={`text-${i}-${bi}-${si}`}
+                                        content={parseQuestion(seg.content).text}
+                                        animate={isCurrentlyStreaming && isLastBlock}
+                                      />
+                                    ) : null
+                                  ) : (
+                                    <div key={`report-wrap-${i}-${bi}-${si}`} className="my-3 w-full">
+                                      {renderReportCard(seg.report)}
+                                    </div>
+                                  )
+                                )}
+                              </Fragment>
+                            )
                           })
                         ) : (
                           <>
@@ -1199,8 +1350,16 @@ export function ChatView({
                               answered={!!parsed.text}
                               drafting={reportDrafting ? 'report' : msg.drafting}
                             />
-                            {/* answer text (report + question blocks stripped out) */}
-                            {parsed.text ? <StreamingText content={parsed.text} animate={i === streamingIndex} /> : null}
+                            {/* answer text and inline report cards, in source order */}
+                            {parsed.segments.map((seg, si) =>
+                              seg.type === 'text' ? (
+                                <StreamingText key={`text-${i}-${si}`} content={seg.content} animate={i === streamingIndex} />
+                              ) : (
+                                <div key={`report-wrap-${i}-${si}`} className="my-3 w-full">
+                                  {renderReportCard(seg.report)}
+                                </div>
+                              )
+                            )}
                           </>
                         )}
 
@@ -1227,126 +1386,11 @@ export function ChatView({
                           )
                         })()}
 
-                        {/* report blocks */}
-                        {msgReports.length > 0 && (
+                        {/* Reports from older threads, stored as a separate array
+                            rather than inline in the text (pre inline-streaming). */}
+                        {(msg.reports?.length ?? 0) > 0 && (
                           <div className="mt-4 flex flex-col gap-3 w-full">
-                            {msgReports.map((r) => {
-                              const isReportStreaming = !r.complete
-                              return (
-                                <div
-                                  key={r.id}
-                                  onClick={() => {
-                                    if (!isReportStreaming) openPanel(r.id)
-                                  }}
-                                  className={`group relative flex w-full max-w-[800px] flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-[0_1px_4px_rgba(0,0,0,0.02)] transition-all overflow-hidden ${isReportStreaming ? 'cursor-default' : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]'}`}
-                                >
-                                  {/* Hover Overlay */}
-                                  {!isReportStreaming && (
-                                    <div className="absolute inset-0 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--background)]/10 backdrop-blur-[1px] pointer-events-none">
-                                      <div className="bg-[var(--foreground)] text-[var(--background)] px-5 py-2.5 rounded-full text-[14px] font-medium shadow-lg pointer-events-auto transition-transform scale-95 group-hover:scale-100 duration-200">
-                                        {panelOpen && activeArtifactId === r.id ? 'Currently opened' : `Open ${r.title}`}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Top Action Bar (Perplexity style) */}
-                                  <div className="flex w-full items-center justify-between px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--background)]/40 relative z-20">
-                                    <div className="flex items-center gap-2.5 text-[var(--muted-foreground)] min-w-0 pr-4">
-                                      <FileText size={15} strokeWidth={1.75} className="shrink-0" />
-                                      <span className="text-[13px] font-medium truncate opacity-90">{r.title}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                      <button 
-                                        disabled={isReportStreaming}
-                                        className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
-                                      >
-                                        <Maximize2 size={13} strokeWidth={2} />
-                                      </button>
-                                      <div className="relative" onClick={(e) => e.stopPropagation()}>
-                                        {isReportStreaming ? (
-                                          <div className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] opacity-70">
-                                            <Loader2 size={13} strokeWidth={2} className="animate-spin text-[var(--muted-foreground)]" />
-                                            Generating
-                                          </div>
-                                        ) : (
-                                          <button 
-                                            onClick={() => setShareDropdownOpen(shareDropdownOpen === r.id ? null : r.id)}
-                                            className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                                          >
-                                            Share <ChevronDown size={13} strokeWidth={2} className="text-[var(--muted-foreground)]" />
-                                          </button>
-                                        )}
-                                        {shareDropdownOpen === r.id && (
-                                          <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setShareDropdownOpen(null)} />
-                                            <div className="absolute right-0 top-full mt-1.5 w-48 bg-[var(--card)] border border-[var(--border-subtle)] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] z-50 py-1.5 overflow-hidden">
-                                              <button 
-                                                onClick={() => {
-                                                  navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
-                                                  setShareCopied(r.id)
-                                                  toast.success('Copied full text')
-                                                  setTimeout(() => setShareCopied(null), 1500)
-                                                  setShareDropdownOpen(null)
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
-                                              >
-                                                {shareCopied === r.id ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
-                                                {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
-                                              </button>
-                                              <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                                              <button 
-                                                onClick={() => {
-                                                  setShareDropdownOpen(null)
-                                                  handleInlineDownload(r, 'markdown')
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
-                                              >
-                                                <Download size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
-                                                Download Markdown
-                                              </button>
-                                              <button 
-                                                onClick={() => {
-                                                  setShareDropdownOpen(null)
-                                                  handleInlineDownload(r, 'html')
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
-                                              >
-                                                <Code2 size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
-                                                Download HTML
-                                              </button>
-                                              <button 
-                                                onClick={() => {
-                                                  setShareDropdownOpen(null)
-                                                  handleInlineDownload(r, 'pdf')
-                                                }}
-                                                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
-                                              >
-                                                <FileText size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
-                                                Download PDF
-                                              </button>
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Body Preview */}
-                                  <div id={`inline-report-${r.id}`} className="relative p-5 sm:p-7 pb-10 max-h-[360px] overflow-hidden w-full bg-[var(--background)]">
-                                    <h1 className="text-[24px] leading-tight font-semibold text-[var(--foreground)] mb-5 tracking-tight opacity-90">
-                                      {r.title}
-                                    </h1>
-                                    
-                                    <div className="text-[15px] leading-relaxed text-[var(--foreground)] opacity-90">
-                                      <MarkdownMessage content={r.content || 'Drafting report...'} />
-                                    </div>
-                                    
-                                    {/* Gradient Fade-out at the bottom */}
-                                    <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent pointer-events-none z-10" />
-                                  </div>
-                                </div>
-                              )
-                            })}
+                            {msg.reports!.map((r) => renderReportCard(r))}
                           </div>
                         )}
 
