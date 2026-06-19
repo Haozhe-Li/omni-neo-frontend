@@ -66,6 +66,9 @@ export function AppSidebar({
     const [optimisticThreads, setOptimisticThreads] = useState<Map<string, StoredChat>>(new Map())
     const [searchQuery, setSearchQuery] = useState('')
     const [isSearchVisible, setIsSearchVisible] = useState(false)
+    // thread_id → lowercased message text, built from locally-cached conversations
+    // so search can match on content, not just the title.
+    const [contentIndex, setContentIndex] = useState<Record<string, string>>({})
     const [isSyncing, setIsSyncing] = useState(false)
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
     const [threadToDelete, setThreadToDelete] = useState<string | null>(null)
@@ -137,6 +140,40 @@ export function AppSidebar({
             return items
         })
     }, [])
+
+    // Build a thread_id → message-text index from the locally-cached
+    // conversations (keys shaped like `<id>_chat_<threadId>`). Lets the history
+    // search match on what was actually said, not only the thread title.
+    const buildContentIndex = useCallback(() => {
+        if (typeof window === 'undefined') return {} as Record<string, string>
+        const idx: Record<string, string> = {}
+        const marker = '_chat_'
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (!key) continue
+            const at = key.indexOf(marker)
+            if (at === -1) continue
+            const threadId = key.slice(at + marker.length)
+            if (!threadId) continue
+            try {
+                const raw = localStorage.getItem(key)
+                if (!raw) continue
+                const msgs = JSON.parse(raw)
+                if (!Array.isArray(msgs)) continue
+                const parts: string[] = []
+                for (const m of msgs) {
+                    if (m && typeof m.content === 'string' && m.content) parts.push(m.content)
+                }
+                if (parts.length) idx[threadId] = parts.join('\n').toLowerCase()
+            } catch { }
+        }
+        return idx
+    }, [])
+
+    // Refresh the content index whenever the search dialog opens (cheap, local-only).
+    useEffect(() => {
+        if (isSearchVisible) setContentIndex(buildContentIndex())
+    }, [isSearchVisible, buildContentIndex])
 
     // ── 2. Backend sync (runs once on mount + on auth change) ────────
     const syncFromBackend = useCallback(async () => {
@@ -465,9 +502,14 @@ export function AppSidebar({
         return [...extra, ...history].sort((a, b) => b.timestamp - a.timestamp)
     }, [history, optimisticThreads])
 
-    const filteredHistory = displayHistory.filter(chat =>
-        chat.query.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredHistory = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        if (!q) return displayHistory
+        return displayHistory.filter(chat =>
+            chat.query.toLowerCase().includes(q) ||
+            (contentIndex[chat.thread_id] || '').includes(q)
+        )
+    }, [displayHistory, searchQuery, contentIndex])
 
     const searchGroupedHistory = useMemo(() => {
         const today: StoredChat[] = []

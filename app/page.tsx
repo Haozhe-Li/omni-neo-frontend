@@ -17,6 +17,10 @@ export default function Home() {
   const [currentThreadId, setCurrentThreadId] = useState('')
   const [model, setModel] = useState<AgentMode>('fast')
   const [initialMode, setInitialMode] = useState<AgentMode>('fast')
+  // Whether the current chat view is a brand-new thread (vs. one re-opened from
+  // history). Only new threads should auto-generate + persist a title — doing it
+  // on every open needlessly bumps the thread's updated_at and reorders the sidebar.
+  const [isNewThread, setIsNewThread] = useState(false)
   const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
 
   const { fetchWithAuth } = useApi()
@@ -82,6 +86,7 @@ export default function Home() {
       setCurrentThreadId(threadId)
       setPendingAttachmentMeta(attachedFileMeta && attachedFileMeta.length > 0 ? attachedFileMeta : [])
       setInitialMode(model)
+      setIsNewThread(true)
       setView('chat')
     },
     [model, quotaExceeded, isSignedIn, clerk]
@@ -101,6 +106,7 @@ export default function Home() {
     setCurrentThreadId(threadId)
     setCurrentQuery(query)
     setPendingAttachmentMeta([])
+    setIsNewThread(false)
     setView('chat')
   }, [])
 
@@ -138,6 +144,7 @@ export default function Home() {
       setCurrentThreadId(newThreadId)
       setCurrentQuery(q)
       setInitialMode(model)
+      setIsNewThread(true)
       setView('chat')
     }
     initFromUrl()
@@ -174,6 +181,7 @@ export default function Home() {
             onToggleSidebar={toggleSidebar}
             isMobile={isMobile}
             initialMode={initialMode}
+            isNewThread={isNewThread}
             initialAttachedFileMeta={pendingAttachmentMeta}
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}

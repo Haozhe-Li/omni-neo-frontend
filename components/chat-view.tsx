@@ -33,6 +33,10 @@ interface ChatViewProps {
   initialAttachedFileMeta?: { id: string; name: string; type: string }[]
   sidebarOpen?: boolean
   setSidebarOpen?: (v: boolean) => void
+  // True only for freshly-started threads. Re-opened threads from history keep
+  // their existing title and must not re-generate/PATCH it (which would bump
+  // updated_at and reorder the sidebar on every open).
+  isNewThread?: boolean
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -330,6 +334,7 @@ export function ChatView({
   initialAttachedFileMeta,
   sidebarOpen,
   setSidebarOpen,
+  isNewThread = false,
 }: ChatViewProps) {
   const { fetchWithAuth } = useApi()
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
@@ -935,7 +940,11 @@ export function ChatView({
   }, [threadId])
 
   // ── title ──────────────────────────────────────────────────────────────
+  // Only auto-generate a title for brand-new threads. Re-opening a thread from
+  // history already has its title (passed in as `query`); regenerating and
+  // PATCHing it on every open would bump updated_at and reshuffle the sidebar.
   useEffect(() => {
+    if (!isNewThread) return
     if (isUntitled(query)) return
     let cancelled = false
     fetch(`${BACKEND_URL}/get_title`, {
@@ -967,7 +976,7 @@ export function ChatView({
     return () => {
       cancelled = true
     }
-  }, [query, threadId, fetchWithAuth])
+  }, [query, threadId, fetchWithAuth, isNewThread])
 
   // ── scroll model ────────────────────────────────────────────────────────
   // No autoscroll while streaming. Instead: when a query is sent we pin it near
