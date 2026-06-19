@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Clock } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -20,6 +20,7 @@ import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock } from '@/components/question-block'
+import { SlowResponseNotice } from '@/components/slow-response-notice'
 import type { AgentMode, ChatMessage, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 
 interface ChatViewProps {
@@ -353,6 +354,10 @@ export function ChatView({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const editRef = useRef<HTMLTextAreaElement>(null)
 
+  // "Still working on this one" notice — a quiet modal shown when a response is
+  // slow to start. Suppressed in fast mode, and permanently dismissible.
+  const [slowNoticeOpen, setSlowNoticeOpen] = useState(false)
+
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
@@ -517,6 +522,8 @@ export function ChatView({
   // generation to the sidebar so it can optimistically show the thread).
   const titleRef = useRef(title)
   titleRef.current = title || query
+  const modeRef = useRef(mode)
+  modeRef.current = mode
 
   // Scroll: pin each new query near the top, then stop following while the answer
   // streams (no per-token autoscroll). A bottom spacer guarantees there's always
@@ -644,19 +651,16 @@ export function ChatView({
 
       // If nothing has streamed back after a few seconds, give a quiet nudge
       // that it's safe to leave and check back later — cleared the moment any
-      // text arrives (or the turn finishes first).
-      const slowHintId = 'slow-stream-hint'
+      // text arrives (or the turn finishes first). Shown as a low-key modal,
+      // never in fast mode, and skippable for good via "Don't show again".
       const slowHintTimer = setTimeout(() => {
-        toast('Still working on this one', {
-          id: slowHintId,
-          description: "Feel free to step away — your answer will be here when you're back.",
-          icon: <Clock size={15} strokeWidth={1.75} />,
-          duration: 8000,
-        })
+        if (modeRef.current === 'fast') return
+        if (typeof window !== 'undefined' && localStorage.getItem('omni:hide-slow-notice') === '1') return
+        setSlowNoticeOpen(true)
       }, 3000)
       const clearSlowHint = () => {
         clearTimeout(slowHintTimer)
-        toast.dismiss(slowHintId)
+        setSlowNoticeOpen(false)
       }
 
       const steps: ToolStep[] = []
@@ -1705,6 +1709,15 @@ export function ChatView({
 
       {/* Sources drawer — small overlay panel, slides in over the right edge */}
       <SourcesPanel sources={activeSources} open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
+
+      {/* Quiet "still working" notice for slow responses (never in fast mode) */}
+      <SlowResponseNotice
+        isOpen={slowNoticeOpen}
+        onClose={() => setSlowNoticeOpen(false)}
+        onDontShowAgain={() => {
+          if (typeof window !== 'undefined') localStorage.setItem('omni:hide-slow-notice', '1')
+        }}
+      />
     </div>
   )
 }
