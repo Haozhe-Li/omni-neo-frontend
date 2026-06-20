@@ -217,7 +217,9 @@
   animation: fade-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-/* Each streamed markdown block fades up as it arrives (see StreamingText). */
+/* Streamed answers render each ~15-char chunk as it arrives (see StreamingText).
+   A soft mask fades the trailing edge so the newest text eases in instead of
+   popping, and a gentle whole-block fade plays once when streaming begins. */
 @keyframes omni-block-in {
   from {
     opacity: 0;
@@ -232,6 +234,12 @@
 
 .omni-block-in {
   animation: omni-block-in 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.omni-stream-reveal {
+  animation: omni-block-in 0.34s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 1.1em), rgba(0, 0, 0, 0.25) 100%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 1.1em), rgba(0, 0, 0, 0.25) 100%);
 }
 
 /* A subtle fade for each plan step / tool row as it appears (tool-activity). */

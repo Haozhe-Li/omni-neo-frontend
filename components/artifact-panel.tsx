@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Code2, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
-import { MarkdownMessage } from '@/components/markdown-message'
+import { StreamingText } from '@/components/streaming-text'
 import type { ChartArtifact, ReportArtifact } from '@/lib/types'
 
 const EChartsChart = dynamic(
@@ -480,7 +480,9 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             {viewMode === 'view' ? (
               <>
                 <h1 className="text-[28px] leading-tight font-semibold text-[var(--foreground)] mb-8 tracking-tight opacity-90">{active.report.title}</h1>
-                {active.report.content ? <MarkdownMessage content={active.report.content} /> : null}
+                {active.report.content ? (
+                  <StreamingText content={active.report.content} animate={!active.report.complete} />
+                ) : null}
 
               </>
             ) : (
