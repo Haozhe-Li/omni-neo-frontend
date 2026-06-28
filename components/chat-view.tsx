@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Clock } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
@@ -642,22 +642,7 @@ export function ChatView({
       const decoder = new TextDecoder()
       let buffer = ''
 
-      // If nothing has streamed back after a few seconds, give a quiet nudge
-      // that it's safe to leave and check back later — cleared the moment any
-      // text arrives (or the turn finishes first).
-      const slowHintId = 'slow-stream-hint'
-      const slowHintTimer = setTimeout(() => {
-        toast('Still working on this one', {
-          id: slowHintId,
-          description: "Feel free to step away — your answer will be here when you're back.",
-          icon: <Clock size={15} strokeWidth={1.75} />,
-          duration: 8000,
-        })
-      }, 3000)
-      const clearSlowHint = () => {
-        clearTimeout(slowHintTimer)
-        toast.dismiss(slowHintId)
-      }
+      const clearSlowHint = () => {}
 
       const steps: ToolStep[] = []
       let text = ''
