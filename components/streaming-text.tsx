@@ -48,7 +48,7 @@ function trimDanglingFence(s: string): string {
   }
   if (count % 2 === 0) return s
   const lang = /^```([a-zA-Z0-9_-]*)/.exec(s.slice(lastIdx))?.[1]?.toLowerCase() ?? ''
-  if (lang === 'echarts') return s + '\n```'
+  if (lang === 'echarts' || lang === 'map') return s + '\n```'
   return s.slice(0, lastIdx)
 }
 

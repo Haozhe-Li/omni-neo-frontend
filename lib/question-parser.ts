@@ -1,4 +1,4 @@
-import type { QuestionBlock } from './types'
+import type { QuestionBlock, QuestionItem } from './types'
 
 const QUESTION_RE = /<question>([\s\S]*?)<\/question>/i
 
@@ -6,6 +6,8 @@ export interface ParsedQuestion {
   /** Message text with the <question> block stripped out. */
   text: string
   question: QuestionBlock | null
+  /** True when <question> tag has opened but </question> hasn't arrived yet (mid-stream). */
+  questionPending: boolean
 }
 
 /**
@@ -22,9 +24,9 @@ export function parseQuestion(content: string): ParsedQuestion {
     // leaks into the markdown renderer.
     const openIdx = content.search(/<question>/i)
     if (openIdx !== -1) {
-      return { text: content.slice(0, openIdx).trimEnd(), question: null }
+      return { text: content.slice(0, openIdx).trimEnd(), question: null, questionPending: true }
     }
-    return { text: content, question: null }
+    return { text: content, question: null, questionPending: false }
   }
 
   const before = content.slice(0, match.index).trimEnd()
@@ -32,22 +34,29 @@ export function parseQuestion(content: string): ParsedQuestion {
   const text = [before, after].filter(Boolean).join('\n\n')
 
   try {
-    const question = JSON.parse(match[1].trim()) as QuestionBlock
-    // Normalise: ensure options is always an array.
-    if (!Array.isArray(question.options)) question.options = []
-    return { text, question }
+    const raw = JSON.parse(match[1].trim())
+    if (!Array.isArray(raw.questions) || raw.questions.length === 0) {
+      return { text: content, question: null, questionPending: false }
+    }
+    const block: QuestionBlock = {
+      questions: raw.questions.map((q: any) => ({
+        ...q,
+        options: Array.isArray(q.options) ? q.options : [],
+      })),
+    }
+    return { text, question: block, questionPending: false }
   } catch {
     // Invalid JSON — leave text intact so the raw block is still readable.
-    return { text: content, question: null }
+    return { text: content, question: null, questionPending: false }
   }
 }
 
 /**
- * Format the user's answers into a natural-language reply string that will be
- * sent back to the agent as the next user message.
+ * Format the user's answer to a single question item into a natural-language
+ * string. Called once per question when building the full submission.
  */
 export function formatQuestionAnswer(
-  question: QuestionBlock,
+  question: QuestionItem,
   selectedIds: string[],
   textInputs: Record<string, string>,
   freeText: string,

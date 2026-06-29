@@ -1,6 +1,7 @@
 'use client'
 
-import { memo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useState, type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -8,10 +9,33 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download, BarChart3 } from 'lucide-react'
+import { Copy, Check, Download, BarChart3, MapPin } from 'lucide-react'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
+import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
+
+const LightChatMiniMap = dynamic(
+  () => import('@/components/light-chat-mini-map').then((m) => m.LightChatMiniMap),
+  { ssr: false }
+)
+
+async function geocodePlaces(
+  names: string[]
+): Promise<Record<string, { lat: number; lng: number } | null>> {
+  const res = await fetch('/api/geocode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ names }),
+  })
+  if (!res.ok) return {}
+  const { results } = await res.json()
+  return Object.fromEntries(
+    (results as { name: string; coords: { lat: number; lng: number } | null }[]).map(
+      (r) => [r.name, r.coords]
+    )
+  )
+}
 
 // A quiet, neutral block placeholder shown while an ```echarts block is still
 // streaming in (its JSON is incomplete and won't parse yet): just a muted canvas
@@ -32,6 +56,128 @@ function ChartDrawingPlaceholder() {
     </div>
   )
 }
+
+// ── Inline map ───────────────────────────────────────────────────────────────
+
+interface MapPinSpec {
+  name: string
+  description?: string
+}
+
+interface MapSpec {
+  title?: string
+  pins: MapPinSpec[]
+}
+
+function MapLoadingPlaceholder() {
+  return (
+    <div className="my-4 h-[360px] w-full overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--foreground)_2.5%,var(--background))] relative">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5">
+        <MapPin
+          size={20}
+          strokeWidth={1.5}
+          className="text-[var(--muted-foreground)] opacity-40 animate-pulse"
+        />
+        <span className="omni-shimmer-text text-[12.5px] font-medium tracking-wide opacity-70">
+          Loading map…
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function MapTextFallback({ spec }: { spec: MapSpec }) {
+  return (
+    <div className="my-4 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] p-4">
+      {spec.title && (
+        <p className="text-[13px] font-semibold text-[var(--foreground)] mb-2">{spec.title}</p>
+      )}
+      <ul className="space-y-1.5">
+        {spec.pins.map((pin, i) => (
+          <li key={i} className="flex items-start gap-2 text-[13px] text-[var(--muted-foreground)]">
+            <MapPin size={14} className="shrink-0 mt-0.5 text-[var(--accent)]" strokeWidth={1.75} />
+            <span>
+              <span className="text-[var(--foreground)] font-medium">{pin.name}</span>
+              {pin.description ? ` — ${pin.description}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// Renders a ```map fenced block inline. Geocodes each pin name via Nominatim
+// and hands the resolved coordinates to LightChatMiniMap. Shows a placeholder
+// while the JSON is still streaming or geocoding is in progress. Falls back to
+// a plain text list if all geocoding fails.
+function InlineMap({ source }: { source: string }) {
+  const [points, setPoints] = useState<LightChatMapPoint[]>([])
+  const [geocodingDone, setGeocodingDone] = useState(false)
+
+  // Quick parse to know whether JSON is complete yet (used for placeholder).
+  let spec: MapSpec | null = null
+  try {
+    spec = JSON.parse(source.trim())
+  } catch {}
+
+  useEffect(() => {
+    let parsed: MapSpec | null = null
+    try { parsed = JSON.parse(source.trim()) } catch {}
+
+    if (!parsed?.pins?.length) {
+      setGeocodingDone(true)
+      return
+    }
+
+    let cancelled = false
+    setPoints([])
+    setGeocodingDone(false)
+
+    const pins = parsed.pins
+    ;(async () => {
+      const coordsMap = await geocodePlaces(pins.map((p) => p.name))
+      if (cancelled) return
+      const resolved: LightChatMapPoint[] = pins
+        .map((p, i) => {
+          const coords = coordsMap[p.name]
+          if (!coords) return null
+          return {
+            id: `pin-${i}`,
+            name: p.name,
+            lat: coords.lat,
+            lng: coords.lng,
+            position: i + 1,
+            address: p.description,
+          }
+        })
+        .filter(Boolean) as LightChatMapPoint[]
+      if (!cancelled) {
+        setPoints(resolved)
+        setGeocodingDone(true)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [source])
+
+  // JSON not yet complete (still streaming)
+  if (!spec) return <MapLoadingPlaceholder />
+
+  // Geocoding in progress with no resolved pins yet
+  if (!geocodingDone && points.length === 0) return <MapLoadingPlaceholder />
+
+  // All pins failed geocoding — text fallback
+  if (geocodingDone && points.length === 0) return <MapTextFallback spec={spec} />
+
+  return (
+    <div className="my-4 w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
+      <LightChatMiniMap points={points} />
+    </div>
+  )
+}
+
+// ── Inline echarts ────────────────────────────────────────────────────────────
 
 // Renders an ```echarts fenced block inline. While the block is still streaming
 // in, its JSON is incomplete and won't parse — show the placeholder until it does.
@@ -90,7 +236,7 @@ const markdownComponents: Components = {
   ),
   pre: ({ children }: any) => {
     const cls = children?.props?.className || ''
-    if (cls.includes('language-mermaid') || cls.includes('language-echarts')) return <>{children}</>
+    if (cls.includes('language-mermaid') || cls.includes('language-echarts') || cls.includes('language-map')) return <>{children}</>
     const match = /language-(\w+)/.exec(cls)
     const language = match ? match[1] : ''
     return (
@@ -112,6 +258,7 @@ const markdownComponents: Components = {
   code: ({ className, children, ...props }) => {
     if (className?.includes('language-mermaid')) return <Mermaid chart={String(children).replace(/\n$/, '')} />
     if (className?.includes('language-echarts')) return <InlineEcharts source={String(children)} />
+    if (className?.includes('language-map')) return <InlineMap source={String(children)} />
     if (!className) {
       return (
         <code className="bg-secondary px-1.5 py-0.5 rounded text-[13px] font-mono text-accent" {...props}>

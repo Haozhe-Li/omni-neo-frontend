@@ -1,7 +1,7 @@
 // ── Wire protocol (mirrors backend core/stream.py) ─────────────────────────
 export type AgentMode = 'fast' | 'pro'
 
-export type WidgetKind = 'weather' | 'stock' | 'place' | 'currency' | 'entity'
+export type WidgetKind = 'weather' | 'stock' | 'currency' | 'entity'
 
 export interface SSEEvent {
   type:
@@ -115,12 +115,15 @@ export interface QuestionOption {
   has_text_input?: boolean
 }
 
-export interface QuestionBlock {
-  /** Selection mechanic: radio / checkbox / plain text input. */
+export interface QuestionItem {
+  id: string
   type: 'single' | 'multiple' | 'text'
   prompt: string
   options: QuestionOption[]
   text_placeholder?: string | null
-  /** Filled for quiz mode; null for genuine survey questions. */
   correct_answer?: string | string[] | null
+}
+
+export interface QuestionBlock {
+  questions: QuestionItem[]
 }

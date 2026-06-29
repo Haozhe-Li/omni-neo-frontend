@@ -1,15 +1,11 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { Cloud, TrendingUp, TrendingDown, MapPin, Star, ExternalLink, Droplets, Wind } from 'lucide-react'
+import { Cloud, TrendingUp, TrendingDown, ExternalLink, Droplets, Wind } from 'lucide-react'
 import type { WidgetData } from '@/lib/types'
 
 const CurrencyWidget = dynamic(
   () => import('@/components/currency-widget').then((m) => m.CurrencyWidget),
-  { ssr: false }
-)
-const LightChatMiniMap = dynamic(
-  () => import('@/components/light-chat-mini-map').then((m) => m.LightChatMiniMap),
   { ssr: false }
 )
 
@@ -243,56 +239,6 @@ function StockCard({ data }: { data: any }) {
   )
 }
 
-function PlaceCard({ data }: { data: any }) {
-  const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : []
-  const points = list
-    .map((item, i) => {
-      const lat = num(item?.lat ?? item?.latitude)
-      const lng = num(item?.lng ?? item?.lon ?? item?.longitude)
-      if (lat == null || lng == null) return null
-      return {
-        id: str(item?.id) || `${lat}-${lng}-${i}`,
-        name: str(item?.name) || str(item?.title) || `Location ${i + 1}`,
-        lat,
-        lng,
-        address: str(item?.address ?? item?.formatted_address),
-        rating: num(item?.rating),
-        url: str(item?.url),
-      }
-    })
-    .filter(Boolean) as any[]
-
-  if (points.length > 0) {
-    return (
-      <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col">
-        <LightChatMiniMap points={points} />
-      </div>
-    )
-  }
-  // Fallback list when no coordinates are available.
-  if (list.length === 0) return null
-  return (
-    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-4">
-      {list.slice(0, 4).map((item, i) => (
-        <div key={i} className="flex items-start gap-3.5">
-          <div className="p-2.5 bg-[var(--secondary)]/50 rounded-xl shrink-0">
-            <MapPin size={18} strokeWidth={1.5} className="text-[var(--foreground)] opacity-80" />
-          </div>
-          <div className="min-w-0 flex-1 pt-0.5">
-            <div className="text-[15px] font-medium text-[var(--foreground)] opacity-90 truncate">{str(item?.name) || str(item?.title) || 'Place'}</div>
-            {str(item?.address) && <div className="text-[13px] text-[var(--muted-foreground)] mt-1 truncate">{item.address}</div>}
-            {num(item?.rating) != null && (
-              <div className="flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)] mt-1.5 opacity-80">
-                <Star size={12} className="fill-[var(--muted-foreground)]" /> {num(item?.rating)!.toFixed(1)}
-              </div>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function EntityCard({ data }: { data: any }) {
   const title = str(data?.title) || str(data?.name) || 'Entity'
   const type = str(data?.type)
@@ -348,8 +294,6 @@ export function WidgetCards({ widgets }: { widgets?: WidgetData[] }) {
             return <WeatherCard key={i} data={w.data} />
           case 'stock':
             return <StockCard key={i} data={w.data} />
-          case 'place':
-            return <PlaceCard key={i} data={w.data} />
           case 'currency':
             return <CurrencyCard key={i} data={w.data} />
           case 'entity':

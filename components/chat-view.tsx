@@ -19,7 +19,7 @@ import { getMemories, appendQueryToMemoryQueue } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
-import { QuestionBlock } from '@/components/question-block'
+import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
 import type { AgentMode, ChatMessage, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 
 interface ChatViewProps {
@@ -384,6 +384,11 @@ export function ChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sidebarOpen])
 
+  // Strip interactive fenced blocks (map, echarts) from report preview content
+  // so they don't render full Leaflet/ECharts instances inside the thumbnail.
+  const stripInteractiveBlocks = (content: string) =>
+    content.replace(/```(map|echarts)[\s\S]*?```/g, '')
+
   const renderReportCard = (r: ReportArtifact) => {
     const isReportStreaming = !r.complete
     return (
@@ -496,7 +501,7 @@ export function ChatView({
           </h1>
 
           <div className="relative z-0 text-[15px] leading-relaxed text-[var(--foreground)] opacity-90">
-            <MarkdownMessage content={r.content || 'Drafting report...'} />
+            <MarkdownMessage content={stripInteractiveBlocks(r.content || 'Drafting report...')} />
           </div>
 
           {/* Gradient Fade-out at the bottom */}
@@ -536,19 +541,21 @@ export function ChatView({
         if (m.role !== 'assistant')
           return { text: m.content || '', reports: [] as ParsedReport[], question: null, segments: [] as ParsedSegment[] }
         const withReports = parseReports(m.content || '', `m${i}`)
-        const { text, question: textQuestion } = parseQuestion(withReports.text)
+        const { text, question: textQuestion, questionPending: tqp } = parseQuestion(withReports.text)
         // <question> only ever appears in narration text, never inside a
         // report, so strip it out of whichever text segment holds it.
         let question = textQuestion
+        let questionPending = tqp
         const segments: ParsedSegment[] = withReports.segments
           .map((seg) => {
             if (seg.type !== 'text') return seg
             const pq = parseQuestion(seg.content)
             if (pq.question) question = pq.question
+            if (pq.questionPending) questionPending = true
             return { type: 'text' as const, content: pq.text }
           })
           .filter((seg) => seg.type !== 'text' || seg.content.trim())
-        return { text, reports: withReports.reports, question, segments }
+        return { text, reports: withReports.reports, question, questionPending, segments }
       }),
     [messages]
   )
@@ -1346,6 +1353,11 @@ export function ChatView({
                               )
                             )}
                           </>
+                        )}
+
+                        {/* Skeleton shown while the <question> block is mid-stream */}
+                        {!parsed.question && parsed.questionPending && i === streamingIndex && isLoading && (
+                          <QuestionSkeleton />
                         )}
 
                         {/* question block
