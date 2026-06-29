@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { ArrowRight, Menu, ChevronDown, ChevronRight, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Telescope, Plane, GraduationCap, Wrench } from 'lucide-react'
 import Image from 'next/image'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
@@ -11,6 +11,34 @@ import { FileUploadArea } from '@/components/file-upload-area'
 
 import { toast } from 'sonner'
 
+
+type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
+const SKILLS: { id: SkillId; label: string; Icon: React.FC<{ className?: string }> }[] = [
+  { id: 'deep-research',   label: 'Deep Research',   Icon: Telescope },
+  { id: 'trip-advisor',    label: 'Trip Advisor',     Icon: Plane },
+  { id: 'guided-learning', label: 'Guided Learning',  Icon: GraduationCap },
+]
+
+const SKILL_PLACEHOLDERS: Record<string, string[]> = {
+  'deep-research': [
+    "Research the history of artificial intelligence",
+    "Deep dive into climate change and its global effects",
+    "Investigate the science behind CRISPR gene editing",
+    "Explore the economics of renewable energy",
+  ],
+  'trip-advisor': [
+    "Plan me a 3 day round trip to Tokyo",
+    "Design a 1 week itinerary for Bali",
+    "Find the best hidden gems in Barcelona",
+    "Plan a romantic weekend getaway in Paris",
+  ],
+  'guided-learning': [
+    "Teach me how neural networks actually work",
+    "Explain quantum physics from scratch",
+    "Help me understand how the stock market works",
+    "Walk me through the basics of machine learning",
+  ],
+}
 
 const SUGGESTED_QUERIES = [
   "Is it rainy today?",
@@ -36,7 +64,7 @@ const SUGGESTED_QUERIES = [
 ]
 
 interface SearchHomeProps {
-  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[]) => void
+  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[], skill?: SkillId | null) => void
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   isMobile?: boolean
@@ -107,8 +135,15 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   }, [])
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const plusMenuRef = useRef<HTMLDivElement>(null)
+  const skillPickerRef = useRef<HTMLDivElement>(null)
 
   const { attachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
+
+  const [activeSkill, setActiveSkill] = useState<SkillId | null>(null)
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [skillsHovered, setSkillsHovered] = useState(false)
+  const [awaitingSkill, setAwaitingSkill] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -144,6 +179,39 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
     rafId.current = requestAnimationFrame(animateGlow)
   }, [])
+
+  useEffect(() => {
+    if (!plusMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setPlusMenuOpen(false)
+        setAwaitingSkill(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [plusMenuOpen])
+
+  useEffect(() => {
+    setSuggestionIndex(0)
+    setSuggestionVisible(true)
+  }, [activeSkill, awaitingSkill])
+
+  useEffect(() => {
+    if (!awaitingSkill) return
+    const onMouse = (e: MouseEvent) => {
+      if (skillPickerRef.current && !skillPickerRef.current.contains(e.target as Node)) {
+        setAwaitingSkill(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAwaitingSkill(false) }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onMouse)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [awaitingSkill])
 
   useEffect(() => {
     // Init glow position to center
@@ -411,6 +479,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     })
   }, [handleFillEnd])
 
+  const getActiveSuggestion = () => {
+    const arr = activeSkill ? SKILL_PLACEHOLDERS[activeSkill] : SUGGESTED_QUERIES
+    return arr[suggestionIndex % arr.length]
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (backendStatus !== 'ready') return
@@ -419,7 +492,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
     // Trigger fill animation for suggestion submit; handleFillEnd will do the actual search
     if (showingSuggestion && attachedFiles.length === 0) {
-      triggerFillAnimation(SUGGESTED_QUERIES[suggestionIndex], true)
+      triggerFillAnimation(getActiveSuggestion(), true)
       return
     }
 
@@ -438,8 +511,9 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       if (readyFileIds.length > 0) {
         console.log('[SearchHome] handleSubmit — attached_file_ids:', readyFileIds)
       }
-      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined)
+      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined, activeSkill || undefined)
       clearFiles()
+      setActiveSkill(null)
       setQuery('')
       if (inputRef.current) {
         inputRef.current.style.height = 'auto'
@@ -448,9 +522,20 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (awaitingSkill && e.key === 'Enter') {
+      const filter = query.startsWith('/') ? query.slice(1).toLowerCase().trim() : ''
+      const matches = SKILLS.filter(s => !filter || s.label.toLowerCase().includes(filter) || s.id.includes(filter))
+      if (matches.length > 0) {
+        e.preventDefault()
+        setActiveSkill(matches[0].id)
+        setAwaitingSkill(false)
+        setQuery('')
+        return
+      }
+    }
     if (e.key === 'Tab' && !query && backendStatus === 'ready' && !isRecording && !sstPrompt) {
       e.preventDefault()
-      triggerFillAnimation(SUGGESTED_QUERIES[suggestionIndex], false)
+      triggerFillAnimation(getActiveSuggestion(), false)
       return
     }
     if (!shouldSubmitOnEnter(e, { isMenuOpen: modelDropdownOpen })) return
@@ -963,7 +1048,26 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   rows={1}
                   value={query}
                   onChange={(e) => {
-                    setQuery(e.target.value)
+                    const val = e.target.value
+                    if (!awaitingSkill && val === '/' && model === 'pro' && !isMobile) {
+                      setAwaitingSkill(true)
+                      setQuery('/')
+                      e.target.style.height = 'auto'
+                      e.target.style.height = `${e.target.scrollHeight}px`
+                      return
+                    }
+                    if (awaitingSkill) {
+                      if (!val.startsWith('/')) {
+                        setAwaitingSkill(false)
+                      } else {
+                        const filter = val.slice(1).toLowerCase().trim()
+                        if (filter) {
+                          const matches = SKILLS.filter(s => s.label.toLowerCase().includes(filter) || s.id.includes(filter))
+                          if (matches.length === 0) setAwaitingSkill(false)
+                        }
+                      }
+                    }
+                    setQuery(val)
                     e.target.style.height = 'auto'
                     e.target.style.height = `${e.target.scrollHeight}px`
                   }}
@@ -1002,43 +1106,178 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       {fillAnim.text}
                     </div>
                   </div>
-                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt ? (
-                  <div
-                    className={`absolute inset-0 pointer-events-none px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed overflow-hidden`}
-                    aria-hidden="true"
-                  >
-                    <span
-                      className="text-[var(--muted-foreground)]/50"
-                      style={{
-                        opacity: suggestionVisible ? 1 : 0,
-                        transition: 'opacity 0.4s ease-in-out',
-                      }}
+                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt ? (() => {
+                  const placeholders = activeSkill
+                    ? SKILL_PLACEHOLDERS[activeSkill]
+                    : SUGGESTED_QUERIES
+                  return (
+                    <div
+                      className={`absolute inset-0 pointer-events-none px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed overflow-hidden`}
+                      aria-hidden="true"
                     >
-                      {SUGGESTED_QUERIES[suggestionIndex]}
-                    </span>
-                  </div>
-                ) : null}
+                      <span
+                        className="text-[var(--muted-foreground)]/50"
+                        style={{
+                          opacity: suggestionVisible ? 1 : 0,
+                          transition: 'opacity 0.4s ease-in-out',
+                        }}
+                      >
+                        {placeholders[suggestionIndex % placeholders.length]}
+                      </span>
+                    </div>
+                  )
+                })() : null}
               </div>
 
               {/* Bottom bar — separate row, never overlaps text */}
               <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                {/* Left side: Upload Button */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={onUploadClick}
-                    disabled={backendStatus !== 'ready' || isCheckPending}
-                    className={`
-                      flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                      ${backendStatus === 'ready' && !isCheckPending
-                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed'
-                      }
-                    `}
-                    aria-label="Upload files"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
+                {/* Left side: + menu + active skill pill (Pro only) */}
+                <div ref={plusMenuRef} className="flex items-center gap-1.5">
+                {model === 'pro' && <>
+                  {/* + button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { if (backendStatus === 'ready' && !isCheckPending) setPlusMenuOpen(p => !p) }}
+                      disabled={backendStatus !== 'ready' || isCheckPending}
+                      className={`
+                        flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                        ${backendStatus === 'ready' && !isCheckPending
+                          ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'
+                        }
+                      `}
+                      aria-label="Add"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+
+                    {plusMenuOpen && (
+                      <>
+                      {/* Mobile bottom sheet */}
+                      <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setPlusMenuOpen(false)} />
+                        <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-semibold text-[var(--foreground)]">Add</h3>
+                            <button type="button" onClick={() => setPlusMenuOpen(false)} className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)]">
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {/* Attach files */}
+                          <button type="button"
+                            onClick={() => { onUploadClick(); setPlusMenuOpen(false) }}
+                            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[var(--secondary)]/30 border border-[var(--border-subtle)] text-[var(--foreground)] mb-3">
+                            <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                            <span className="text-[15px] font-medium">Attach files</span>
+                          </button>
+                          {/* Skills */}
+                          <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2 px-1">Skills</p>
+                          <div className="flex flex-col gap-2">
+                            {SKILLS.map((skill) => (
+                              <button key={skill.id} type="button"
+                                onClick={() => { setActiveSkill(skill.id === activeSkill ? null : skill.id); setPlusMenuOpen(false) }}
+                                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${activeSkill === skill.id ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}>
+                                <span className="flex items-center gap-3">
+                                  <skill.Icon className="h-5 w-5 shrink-0" />
+                                  <span className="text-[15px] font-medium">{skill.label}</span>
+                                </span>
+                                {activeSkill === skill.id ? (
+                                  <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
+                                    <Check className="h-3.5 w-3.5" />
+                                  </div>
+                                ) : (
+                                  <div className="h-5 w-5 rounded-full border border-[var(--border)] shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Desktop dropdown */}
+                      <div className="hidden md:block absolute bottom-full left-0 mb-2 w-[260px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 py-2">
+                        {/* Upload */}
+                        <button
+                          type="button"
+                          onClick={() => { onUploadClick(); setPlusMenuOpen(false) }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors rounded-lg mx-0"
+                        >
+                          <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                          Upload files or images
+                        </button>
+
+                        {/* Divider */}
+                        <div className="mx-3 my-1 border-t border-[var(--border)]" />
+
+                        {/* Skills — hover to reveal submenu */}
+                        <div
+                          className="relative"
+                          onMouseEnter={() => setSkillsHovered(true)}
+                          onMouseLeave={() => setSkillsHovered(false)}
+                        >
+                          <button
+                            type="button"
+                            className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] transition-colors rounded-lg ${skillsHovered ? 'bg-[var(--secondary)]/60' : 'hover:bg-[var(--secondary)]/60'}`}
+                          >
+                            <span className="flex items-center gap-3">
+                              <Wrench className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                              Skills
+                            </span>
+                            <ChevronRight className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                          </button>
+
+                          {skillsHovered && (
+                            <div className="absolute top-0 left-full w-[200px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in duration-100">
+                              {SKILLS.map((skill) => (
+                                <button
+                                  key={skill.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveSkill(skill.id === activeSkill ? null : skill.id)
+                                    setPlusMenuOpen(false)
+                                    setSkillsHovered(false)
+                                    setAwaitingSkill(false)
+                                  }}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors"
+                                >
+                                  <skill.Icon className="h-[18px] w-[18px] text-[var(--muted-foreground)] shrink-0" />
+                                  {skill.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Active skill pill */}
+                  {activeSkill && (() => {
+                    const skill = SKILLS.find(s => s.id === activeSkill)!
+                    return (
+                      <>
+                        {/* Mobile: X + icon only */}
+                        <button type="button" onClick={() => setActiveSkill(null)}
+                          className="md:hidden flex items-center gap-1.5 rounded-full border border-foreground/25 px-2.5 py-1.5 text-[var(--muted-foreground)]"
+                          aria-label="Remove skill">
+                          <X className="h-3.5 w-3.5 shrink-0" />
+                          <skill.Icon className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                        {/* Desktop: hover icon swap + name */}
+                        <button type="button" onClick={() => setActiveSkill(null)}
+                          className="hidden md:flex group items-center gap-1.5 rounded-full border border-foreground/25 px-3 py-1.5 text-[13px] font-medium text-[var(--muted-foreground)]"
+                          aria-label="Remove skill">
+                          <span className="relative h-3.5 w-3.5 shrink-0">
+                            <skill.Icon className="absolute inset-0 h-3.5 w-3.5 transition-opacity group-hover:opacity-0" />
+                            <X className="absolute inset-0 h-3.5 w-3.5 transition-opacity opacity-0 group-hover:opacity-100" />
+                          </span>
+                          <span>{skill.label}</span>
+                        </button>
+                      </>
+                    )
+                  })()}
+                </>}
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -1217,6 +1456,37 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   </button>
                 </div>
               </div>
+
+              {/* / skill picker */}
+              {awaitingSkill && (() => {
+                const filter = query.startsWith('/') ? query.slice(1).toLowerCase().trim() : ''
+                const filtered = SKILLS.filter(s => !filter || s.label.toLowerCase().includes(filter) || s.id.includes(filter))
+                if (filtered.length === 0) return null
+                return (
+                  <div
+                    ref={skillPickerRef}
+                    className="absolute top-full left-0 mt-2 w-[240px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in slide-in-from-top-1 duration-150"
+                  >
+                    <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Skills</p>
+                    {filtered.map((skill) => (
+                      <button
+                        key={skill.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveSkill(skill.id)
+                          setAwaitingSkill(false)
+                          setQuery('')
+                          setTimeout(() => inputRef.current?.focus(), 0)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors rounded-lg mx-0"
+                      >
+                        <skill.Icon className="h-4 w-4 text-[var(--muted-foreground)] shrink-0" />
+                        {skill.label}
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           </form>
 

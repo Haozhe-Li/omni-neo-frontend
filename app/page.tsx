@@ -18,6 +18,7 @@ export default function Home() {
   const [model, setModel] = useState<AgentMode>('fast')
   const [initialMode, setInitialMode] = useState<AgentMode>('fast')
   const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
+  const [pendingSkill, setPendingSkill] = useState<string | null>(null)
 
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
@@ -71,7 +72,8 @@ export default function Home() {
       query: string,
       threadId: string,
       _attachedFileIds?: string[],
-      attachedFileMeta?: { id: string; name: string; type: string }[]
+      attachedFileMeta?: { id: string; name: string; type: string }[],
+      skill?: string | null
     ) => {
       if (model === 'pro' && !isSignedIn && quotaExceeded) {
         toast.info('Daily Pro quota reached. Sign in to continue.')
@@ -81,6 +83,7 @@ export default function Home() {
       setCurrentQuery(query)
       setCurrentThreadId(threadId)
       setPendingAttachmentMeta(attachedFileMeta && attachedFileMeta.length > 0 ? attachedFileMeta : [])
+      setPendingSkill(skill || null)
       setInitialMode(model)
       setView('chat')
     },
@@ -175,6 +178,7 @@ export default function Home() {
             isMobile={isMobile}
             initialMode={initialMode}
             initialAttachedFileMeta={pendingAttachmentMeta}
+            initialSkill={pendingSkill as any}
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}
           />

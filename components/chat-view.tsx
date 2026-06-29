@@ -1,8 +1,9 @@
 'use client'
 
-import { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2 } from 'lucide-react'
+import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, ChevronRight, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
@@ -30,11 +31,19 @@ interface ChatViewProps {
   isMobile?: boolean
   initialMode?: AgentMode
   initialAttachedFileMeta?: { id: string; name: string; type: string }[]
+  initialSkill?: SkillId | null
   sidebarOpen?: boolean
   setSidebarOpen?: (v: boolean) => void
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+
+type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
+const SKILLS: { id: SkillId; label: string; Icon: React.FC<{ className?: string }> }[] = [
+  { id: 'deep-research',   label: 'Deep Research',   Icon: Telescope },
+  { id: 'trip-advisor',    label: 'Trip Advisor',     Icon: Plane },
+  { id: 'guided-learning', label: 'Guided Learning',  Icon: GraduationCap },
+]
 
 // Gap left above a query when it's pinned to the top of the viewport (matches the
 // `scroll-mt-20` on each message: 20 × 0.25rem = 80px).
@@ -327,10 +336,13 @@ export function ChatView({
   isMobile = false,
   initialMode = 'fast',
   initialAttachedFileMeta,
+  initialSkill = null,
   sidebarOpen,
   setSidebarOpen,
 }: ChatViewProps) {
   const { fetchWithAuth } = useApi()
+  const { isSignedIn } = useAuth()
+  const clerk = useClerk()
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -347,6 +359,12 @@ export function ChatView({
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [skillsHovered, setSkillsHovered] = useState(false)
+  const [activeSkill, setActiveSkill] = useState<SkillId | null>(initialSkill)
+  const [awaitingSkill, setAwaitingSkill] = useState(false)
+  const plusMenuRef = useRef<HTMLDivElement>(null)
+  const skillPickerRef = useRef<HTMLDivElement>(null)
   // Inline edit state for user messages
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
@@ -383,6 +401,35 @@ export function ChatView({
     if (sidebarOpen) setPanelOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sidebarOpen])
+
+  // Close + menu when clicking outside
+  useEffect(() => {
+    if (!plusMenuOpen) return
+    const handler = (e: MouseEvent) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
+        setPlusMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [plusMenuOpen])
+
+  // Close skill picker when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!awaitingSkill) return
+    const onMouse = (e: MouseEvent) => {
+      if (skillPickerRef.current && !skillPickerRef.current.contains(e.target as Node)) {
+        setAwaitingSkill(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAwaitingSkill(false) }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onMouse)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [awaitingSkill])
 
   // Strip interactive fenced blocks (map, echarts) from report preview content
   // so they don't render full Leaflet/ECharts instances inside the thumbnail.
@@ -827,6 +874,7 @@ export function ChatView({
         const payload: any = { query: queryText, thread_id: threadId, mode }
         if (Object.keys(personalization).length) payload.personalization = personalization
         if (fileIds && fileIds.length) payload.attached_file_ids = fileIds
+        if (activeSkill) payload.skill = activeSkill
         appendQueryToMemoryQueue(queryText)
 
         const res = await fetchWithAuth(`${BACKEND_URL}/chat`, {
@@ -1116,6 +1164,17 @@ export function ChatView({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (awaitingSkill && e.key === 'Enter') {
+      const filter = input.startsWith('/') ? input.slice(1).toLowerCase().trim() : ''
+      const matches = SKILLS.filter(s => !filter || s.label.toLowerCase().includes(filter) || s.id.includes(filter))
+      if (matches.length > 0) {
+        e.preventDefault()
+        setActiveSkill(matches[0].id)
+        setAwaitingSkill(false)
+        setInput('')
+        return
+      }
+    }
     if (!shouldSubmitOnEnter(e)) return
     e.preventDefault()
     handleSend()
@@ -1467,7 +1526,26 @@ export function ChatView({
                 rows={1}
                 value={input}
                 onChange={(e) => {
-                  setInput(e.target.value)
+                  const val = e.target.value
+                  if (!awaitingSkill && val === '/' && !isLoading && mode === 'pro' && !isMobile) {
+                    setAwaitingSkill(true)
+                    setInput('/')
+                    e.target.style.height = 'auto'
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 300)}px`
+                    return
+                  }
+                  if (awaitingSkill) {
+                    if (!val.startsWith('/')) {
+                      setAwaitingSkill(false)
+                    } else {
+                      const filter = val.slice(1).toLowerCase().trim()
+                      if (filter) {
+                        const matches = SKILLS.filter(s => s.label.toLowerCase().includes(filter) || s.id.includes(filter))
+                        if (matches.length === 0) setAwaitingSkill(false)
+                      }
+                    }
+                  }
+                  setInput(val)
                   e.target.style.height = 'auto'
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 300)}px`
                 }}
@@ -1481,24 +1559,161 @@ export function ChatView({
 
               {/* Bottom bar */}
               <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                {/* Left side: Upload Button */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading}
-                    className={`
-                      flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                      ${!isLoading
-                        ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed'
-                      }
-                    `}
-                    aria-label="Upload files"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
+                {/* Left side: + menu + active skill pill (Pro only) */}
+                <div ref={plusMenuRef} className="flex items-center gap-1.5">
+                {mode === 'pro' && <>
+                  {/* + button */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { if (!isLoading) setPlusMenuOpen(p => !p) }}
+                      disabled={isLoading}
+                      className={`
+                        flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                        ${!isLoading
+                          ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
+                          : 'bg-muted text-muted-foreground cursor-not-allowed'
+                        }
+                      `}
+                      aria-label="Add"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+
+                    {plusMenuOpen && (
+                      <>
+                      {/* Mobile bottom sheet */}
+                      <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setPlusMenuOpen(false)} />
+                        <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-base font-semibold text-[var(--foreground)]">Add</h3>
+                            <button type="button" onClick={() => setPlusMenuOpen(false)} className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)]">
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {/* Attach files */}
+                          <button type="button"
+                            onClick={() => {
+                              if (!isSignedIn) { clerk.openSignIn(); return }
+                              fileInputRef.current?.click()
+                              setPlusMenuOpen(false)
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[var(--secondary)]/30 border border-[var(--border-subtle)] text-[var(--foreground)] mb-3">
+                            <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                            <span className="text-[15px] font-medium">Attach files</span>
+                          </button>
+                          {/* Skills */}
+                          <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2 px-1">Skills</p>
+                          <div className="flex flex-col gap-2">
+                            {SKILLS.map((skill) => (
+                              <button key={skill.id} type="button"
+                                onClick={() => { setActiveSkill(skill.id === activeSkill ? null : skill.id); setPlusMenuOpen(false) }}
+                                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${activeSkill === skill.id ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}>
+                                <span className="flex items-center gap-3">
+                                  <skill.Icon className="h-5 w-5 shrink-0" />
+                                  <span className="text-[15px] font-medium">{skill.label}</span>
+                                </span>
+                                {activeSkill === skill.id ? (
+                                  <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
+                                    <Check className="h-3.5 w-3.5" />
+                                  </div>
+                                ) : (
+                                  <div className="h-5 w-5 rounded-full border border-[var(--border)] shrink-0" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Desktop dropdown */}
+                      <div className="hidden md:block absolute bottom-full left-0 mb-2 w-[260px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 py-2">
+                        {/* Upload */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isSignedIn) { clerk.openSignIn(); return }
+                            fileInputRef.current?.click()
+                            setPlusMenuOpen(false)
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                        >
+                          <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                          Upload files or images
+                        </button>
+
+                        {/* Divider */}
+                        <div className="mx-3 my-1 border-t border-[var(--border)]" />
+
+                        {/* Skills — hover to reveal submenu */}
+                        <div
+                          className="relative"
+                          onMouseEnter={() => setSkillsHovered(true)}
+                          onMouseLeave={() => setSkillsHovered(false)}
+                        >
+                          <button
+                            type="button"
+                            className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] transition-colors rounded-lg ${skillsHovered ? 'bg-[var(--secondary)]/60' : 'hover:bg-[var(--secondary)]/60'}`}
+                          >
+                            <span className="flex items-center gap-3">
+                              <Wrench className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                              Skills
+                            </span>
+                            <ChevronRight className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+                          </button>
+
+                          {skillsHovered && (
+                            <div className="absolute top-0 left-full w-[200px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in duration-100">
+                              {SKILLS.map((skill) => (
+                                <button
+                                  key={skill.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveSkill(skill.id === activeSkill ? null : skill.id)
+                                    setPlusMenuOpen(false)
+                                    setSkillsHovered(false)
+                                  }}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors"
+                                >
+                                  <skill.Icon className="h-[18px] w-[18px] text-[var(--muted-foreground)] shrink-0" />
+                                  {skill.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      </>
+                    )}
+                  </div>
                   <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
+
+                  {/* Active skill pill */}
+                  {activeSkill && (() => {
+                    const skill = SKILLS.find(s => s.id === activeSkill)!
+                    return (
+                      <>
+                        {/* Mobile: X + icon only */}
+                        <button type="button" onClick={() => setActiveSkill(null)}
+                          className="md:hidden flex items-center gap-1.5 rounded-full border border-foreground/25 px-2.5 py-1.5 text-[var(--muted-foreground)]"
+                          aria-label="Remove skill">
+                          <X className="h-3.5 w-3.5 shrink-0" />
+                          <skill.Icon className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                        {/* Desktop: hover icon swap + name */}
+                        <button type="button" onClick={() => setActiveSkill(null)}
+                          className="hidden md:flex group items-center gap-1.5 rounded-full border border-foreground/25 px-3 py-1.5 text-[13px] font-medium text-[var(--muted-foreground)]"
+                          aria-label="Remove skill">
+                          <span className="relative h-3.5 w-3.5 shrink-0">
+                            <skill.Icon className="absolute inset-0 h-3.5 w-3.5 transition-opacity group-hover:opacity-0" />
+                            <X className="absolute inset-0 h-3.5 w-3.5 transition-opacity opacity-0 group-hover:opacity-100" />
+                          </span>
+                          <span>{skill.label}</span>
+                        </button>
+                      </>
+                    )
+                  })()}
+                </>}
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -1659,6 +1874,37 @@ export function ChatView({
                   )}
                 </div>
               </div>
+
+              {/* / skill picker */}
+              {awaitingSkill && (() => {
+                const filter = input.startsWith('/') ? input.slice(1).toLowerCase().trim() : ''
+                const filtered = SKILLS.filter(s => !filter || s.label.toLowerCase().includes(filter) || s.id.includes(filter))
+                if (filtered.length === 0) return null
+                return (
+                  <div
+                    ref={skillPickerRef}
+                    className="absolute bottom-full left-0 mb-2 w-[240px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl z-50 py-1.5 animate-in fade-in slide-in-from-bottom-1 duration-150"
+                  >
+                    <p className="px-3 pt-1.5 pb-1 text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wide">Skills</p>
+                    {filtered.map((skill) => (
+                      <button
+                        key={skill.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveSkill(skill.id)
+                          setAwaitingSkill(false)
+                          setInput('')
+                          setTimeout(() => inputRef.current?.focus(), 0)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                      >
+                        <skill.Icon className="h-4 w-4 text-[var(--muted-foreground)] shrink-0" />
+                        {skill.label}
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         </div>
