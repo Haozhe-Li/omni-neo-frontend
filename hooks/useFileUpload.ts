@@ -6,6 +6,7 @@ export type FileUploadStatus = 'uploading' | 'ready' | 'error'
 
 export interface AttachedFile {
     id: string // Our generated local ID until we get the real one, then it's the real file_id
+    localKey: string // Stable for the file's whole lifetime — use this as the React key, `id` changes mid-upload
     file: File
     name: string
     size: number
@@ -38,6 +39,7 @@ export function useFileUpload() {
             ...prev,
             {
                 id: localId,
+                localKey: localId,
                 file,
                 name: file.name,
                 size: file.size,

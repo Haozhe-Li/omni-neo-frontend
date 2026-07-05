@@ -328,6 +328,62 @@ const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf
   }
 }
 
+function MessageAttachments({ files }: { files: { id: string; name: string; type: string }[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!expanded) return
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setExpanded(false)
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false) }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [expanded])
+
+  if (files.length === 1) {
+    return (
+      <div className="mt-1.5 inline-flex max-w-[240px] items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-2.5 py-1.5 text-[12px] text-[var(--muted-foreground)]">
+        <Paperclip className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate min-w-0">{files[0].name}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div ref={ref} className="relative mt-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors ${expanded
+          ? 'border-[var(--border)] bg-[var(--secondary)]/70 text-[var(--foreground)]'
+          : 'border-[var(--border-subtle)] bg-[var(--secondary)]/40 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60'
+          }`}
+      >
+        <Paperclip className="h-3.5 w-3.5 shrink-0" />
+        {files.length} attachments
+        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="absolute right-0 top-full mt-1.5 w-[240px] rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg py-1.5 z-20 animate-in fade-in slide-in-from-top-1 duration-150">
+          {files.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 px-3 py-2 text-[12px] text-[var(--foreground)]">
+              <Paperclip className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
+              <span className="truncate min-w-0">{f.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ChatView({
   query,
   threadId,
@@ -632,24 +688,6 @@ export function ChatView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportIdsKey, parsedReports])
-
-  // Pre-populate attachment chips passed from the home composer.
-  useEffect(() => {
-    if (initialAttachedFileMeta && initialAttachedFileMeta.length > 0) {
-      setAttachedFiles(
-        initialAttachedFileMeta.map((f) => ({
-          id: f.id,
-          file: new File([], f.name),
-          name: f.name,
-          size: 0,
-          type: f.type,
-          status: 'ready' as const,
-          progress: 100,
-        }))
-      )
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // ── persistence ────────────────────────────────────────────────────────
   const syncToBackend = useCallback(
@@ -962,6 +1000,7 @@ export function ChatView({
         content: query,
         ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}),
       }
+      setAttachedFiles([])
       requestPin() // pin the first query to the top
       await runQuery(query, [userMsg], fileIds)
     }
@@ -1139,8 +1178,13 @@ export function ChatView({
 
   // ── send from composer ─────────────────────────────────────────────────
   const handleSend = async () => {
+    if (isLoading) return
+    if (attachedFiles.some((f) => f.status === 'uploading')) {
+      toast.info('Please wait for the file to finish uploading.')
+      return
+    }
     const readyFiles = attachedFiles.filter((f) => f.status === 'ready')
-    if ((!input.trim() && readyFiles.length === 0) || isLoading) return
+    if (!input.trim() && readyFiles.length === 0) return
     const activeFiles = readyFiles.map((f) => ({ id: f.id!, name: f.name, type: f.type }))
     const userMsg: ChatMessage = {
       role: 'user',
@@ -1150,6 +1194,7 @@ export function ChatView({
     const baseHistory = [...messages, userMsg]
     const queryText = input
     setInput('')
+    setAttachedFiles([])
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
     }
@@ -1271,6 +1316,7 @@ export function ChatView({
               return messages.map((msg, i) => (
               <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                 {msg.role === 'user' ? (
+                  <>
                   <div className="group relative flex flex-row items-end gap-1 max-w-[85%]">
                     {/* Hover action row — left of bubble */}
                     {editingIndex !== i && (
@@ -1341,6 +1387,10 @@ export function ChatView({
                       </div>
                     )}
                   </div>
+                  {editingIndex !== i && !!msg.attachedFiles?.length && (
+                    <MessageAttachments files={msg.attachedFiles} />
+                  )}
+                  </>
                 ) : (
                   (() => {
                     const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[], segments: [] as ParsedSegment[] }
@@ -1516,7 +1566,7 @@ export function ChatView({
               `}
             >
               {attachedFiles.length > 0 && (
-                <div className="px-5 pt-4 pb-0">
+                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
                 </div>
               )}
@@ -1813,10 +1863,10 @@ export function ChatView({
                     <button
                       type="button"
                       onClick={handleSend}
-                      disabled={!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0}
+                      disabled={(!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || attachedFiles.some((f) => f.status === 'uploading')}
                       className={`
                         flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                        ${(input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0)
+                        ${(input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0) && !attachedFiles.some((f) => f.status === 'uploading')
                             ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
                             : 'bg-muted text-muted-foreground cursor-not-allowed'
                         }

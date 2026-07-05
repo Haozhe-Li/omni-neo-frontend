@@ -487,6 +487,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     e.preventDefault()
     if (backendStatus !== 'ready') return
 
+    if (attachedFiles.some((f) => f.status === 'uploading')) {
+      toast.info('Please wait for the file to finish uploading.')
+      return
+    }
+
     const showingSuggestion = !query && !isRecording && !sstPrompt
 
     // Trigger fill animation for suggestion submit; handleFillEnd will do the actual search
@@ -501,12 +506,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
     console.log('[SearchHome] handleSubmit — thread_id being sent to chat:', activeThreadId)
 
-    const effectiveQuery = query.trim()
+    // Filter out files that are not ready
+    const readyFileIds = attachedFiles.filter((f) => f.status === 'ready').map((f) => f.id)
+    const readyFileMeta = attachedFiles.filter((f) => f.status === 'ready').map((f) => ({ id: f.id, name: f.name, type: f.type }))
+    const effectiveQuery = query.trim() || (readyFileMeta.length > 1 ? 'Please read these files' : readyFileMeta.length === 1 ? 'Please read this file' : '')
 
     if (effectiveQuery || attachedFiles.length > 0) {
-      // Filter out files that are not ready
-      const readyFileIds = attachedFiles.filter((f) => f.status === 'ready').map((f) => f.id)
-      const readyFileMeta = attachedFiles.filter((f) => f.status === 'ready').map((f) => ({ id: f.id, name: f.name, type: f.type }))
       if (readyFileIds.length > 0) {
         console.log('[SearchHome] handleSubmit — attached_file_ids:', readyFileIds)
       }
@@ -901,9 +906,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         }
         const allowedTypes = [
           'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
-          'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml'
+          'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml',
+          'image/jpeg', 'image/png'
         ]
-        const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh']
+        const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.jpg', '.jpeg', '.png']
 
         const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
         const isAllowedType = allowedTypes.includes(file.type)
@@ -1038,7 +1044,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
               `}
             >
               {attachedFiles.length > 0 && (
-                <div className="px-5 pt-4 pb-0">
+                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
                 </div>
               )}
@@ -1106,13 +1112,22 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       {fillAnim.text}
                     </div>
                   </div>
+                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt && attachedFiles.length > 0 ? (
+                  <div
+                    className="absolute inset-0 pointer-events-none px-6 pt-3 pb-2 text-base leading-relaxed overflow-hidden"
+                    aria-hidden="true"
+                  >
+                    <span className="text-[var(--muted-foreground)]/50">
+                      {attachedFiles.length > 1 ? 'Please read these files' : 'Please read this file'}
+                    </span>
+                  </div>
                 ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt ? (() => {
                   const placeholders = activeSkill
                     ? SKILL_PLACEHOLDERS[activeSkill]
                     : SUGGESTED_QUERIES
                   return (
                     <div
-                      className={`absolute inset-0 pointer-events-none px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed overflow-hidden`}
+                      className="absolute inset-0 pointer-events-none px-6 pt-5 pb-2 text-base leading-relaxed overflow-hidden"
                       aria-hidden="true"
                     >
                       <span
