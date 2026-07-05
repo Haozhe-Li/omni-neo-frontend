@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Menu, ChevronDown, ChevronRight, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Telescope, Plane, GraduationCap, Wrench } from 'lucide-react'
+import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Telescope, Plane, GraduationCap } from 'lucide-react'
 import Image from 'next/image'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
@@ -13,10 +13,10 @@ import { toast } from 'sonner'
 
 
 type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
-const SKILLS: { id: SkillId; label: string; Icon: React.FC<{ className?: string }> }[] = [
-  { id: 'deep-research',   label: 'Deep Research',   Icon: Telescope },
-  { id: 'trip-advisor',    label: 'Trip Advisor',     Icon: Plane },
-  { id: 'guided-learning', label: 'Guided Learning',  Icon: GraduationCap },
+const SKILLS: { id: SkillId; label: string; desc: string; Icon: React.FC<{ className?: string }> }[] = [
+  { id: 'deep-research',   label: 'Deep Research',   desc: 'Get a detailed report',        Icon: Telescope },
+  { id: 'trip-advisor',    label: 'Trip Advisor',     desc: 'Plan your next trip',          Icon: Plane },
+  { id: 'guided-learning', label: 'Guided Learning',  desc: 'Learn something step by step', Icon: GraduationCap },
 ]
 
 const SKILL_PLACEHOLDERS: Record<string, string[]> = {
@@ -142,7 +142,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   const [activeSkill, setActiveSkill] = useState<SkillId | null>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
-  const [skillsHovered, setSkillsHovered] = useState(false)
   const [awaitingSkill, setAwaitingSkill] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -834,9 +833,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       }
       const allowedTypes = [
         'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
-        'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml'
+        'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml',
+        'image/jpeg', 'image/png'
       ]
-      const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh']
+      const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.jpg', '.jpeg', '.png']
 
       const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
       const isAllowedType = allowedTypes.includes(file.type)
@@ -929,7 +929,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         ref={fileInputRef}
         onChange={handleFileSelect}
         className="hidden"
-        accept=".pdf,.txt,.md,.py,.js,.jsx,.ts,.tsx,.html,.json,.xml,.yaml,.yml,.java,.c,.cpp,.h,.hpp,.sh,application/pdf,text/plain,text/markdown,text/html,application/json,application/xml,application/yaml"
+        accept=".pdf,.txt,.md,.py,.js,.jsx,.ts,.tsx,.html,.json,.xml,.yaml,.yml,.java,.c,.cpp,.h,.hpp,.sh,.jpg,.jpeg,.png,application/pdf,text/plain,text/markdown,text/html,application/json,application/xml,application/yaml,image/jpeg,image/png"
       />
 
       {/* Mobile Header */}
@@ -1131,11 +1131,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
               {/* Bottom bar — separate row, never overlaps text */}
               <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                {/* Left side: + menu + active skill pill (Pro only) */}
+                {/* Left side: + menu + active skill pill */}
                 <div ref={plusMenuRef} className="flex items-center gap-1.5">
-                {model === 'pro' && <>
-                  {/* + button */}
-                  <div className="relative">
+                  {/* + button — intentionally not `relative`, so the dropdown anchors to the composer box below */}
+                  <div>
                     <button
                       type="button"
                       onClick={() => { if (backendStatus === 'ready' && !isCheckPending) setPlusMenuOpen(p => !p) }}
@@ -1152,103 +1151,64 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       <Plus className="h-4 w-4" />
                     </button>
 
+                    {/* Dropdown expands downward on desktop (input sits near the top of the page) and
+                        upward on mobile (input is pinned to the bottom of the viewport). */}
                     {plusMenuOpen && (
-                      <>
-                      {/* Mobile bottom sheet */}
-                      <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
-                        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setPlusMenuOpen(false)} />
-                        <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
-                          <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-semibold text-[var(--foreground)]">Add</h3>
-                            <button type="button" onClick={() => setPlusMenuOpen(false)} className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)]">
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                          {/* Attach files */}
-                          <button type="button"
-                            onClick={() => { onUploadClick(); setPlusMenuOpen(false) }}
-                            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-[var(--secondary)]/30 border border-[var(--border-subtle)] text-[var(--foreground)] mb-3">
-                            <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                            <span className="text-[15px] font-medium">Attach files</span>
-                          </button>
-                          {/* Skills */}
-                          <p className="text-xs font-medium text-[var(--muted-foreground)] mb-2 px-1">Skills</p>
-                          <div className="flex flex-col gap-2">
-                            {SKILLS.map((skill) => (
-                              <button key={skill.id} type="button"
-                                onClick={() => { setActiveSkill(skill.id === activeSkill ? null : skill.id); setPlusMenuOpen(false) }}
-                                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${activeSkill === skill.id ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}>
-                                <span className="flex items-center gap-3">
-                                  <skill.Icon className="h-5 w-5 shrink-0" />
-                                  <span className="text-[15px] font-medium">{skill.label}</span>
-                                </span>
-                                {activeSkill === skill.id ? (
-                                  <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white shrink-0">
-                                    <Check className="h-3.5 w-3.5" />
-                                  </div>
-                                ) : (
-                                  <div className="h-5 w-5 rounded-full border border-[var(--border)] shrink-0" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Desktop dropdown */}
-                      <div className="hidden md:block absolute bottom-full left-0 mb-2 w-[260px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 py-2">
-                        {/* Upload */}
+                      <div className="absolute inset-x-0 bottom-full mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 md:slide-in-from-top-1 duration-100 py-2">
+                        {/* Add photos & files */}
                         <button
                           type="button"
                           onClick={() => { onUploadClick(); setPlusMenuOpen(false) }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors rounded-lg mx-0"
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
                         >
                           <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                          Upload files or images
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
+                            <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
+                          </span>
                         </button>
 
                         {/* Divider */}
                         <div className="mx-3 my-1 border-t border-[var(--border)]" />
 
-                        {/* Skills — hover to reveal submenu */}
-                        <div
-                          className="relative"
-                          onMouseEnter={() => setSkillsHovered(true)}
-                          onMouseLeave={() => setSkillsHovered(false)}
-                        >
-                          <button
-                            type="button"
-                            className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] transition-colors rounded-lg ${skillsHovered ? 'bg-[var(--secondary)]/60' : 'hover:bg-[var(--secondary)]/60'}`}
-                          >
-                            <span className="flex items-center gap-3">
-                              <Wrench className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                              Skills
-                            </span>
-                            <ChevronRight className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
-                          </button>
-
-                          {skillsHovered && (
-                            <div className="absolute top-0 left-full w-[200px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in duration-100">
-                              {SKILLS.map((skill) => (
-                                <button
-                                  key={skill.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveSkill(skill.id === activeSkill ? null : skill.id)
-                                    setPlusMenuOpen(false)
-                                    setSkillsHovered(false)
-                                    setAwaitingSkill(false)
-                                  }}
-                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors"
-                                >
-                                  <skill.Icon className="h-[18px] w-[18px] text-[var(--muted-foreground)] shrink-0" />
-                                  {skill.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {/* Skills — Pro only */}
+                        {SKILLS.map((skill) => {
+                          const isActive = activeSkill === skill.id
+                          if (model !== 'pro') {
+                            return (
+                              <button
+                                key={skill.id}
+                                type="button"
+                                title="Only available in Pro mode"
+                                onClick={() => toast('Switch to Pro mode to use skills')}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
+                              >
+                                <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
+                                  <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
+                                </span>
+                                <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
+                              </button>
+                            )
+                          }
+                          return (
+                            <button
+                              key={skill.id}
+                              type="button"
+                              onClick={() => { setActiveSkill(isActive ? null : skill.id); setPlusMenuOpen(false) }}
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors rounded-lg ${isActive ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--secondary)]/60'}`}
+                            >
+                              <skill.Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'}`} />
+                              <span className="min-w-0 flex-1">
+                                <span className={`block text-sm font-medium ${isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>{skill.label}</span>
+                                <span className="block text-xs text-[var(--muted-foreground)]">{skill.desc}</span>
+                              </span>
+                              {isActive && <Check className="h-4 w-4 text-[var(--accent)] shrink-0" />}
+                            </button>
+                          )
+                        })}
                       </div>
-                      </>
                     )}
                   </div>
 
@@ -1277,7 +1237,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       </>
                     )
                   })()}
-                </>}
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
