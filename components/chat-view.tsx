@@ -402,7 +402,7 @@ export function ChatView({
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
 
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'user', content: query },
+    { role: 'user', content: query, ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}) },
     { role: 'assistant', content: '' },
   ])
   const [input, setInput] = useState('')
@@ -1283,6 +1283,13 @@ export function ChatView({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData?.files || [])
+    if (files.length === 0) return
+    e.preventDefault()
+    for (const f of files) uploadFile(f, threadId).catch((err) => console.error('Paste upload failed', err))
+  }
+
   // ── render ───────────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
@@ -1601,6 +1608,7 @@ export function ChatView({
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
+                onPaste={onPaste}
                 placeholder={isRecording ? 'Listening...' : "Ask anything..."}
                 className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-[15px] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
                 style={{ minHeight: '52px' }}

@@ -815,48 +815,51 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
   }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Shared validation + upload path for file-picker, drag-drop, and paste.
+  const uploadFilesFromList = useCallback((fileList: FileList | File[]) => {
     if (!isSignedIn) {
       clerk.openSignIn()
       return
     }
-    const files = e.target.files
-    if (!files || files.length === 0) return
+    const files = Array.from(fileList)
+    if (files.length === 0) return
 
     if (attachedFiles.length + files.length > 5) {
       toast.error('You can only attach up to 5 files per message.')
       return
     }
 
-    // We only support uploading one file at a time or we can loop through them
-    const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+    const processFiles = async () => {
+      const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+      files.forEach(file => {
+        if (file.size > 20 * 1024 * 1024) {
+          toast.error(`${file.name} is too large. Maximum size is 20MB.`)
+          return
+        }
+        const allowedTypes = [
+          'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
+          'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml',
+          'image/jpeg', 'image/png'
+        ]
+        const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.jpg', '.jpeg', '.png']
 
-    Array.from(files).forEach(file => {
-      if (file.size > 20 * 1024 * 1024) {
-        toast.error(`${file.name} is too large. Maximum size is 20MB.`)
-        return
-      }
-      const allowedTypes = [
-        'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
-        'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml',
-        'image/jpeg', 'image/png'
-      ]
-      const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.jpg', '.jpeg', '.png']
+        const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+        const isAllowedType = allowedTypes.includes(file.type)
+        const isAllowedExt = allowedExtensions.includes(fileExt)
 
-      const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
-      const isAllowedType = allowedTypes.includes(file.type)
-      const isAllowedExt = allowedExtensions.includes(fileExt)
-
-      if (!isAllowedType && !isAllowedExt) {
-        toast.error(`${file.name} is not a supported file type.`)
-        return
-      }
-      console.log(`[SearchHome] handleFileSelect — uploading ${file.name} to thread_id:`, activeThreadId)
-      uploadFile(file, activeThreadId).catch((err) => {
-        console.error('Failed to upload file in UI', err)
+        if (!isAllowedType && !isAllowedExt) {
+          toast.error(`${file.name} is not a supported file type.`)
+          return
+        }
+        uploadFile(file, activeThreadId).catch(err => console.error('Failed to upload file in UI', err))
       })
-    })
+    }
+    processFiles()
+  }, [isSignedIn, clerk, uploadFile, threadId, fetchThreadId, createLocalFallbackThreadId, attachedFiles.length])
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) uploadFilesFromList(files)
     // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -884,47 +887,16 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    if (!isSignedIn) {
-      clerk.openSignIn()
-      return
+    uploadFilesFromList(e.dataTransfer.files)
+  }, [uploadFilesFromList])
+
+  const onPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = e.clipboardData?.files
+    if (files && files.length > 0) {
+      e.preventDefault()
+      uploadFilesFromList(files)
     }
-    const files = e.dataTransfer.files
-    if (!files || files.length === 0) return
-
-    if (attachedFiles.length + files.length > 5) {
-      toast.error('You can only attach up to 5 files per message.')
-      return
-    }
-
-    // Wrapping async in a separate fn since useCallback expected sync/void but await requires async
-    const processDrops = async () => {
-      const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
-      Array.from(files).forEach(file => {
-        if (file.size > 20 * 1024 * 1024) {
-          toast.error(`${file.name} is too large. Maximum size is 20MB.`)
-          return
-        }
-        const allowedTypes = [
-          'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
-          'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml',
-          'image/jpeg', 'image/png'
-        ]
-        const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.jpg', '.jpeg', '.png']
-
-        const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
-        const isAllowedType = allowedTypes.includes(file.type)
-        const isAllowedExt = allowedExtensions.includes(fileExt)
-
-        if (!isAllowedType && !isAllowedExt) {
-          toast.error(`${file.name} is not a supported file type.`)
-          return
-        }
-        console.log(`[SearchHome] onDrop — uploading ${file.name} to thread_id:`, activeThreadId)
-        uploadFile(file, activeThreadId).catch(err => console.error("Drop upload failed", err))
-      })
-    }
-    processDrops()
-  }, [isSignedIn, clerk, uploadFile, threadId, fetchThreadId, createLocalFallbackThreadId, attachedFiles.length])
+  }, [uploadFilesFromList])
 
   return (
     <main className="relative h-full flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
@@ -1080,6 +1052,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
                   onKeyDown={handleKeyDown}
+                  onPaste={onPaste}
                   disabled={backendStatus !== 'ready' || isCheckPending}
                   placeholder={
                     (isRecording || !!sstPrompt)
