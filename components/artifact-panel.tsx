@@ -129,7 +129,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         toast.dismiss('download-zip')
         toast.error('Failed to download markdown')
       }
-    } else if (format === 'pdf') {
+    } else if (format === 'pdf' || format === 'html') {
       setIsPdfLoading(true)
       try {
         const containerClone = containerRef.current?.cloneNode(true) as HTMLElement
