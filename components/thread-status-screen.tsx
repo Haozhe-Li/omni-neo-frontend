@@ -102,7 +102,7 @@ export function ThreadStatusScreen({ title, description, primaryAction, secondar
         <div className="animate-in fade-in slide-in-from-bottom-4 delay-300 duration-700 ease-out fill-mode-both flex items-center gap-3">
           <button
             onClick={primaryAction.onClick}
-            className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-secondary/80 hover:bg-secondary text-[13px] font-medium text-foreground transition-all duration-300 border border-border/50 hover:border-border"
+            className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity shadow-sm"
           >
             {primaryAction.label}
           </button>
@@ -115,10 +115,6 @@ export function ThreadStatusScreen({ title, description, primaryAction, secondar
             </Link>
           )}
         </div>
-      </div>
-
-      <div className="absolute bottom-12 text-[10px] text-muted-foreground/30 tracking-[0.2em] uppercase font-light">
-        Omni Knows
       </div>
     </main>
   )
