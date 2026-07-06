@@ -66,14 +66,20 @@ function isUntitled(t?: string) {
   return !n || n === 'untitled' || n === 'untitled chat'
 }
 
-const TAB_TITLE_CHAR_LIMIT = 20
+const TAB_TITLE_LIMIT = 15
+const CJK_CHAR_PATTERN = /[一-鿿]/
 
 function toTabTitle(chatTitle: string) {
   const trimmed = chatTitle.trim()
   if (!trimmed) return 'Omni Knows'
-  const truncated =
-    trimmed.length > TAB_TITLE_CHAR_LIMIT ? `${trimmed.slice(0, TAB_TITLE_CHAR_LIMIT)}…` : trimmed
-  return `${truncated} | Omni Knows`
+
+  // Chinese: count by character. English (or anything else): count by word,
+  // since a 15-character cutoff would chop most words in half.
+  if (CJK_CHAR_PATTERN.test(trimmed)) {
+    return trimmed.length > TAB_TITLE_LIMIT ? `${trimmed.slice(0, TAB_TITLE_LIMIT)}…` : trimmed
+  }
+  const words = trimmed.split(/\s+/).filter(Boolean)
+  return words.length > TAB_TITLE_LIMIT ? `${words.slice(0, TAB_TITLE_LIMIT).join(' ')}…` : trimmed
 }
 
 const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf' | 'html') => {
