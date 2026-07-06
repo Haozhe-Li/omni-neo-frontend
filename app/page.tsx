@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { SearchHome } from '@/components/search-home'
 import { ChatView } from '@/components/chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
@@ -8,8 +8,19 @@ import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import { useGuestQuota } from '@/hooks/useGuestQuota'
 import { useAuth, useClerk } from '@clerk/nextjs'
-import { useIsMobile } from '@/hooks/use-mobile'
+import { useAppShell } from '@/hooks/useAppShell'
+import { useRouter } from 'next/navigation'
 import type { AgentMode } from '@/lib/types'
+
+// Swap the visible URL to /thread/{id} without triggering a Next.js navigation,
+// so an in-progress/streaming chat is never remounted. A hard reload or a
+// freshly-opened link still hits app/thread/[id] and goes through its own
+// access-check flow.
+function setShareableUrl(threadId: string) {
+  if (typeof window === 'undefined' || !threadId) return
+  if (threadId.startsWith('local-')) return // not a real backend id, nothing to share yet
+  window.history.replaceState({}, '', `/thread/${threadId}`)
+}
 
 export default function Home() {
   const [view, setView] = useState<'home' | 'chat'>('home')
@@ -23,33 +34,9 @@ export default function Home() {
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
+  const router = useRouter()
   const { quota, quotaExceeded, refresh: refreshQuota } = useGuestQuota()
-
-  const isMobileCheck = useIsMobile()
-  const isMobile = isMobileCheck === undefined ? true : isMobileCheck
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const sidebarInitializedRef = useRef(false)
-
-  useEffect(() => {
-    if (isMobile === undefined) return
-    if (isMobile) {
-      setSidebarOpen(false)
-      sidebarInitializedRef.current = true
-      return
-    }
-    const saved = localStorage.getItem('omni_sidebar_open')
-    const shouldOpen = saved !== '0' // default open on desktop if no preference
-    if (!sidebarInitializedRef.current) {
-      sidebarInitializedRef.current = true
-      if (shouldOpen) {
-        setSidebarOpen(false)
-        const t = setTimeout(() => setSidebarOpen(true), 200)
-        return () => clearTimeout(t)
-      }
-    } else {
-      setSidebarOpen(shouldOpen)
-    }
-  }, [isMobile])
+  const { isMobile, sidebarOpen, setSidebarOpen, toggleSidebar } = useAppShell()
 
   useEffect(() => {
     const loadModel = () => {
@@ -86,6 +73,7 @@ export default function Home() {
       setPendingSkill(skill || null)
       setInitialMode(model)
       setView('chat')
+      setShareableUrl(threadId)
     },
     [model, quotaExceeded, isSignedIn, clerk]
   )
@@ -100,24 +88,12 @@ export default function Home() {
     setCurrentThreadId('')
   }, [])
 
-  const handleSelectThread = useCallback(async (threadId: string, query: string) => {
-    setCurrentThreadId(threadId)
-    setCurrentQuery(query)
-    setPendingAttachmentMeta([])
-    setView('chat')
-  }, [])
-
-  // Pending thread from settings-page navigation
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const pendingThreadId = localStorage.getItem('pending_thread_id')
-    if (pendingThreadId) {
-      const pendingQuery = localStorage.getItem('pending_thread_query') || ''
-      localStorage.removeItem('pending_thread_id')
-      localStorage.removeItem('pending_thread_query')
-      setTimeout(() => handleSelectThread(pendingThreadId, pendingQuery), 0)
-    }
-  }, [handleSelectThread])
+  const handleSelectThread = useCallback(
+    (threadId: string) => {
+      router.push(`/thread/${threadId}`)
+    },
+    [router]
+  )
 
   // Initial query from URL (?q=...)
   useEffect(() => {
@@ -142,18 +118,11 @@ export default function Home() {
       setCurrentQuery(q)
       setInitialMode(model)
       setView('chat')
+      setShareableUrl(newThreadId)
     }
     initFromUrl()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchWithAuth])
-
-  const toggleSidebar = useCallback(() => {
-    setSidebarOpen((p) => {
-      const next = !p
-      localStorage.setItem('omni_sidebar_open', next ? '1' : '0')
-      return next
-    })
-  }, [])
 
   return (
     <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
