@@ -15,7 +15,7 @@ import type { ChatMessage } from '@/lib/types'
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
 type Status = 'checking' | 'ready' | 'empty' | 'unauthenticated' | 'not-found' | 'error'
-type PreloadedThread = { messages: ChatMessage[]; is_generating?: boolean }
+type PreloadedThread = { messages: ChatMessage[]; is_generating?: boolean; title?: string }
 
 export function ThreadPageClient({ threadId }: { threadId: string }) {
   const router = useRouter()
@@ -56,7 +56,11 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
         }
         const data = await res.json().catch(() => null)
         if (Array.isArray(data?.messages) && data.messages.length > 0) {
-          setPreloadedThread({ messages: data.messages as ChatMessage[], is_generating: !!data.is_generating })
+          setPreloadedThread({
+            messages: data.messages as ChatMessage[],
+            is_generating: !!data.is_generating,
+            title: typeof data?.title === 'string' ? data.title : undefined,
+          })
           setStatus('ready')
         } else {
           setStatus('empty')
