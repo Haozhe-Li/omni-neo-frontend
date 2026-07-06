@@ -212,14 +212,8 @@ export default function SettingsPage() {
         router.push('/')
     }, [router])
 
-    const handleSelectThread = useCallback((threadId: string, query?: string) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('pending_thread_id', threadId)
-            if (query) {
-                localStorage.setItem('pending_thread_query', query)
-            }
-        }
-        router.push('/')
+    const handleSelectThread = useCallback((threadId: string) => {
+        router.push(`/thread/${threadId}`)
     }, [router])
 
 
