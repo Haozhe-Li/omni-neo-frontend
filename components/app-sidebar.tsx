@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -73,6 +73,27 @@ export function AppSidebar({
     const [isDeleting, setIsDeleting] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const [pagesOpen, setPagesOpen] = useState(false)
+    const [pagesResetKey, setPagesResetKey] = useState(0)
+    const previousPathRef = useRef<string | null>(null)
+
+    // Reflect the embedded Pages panel in the URL (base_url/pages) without a real
+    // navigation, and restore whatever URL was showing before it opened once closed.
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        if (pagesOpen) {
+            if (previousPathRef.current === null) {
+                previousPathRef.current = window.location.pathname + window.location.search
+            }
+            if (window.location.pathname !== '/pages') {
+                window.history.replaceState({}, '', '/pages')
+            }
+        } else if (previousPathRef.current !== null) {
+            window.history.replaceState({}, '', previousPathRef.current)
+            previousPathRef.current = null
+        }
+    }, [pagesOpen])
+
+    const closePages = useCallback(() => setPagesOpen(false), [])
 
     useEffect(() => { setMounted(true) }, [])
 
@@ -577,14 +598,15 @@ export function AppSidebar({
             <div className="px-3 pb-2 space-y-2">
                 <button
                     onClick={() => {
+                        closePages()
                         setLoadingAction('new-chat')
                         if (onNewChat) onNewChat()
                         setTimeout(() => setLoadingAction(null), 1000)
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
-                    flex items-center gap-3 w-full p-2 rounded-lg 
-                    hover:bg-[var(--secondary)] 
+                    flex items-center gap-3 w-full p-2 rounded-lg
+                    hover:bg-[var(--secondary)]
                     text-[var(--foreground)]
                     transition-all duration-200
                     ${!isExpanded ? 'justify-center' : ''}
@@ -606,6 +628,7 @@ export function AppSidebar({
                 <button
                     onClick={() => {
                         setPagesOpen(true)
+                        setPagesResetKey((k) => k + 1)
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
@@ -632,6 +655,7 @@ export function AppSidebar({
                 {/* History Toggle Button */}
                 <button
                     onClick={() => {
+                        closePages()
                         setIsSearchVisible(true)
                     }}
                     className={`
@@ -658,6 +682,7 @@ export function AppSidebar({
                             <button
                                 key={chat.thread_id}
                                 onClick={() => {
+                                    closePages()
                                     if (currentThreadId !== chat.thread_id) {
                                         setLoadingAction(`thread_${chat.thread_id}`)
                                         if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
@@ -730,6 +755,7 @@ export function AppSidebar({
             < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
                 <button
                     onClick={() => {
+                        closePages()
                         if (pathname !== '/settings') {
                             setLoadingAction('settings')
                             router.push('/settings')
@@ -1034,7 +1060,7 @@ export function AppSidebar({
                     {SidebarContent}
                 </aside>
 
-                <PagesPanel isOpen={pagesOpen} onClose={() => setPagesOpen(false)} leftOffset="0px" />
+                <PagesPanel key={pagesResetKey} isOpen={pagesOpen} onClose={closePages} leftOffset="0px" />
             </>
         )
     }
@@ -1053,7 +1079,7 @@ export function AppSidebar({
             >
                 {SidebarContent}
             </aside>
-            <PagesPanel isOpen={pagesOpen} onClose={() => setPagesOpen(false)} leftOffset={isExpanded ? '16rem' : '4rem'} />
+            <PagesPanel key={pagesResetKey} isOpen={pagesOpen} onClose={closePages} leftOffset={isExpanded ? '16rem' : '4rem'} />
         </>
     )
 }

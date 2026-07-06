@@ -2,7 +2,8 @@ import { redis } from '@/lib/redis'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Metadata } from 'next'
-import { ArrowRight, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
+import { PagesHero } from '@/components/pages-grid'
 import { PagesClient } from './pages-client'
 
 export const metadata: Metadata = {
@@ -78,42 +79,7 @@ export default async function OmniPagesList() {
 
             <main className="max-w-6xl mx-auto px-6">
 
-                {/* ─── Hero section with featured image ─── */}
-                <section className="py-12 sm:py-16">
-                    <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-center">
-                        <div className="relative w-full lg:w-[60%] aspect-[16/9] rounded-2xl overflow-hidden shadow-lg">
-                            <Image
-                                src="/omniknows_pages.webp"
-                                alt="Omni Knows"
-                                fill
-                                className="object-cover"
-                                priority
-                            />
-                            {/* Subtle gradient overlay */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                        </div>
-
-                        <div className="flex-1 space-y-5">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--accent)]">Welcome</span>
-                                <span className="w-8 h-px bg-[var(--accent)]" />
-                            </div>
-                            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)] leading-[1.15]">
-                                Introducing Omni Pages
-                            </h1>
-                            <p className="text-[var(--muted-foreground)] text-base leading-relaxed">
-                                Omni Pages is a new feature that allows you to publish your research from the Omni Canvas.
-                            </p>
-                            <Link
-                                href="https://haozhe.li/blog/omniknows-pages"
-                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-[var(--foreground)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--foreground)] hover:text-[var(--background)] transition-colors"
-                            >
-                                Learn More
-                                <ArrowRight className="w-4 h-4" />
-                            </Link>
-                        </div>
-                    </div>
-                </section>
+                <PagesHero />
 
                 {/* ─── Divider ─── */}
                 <div className="border-t border-[var(--border-subtle)]/40" />
