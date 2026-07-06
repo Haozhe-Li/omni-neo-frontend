@@ -10,10 +10,12 @@ import { ThreadStatusScreen } from '@/components/thread-status-screen'
 import { Spinner } from '@/components/ui/spinner'
 import { useApi } from '@/hooks/useApi'
 import { useAppShell } from '@/hooks/useAppShell'
+import type { ChatMessage } from '@/lib/types'
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
 type Status = 'checking' | 'ready' | 'empty' | 'unauthenticated' | 'not-found' | 'error'
+type PreloadedThread = { messages: ChatMessage[]; is_generating?: boolean }
 
 export function ThreadPageClient({ threadId }: { threadId: string }) {
   const router = useRouter()
@@ -23,7 +25,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
   const { isMobile, sidebarOpen, setSidebarOpen, toggleSidebar } = useAppShell()
 
   const [status, setStatus] = useState<Status>('checking')
-  const [firstQuery, setFirstQuery] = useState('')
+  const [preloadedThread, setPreloadedThread] = useState<PreloadedThread | null>(null)
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
         }
         const data = await res.json().catch(() => null)
         if (Array.isArray(data?.messages) && data.messages.length > 0) {
-          setFirstQuery(String(data.messages[0]?.content ?? ''))
+          setPreloadedThread({ messages: data.messages as ChatMessage[], is_generating: !!data.is_generating })
           setStatus('ready')
         } else {
           setStatus('empty')
@@ -142,7 +144,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
       <main className="flex-1 min-w-0 h-full relative overflow-hidden">
         <ChatView
           key={threadId}
-          query={firstQuery}
+          query={String(preloadedThread?.messages?.[0]?.content ?? '')}
           threadId={threadId}
           onNewSearch={goHome}
           onToggleSidebar={toggleSidebar}
@@ -150,6 +152,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
           initialMode="fast"
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
+          preloadedThread={preloadedThread}
         />
       </main>
     </div>

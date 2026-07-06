@@ -34,6 +34,10 @@ interface ChatViewProps {
   initialSkill?: SkillId | null
   sidebarOpen?: boolean
   setSidebarOpen?: (v: boolean) => void
+  // Already-fetched history for an existing thread (e.g. resumed via a /thread/{id}
+  // link). When present, ChatView renders straight from it instead of firing its
+  // own initial-load fetch, so there's no loading-placeholder flash.
+  preloadedThread?: { messages: ChatMessage[]; is_generating?: boolean } | null
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -395,19 +399,24 @@ export function ChatView({
   initialSkill = null,
   sidebarOpen,
   setSidebarOpen,
+  preloadedThread = null,
 }: ChatViewProps) {
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
 
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'user', content: query, ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}) },
-    { role: 'assistant', content: '' },
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    preloadedThread?.messages?.length
+      ? preloadedThread.messages
+      : [
+          { role: 'user', content: query, ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}) },
+          { role: 'assistant', content: '' },
+        ]
+  )
   const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [mode, setMode] = useState<AgentMode>(initialMode)
+  const [isLoading, setIsLoading] = useState(() => (preloadedThread ? !!preloadedThread.is_generating : true))
+  const [mode, setMode] = useState<AgentMode>(() => preloadedThread?.messages?.[0]?.mode ?? initialMode)
   const [title, setTitle] = useState(query)
   const [isRecording, setIsRecording] = useState(false)
   // Index of the assistant message currently being streamed (typewriter).
@@ -939,54 +948,69 @@ export function ChatView({
     [threadId, mode, buildPersonalization, fetchWithAuth, handleStream, syncToBackend]
   )
 
-  // ── initial load: backend history, else fire the first query ───────────
+  // Applies an already-fetched /api/threads/{id} payload: reconnects to a
+  // background generation if one is in flight, otherwise just settles the
+  // loading state. Shared by the preloaded path and the fetch-on-mount path
+  // below so the two don't drift apart.
+  const applyLoadedThread = useCallback(
+    async (data: { messages?: unknown; is_generating?: boolean }) => {
+      if (!Array.isArray(data?.messages) || data.messages.length === 0) return false
+      const loadedMessages = data.messages as ChatMessage[]
+      setMessages(loadedMessages)
+      if (loadedMessages[0]?.mode) setMode(loadedMessages[0].mode)
+
+      if (data.is_generating) {
+        // A background generation is in progress — reconnect to it.
+        setIsLoading(true)
+        setStreamingIndex(loadedMessages.length)
+        requestPin()
+        localStorage.setItem(`omni:gen:${threadId}`, titleRef.current || '1')
+        window.dispatchEvent(
+          new CustomEvent('omni:gen:start', {
+            detail: { threadId, title: titleRef.current, mode },
+          })
+        )
+        try {
+          const streamRes = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/stream`)
+          if (streamRes.ok) {
+            await handleStream(streamRes, loadedMessages)
+          } else {
+            setIsLoading(false)
+          }
+        } catch {
+          setIsLoading(false)
+        } finally {
+          localStorage.removeItem(`omni:gen:${threadId}`)
+          window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
+        }
+      } else {
+        // Clear any stale generating marker from a previous session.
+        localStorage.removeItem(`omni:gen:${threadId}`)
+        window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
+        setIsLoading(false)
+        setTimeout(() => requestPin(), 50)
+      }
+      return true
+    },
+    [threadId, mode, fetchWithAuth, handleStream, requestPin]
+  )
+
+  // ── initial load: preloaded/backend history, else fire the first query ─
   useEffect(() => {
     if (initializedRef.current) return
     initializedRef.current = true
     const init = async () => {
-      try {
-        const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (Array.isArray(data?.messages) && data.messages.length > 0) {
-            setMessages(data.messages as ChatMessage[])
-            if (data?.messages?.[0]?.mode) setMode(data.messages[0].mode)
-
-            if (data.is_generating) {
-              // A background generation is in progress — reconnect to it.
-              setIsLoading(true)
-              setStreamingIndex((data.messages as ChatMessage[]).length)
-              requestPin()
-              localStorage.setItem(`omni:gen:${threadId}`, titleRef.current || '1')
-              window.dispatchEvent(
-                new CustomEvent('omni:gen:start', {
-                  detail: { threadId, title: titleRef.current, mode },
-                })
-              )
-              try {
-                const streamRes = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/stream`)
-                if (streamRes.ok) {
-                  await handleStream(streamRes, data.messages as ChatMessage[])
-                } else {
-                  setIsLoading(false)
-                }
-              } catch {
-                setIsLoading(false)
-              } finally {
-                localStorage.removeItem(`omni:gen:${threadId}`)
-                window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
-              }
-            } else {
-              // Clear any stale generating marker from a previous session.
-              localStorage.removeItem(`omni:gen:${threadId}`)
-              window.dispatchEvent(new CustomEvent('omni:gen:stop', { detail: { threadId } }))
-              setIsLoading(false)
-              setTimeout(() => requestPin(), 50)
-            }
-            return
+      if (preloadedThread) {
+        if (await applyLoadedThread(preloadedThread)) return
+      } else {
+        try {
+          const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (await applyLoadedThread(data)) return
           }
-        }
-      } catch {}
+        } catch {}
+      }
 
       const fileIds =
         initialAttachedFileMeta && initialAttachedFileMeta.length > 0 && !initialFilesSentRef.current
