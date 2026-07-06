@@ -37,7 +37,7 @@ interface ChatViewProps {
   // Already-fetched history for an existing thread (e.g. resumed via a /thread/{id}
   // link). When present, ChatView renders straight from it instead of firing its
   // own initial-load fetch, so there's no loading-placeholder flash.
-  preloadedThread?: { messages: ChatMessage[]; is_generating?: boolean } | null
+  preloadedThread?: { messages: ChatMessage[]; is_generating?: boolean; title?: string } | null
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -438,7 +438,12 @@ export function ChatView({
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(() => (preloadedThread ? !!preloadedThread.is_generating : true))
   const [mode, setMode] = useState<AgentMode>(() => preloadedThread?.messages?.[0]?.mode ?? initialMode)
-  const [title, setTitle] = useState(query)
+  // A user-set title (persisted backend-side) always wins over the raw first
+  // query, so a rename survives a refresh / re-opening the /thread/{id} link.
+  const [title, setTitle] = useState(() => preloadedThread?.title?.trim() || query)
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const titleInputRef = useRef<HTMLInputElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   // Index of the assistant message currently being streamed (typewriter).
   const [streamingIndex, setStreamingIndex] = useState(-1)
@@ -974,11 +979,12 @@ export function ChatView({
   // loading state. Shared by the preloaded path and the fetch-on-mount path
   // below so the two don't drift apart.
   const applyLoadedThread = useCallback(
-    async (data: { messages?: unknown; is_generating?: boolean }) => {
+    async (data: { messages?: unknown; is_generating?: boolean; title?: string }) => {
       if (!Array.isArray(data?.messages) || data.messages.length === 0) return false
       const loadedMessages = data.messages as ChatMessage[]
       setMessages(loadedMessages)
       if (loadedMessages[0]?.mode) setMode(loadedMessages[0].mode)
+      if (data.title?.trim()) setTitle(data.title.trim())
 
       if (data.is_generating) {
         // A background generation is in progress — reconnect to it.
@@ -1100,6 +1106,38 @@ export function ChatView({
       document.title = 'Omni Knows'
     }
   }, [title, query])
+
+  // ── manual title editing ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isEditingTitle) return
+    titleInputRef.current?.focus()
+    titleInputRef.current?.select()
+  }, [isEditingTitle])
+
+  const startEditingTitle = useCallback(() => {
+    setTitleDraft(title || query)
+    setIsEditingTitle(true)
+  }, [title, query])
+
+  const cancelEditingTitle = useCallback(() => {
+    setIsEditingTitle(false)
+  }, [])
+
+  const commitEditingTitle = useCallback(() => {
+    const trimmed = titleDraft.trim()
+    const current = title || query
+    if (trimmed && trimmed !== current) {
+      setTitle(trimmed)
+      if (threadId) {
+        fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/title`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title: trimmed }),
+        }).catch(() => {})
+        window.dispatchEvent(new CustomEvent('omni:title', { detail: { threadId, title: trimmed } }))
+      }
+    }
+    setIsEditingTitle(false)
+  }, [titleDraft, title, query, threadId, fetchWithAuth])
 
   // ── scroll model ────────────────────────────────────────────────────────
   // No autoscroll while streaming. Instead: when a query is sent we pin it near
@@ -1362,9 +1400,50 @@ export function ChatView({
               </button>
             )}
           </div>
-          <span className="absolute left-1/2 -translate-x-1/2 max-w-[55%] truncate text-sm font-medium text-foreground/90">
-            {title || query}
-          </span>
+          <div className="absolute left-1/2 -translate-x-1/2 max-w-[60%] flex items-center gap-1 group">
+            {isEditingTitle ? (
+              <>
+                <input
+                  ref={titleInputRef}
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitEditingTitle() }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelEditingTitle() }
+                  }}
+                  onBlur={commitEditingTitle}
+                  className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground/90 outline-none border-b border-[var(--accent)]/60"
+                />
+                <button
+                  title="Save"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={commitEditingTitle}
+                  className="shrink-0 p-1 rounded-full text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all duration-150 active:scale-95"
+                >
+                  <Check size={13} strokeWidth={2} />
+                </button>
+                <button
+                  title="Cancel"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={cancelEditingTitle}
+                  className="shrink-0 p-1 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-150 active:scale-95"
+                >
+                  <X size={13} strokeWidth={2} />
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{title || query}</span>
+                <button
+                  title="Edit title"
+                  onClick={startEditingTitle}
+                  className="shrink-0 p-1 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] opacity-0 group-hover:opacity-100 transition-all duration-150 active:scale-95"
+                >
+                  <Pencil size={12} strokeWidth={1.75} />
+                </button>
+              </>
+            )}
+          </div>
           <div className="flex items-center gap-1">
           </div>
         </header>
