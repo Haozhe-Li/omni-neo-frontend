@@ -9,10 +9,11 @@ import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download, Sparkles, ArrowUp } from 'lucide-react'
+import { Copy, Check, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
+import { InlineEcharts, InlineMap } from '@/components/markdown-message'
 import type { Source } from '@/lib/types'
 import { SourceItem } from '@/components/source-item'
 import { preprocessMarkdown } from '@/lib/markdown'
@@ -28,6 +29,8 @@ interface MarkdownBlogViewProps {
   readingTime?: string
   tags?: string[]
   sources?: Source[]
+  /** Rendered inside the app shell (sidebar already provides nav) — hides the standalone header/footer. */
+  embedded?: boolean
 }
 
 function extractNodeText(node: ReactNode): string {
@@ -90,7 +93,8 @@ const markdownComponents: Components = {
     </a>
   ),
   pre: ({ children }: any) => {
-    if (children?.props?.className?.includes('language-mermaid')) {
+    const cls = children?.props?.className || ''
+    if (cls.includes('language-mermaid') || cls.includes('language-echarts') || cls.includes('language-map')) {
       return <>{children}</>
     }
     return (
@@ -107,6 +111,12 @@ const markdownComponents: Components = {
 
     if (className?.includes('language-mermaid')) {
       return <Mermaid chart={String(children).replace(/\n$/, '')} />
+    }
+    if (className?.includes('language-echarts')) {
+      return <InlineEcharts source={String(children)} />
+    }
+    if (className?.includes('language-map')) {
+      return <InlineMap source={String(children)} />
     }
 
     if (isInline) {
@@ -187,72 +197,36 @@ export function MarkdownBlogView({
   readingTime,
   tags = [],
   sources = [],
+  embedded = false,
 }: MarkdownBlogViewProps) {
-  const [input, setInput] = useState('')
-  const [isComposing, setIsComposing] = useState(false)
-
-  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
-
-  const handleSend = () => {
-    if (!input.trim()) return
-    const pageUrl = `https://omniknows.xyz${window.location.pathname}`
-    const query = `User want to follow up this pages, please use load webpage tool first to read the page before answering questions: \n\n${JSON.stringify({ title, url: pageUrl }, null, 2)}\n\nUser Query: ${input.trim()}`
-    window.open(`/?q=${encodeURIComponent(query)}&model=light`, '_blank')
-    setInput('')
-  }
-
   return (
-    <div className="blog-shell min-h-screen bg-background">
-      {/* ─── Navbar ─── */}
-      <header className="sticky top-0 z-50 bg-[var(--background)]/80 backdrop-blur-xl border-b border-[var(--border-subtle)]/30">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
-          <Link href="/pages" className="flex items-center gap-2.5 group">
-            <Image
-              src="/android-chrome-512x512.png"
-              alt="Omni Knows Logo"
-              width={28}
-              height={28}
-              className="rounded-xl shadow-sm"
-            />
-            <span className="font-[family-name:var(--font-plex)] text-[20px] font-light tracking-tight text-[var(--foreground)] lowercase group-hover:opacity-70 transition-opacity">
-              omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
-            </span>
-          </Link>
-
-          {/* <nav className="hidden sm:flex items-center gap-8">
-            <Link href="/pages" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-              Pages
-            </Link>
-            <Link href="/" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-              Search
-            </Link>
-            <Link href="/settings" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
-              Settings
-            </Link>
-          </nav> */}
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity shadow-sm"
-            >
-              Ask anything
+    <div className={embedded ? 'bg-transparent' : 'blog-shell min-h-screen bg-background'}>
+      {/* ─── Minimal brand bar ─── */}
+      {!embedded && (
+        <header className="sticky top-0 z-30 bg-[var(--background)]/85 backdrop-blur-xl border-b border-[var(--border-subtle)]">
+          <div className="max-w-6xl mx-auto flex items-center px-6 h-14">
+            <Link href="/pages" className="flex items-center gap-2 group">
+              <Image
+                src="/android-chrome-512x512.png"
+                alt="Omni Knows Logo"
+                width={20}
+                height={20}
+                className="rounded-lg"
+              />
+              <span className="font-[family-name:var(--font-plex)] text-[14px] font-light tracking-tight text-[var(--muted-foreground)] lowercase group-hover:text-[var(--foreground)] transition-colors">
+                omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
+              </span>
             </Link>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
-      <main className="px-4 py-8 sm:px-6 sm:py-10">
-        <article className="mx-auto w-full max-w-[880px] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-sm backdrop-blur-sm sm:p-8">
+      <main className={embedded ? '' : 'px-4 py-8 sm:px-6 sm:py-10'}>
+        <article className={embedded ? 'mx-auto w-full max-w-[880px]' : 'mx-auto w-full max-w-[880px] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-sm sm:p-8'}>
           <header className="border-b border-border/70 pb-6">
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{sectionLabel}</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{title}</h1>
-            {excerpt && <p className="mt-4 text-base leading-7 text-muted-foreground sm:text-lg">{excerpt}</p>}
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{title}</h1>
+            {excerpt && <p className="mt-4 text-base leading-7 text-muted-foreground">{excerpt}</p>}
 
             <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
               <span>{author}</span>
@@ -296,11 +270,10 @@ export function MarkdownBlogView({
         </article>
       </main>
 
-      <footer className="mx-auto mt-2 w-full max-w-[1200px] border-t border-border px-4 py-6 sm:px-6 pb-40">
-        <div className="flex flex-col items-center gap-1 text-[11px] text-muted-foreground/70">
-          <b>Answers generated by AI. Check important info.</b>
-          <p>
-            © {new Date().getFullYear()}{' '}
+      {!embedded && (
+        <footer className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-6">
+          <p className="text-center text-[11px] text-muted-foreground/70">
+            Answers generated by AI. Check important info. ·{' '}
             <a
               href="https://omniknows.xyz"
               target="_blank"
@@ -309,53 +282,9 @@ export function MarkdownBlogView({
             >
               Omni Knows
             </a>
-            {'. All rights reserved.'}
           </p>
-          <p>
-            Made with love by{' '}
-            <a
-              href="https://haozhe.li"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-muted-foreground/40 underline-offset-2 transition-colors hover:text-foreground hover:decoration-foreground"
-            >
-              Haozhe Li
-            </a>
-          </p>
-        </div>
-      </footer>
-
-      {/* ─── Floating Follow-up Input ─── */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent" />
-        <div className="max-w-[880px] mx-auto px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-6 sm:px-8 relative pointer-events-auto">
-          <div className="relative">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleInputKeyDown}
-              onCompositionStart={() => setIsComposing(true)}
-              onCompositionEnd={() => setIsComposing(false)}
-              placeholder="Ask a follow-up about this page..."
-              rows={1}
-              className="block w-full resize-none bg-card text-[var(--foreground)] rounded-2xl pl-5 pr-14 py-4 min-h-[56px] max-h-56 overflow-y-auto focus:outline-none focus:ring-1 focus:ring-[var(--accent)] transition-all shadow-[0_0_0_1px_var(--border),0_4px_20px_rgba(0,0,0,0.08)]"
-              style={{ minHeight: '56px' }}
-            />
-            <div className="absolute right-[10px] bottom-[10px] flex items-center">
-              <button
-                onClick={handleSend}
-                disabled={!input.trim()}
-                className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 cursor-pointer ${!input.trim()
-                  ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] cursor-not-allowed'
-                  : 'bg-[var(--accent)] text-white hover:opacity-90'
-                  }`}
-              >
-                <ArrowUp size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+        </footer>
+      )}
     </div>
   )
 }

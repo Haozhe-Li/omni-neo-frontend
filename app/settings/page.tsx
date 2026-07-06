@@ -894,6 +894,8 @@ function MyPagesList() {
     const [pages, setPages] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUnpublishingId, setIsUnpublishingId] = useState<string | null>(null)
+    const [isDeleteAllConfirmOpen, setIsDeleteAllConfirmOpen] = useState(false)
+    const [isDeletingAll, setIsDeletingAll] = useState(false)
 
     const fetchPages = useCallback(async () => {
         setIsLoading(true)
@@ -944,6 +946,22 @@ function MyPagesList() {
         toast.success('Link copied')
     }
 
+    const handleUnpublishAll = async () => {
+        setIsDeletingAll(true)
+        try {
+            const res = await fetch('/api/unpublish-all', { method: 'POST' })
+            if (!res.ok) throw new Error('Failed to unpublish all')
+            setPages([])
+            toast.success('All pages unpublished')
+        } catch (error) {
+            console.error('Failed to unpublish all:', error)
+            toast.error('Failed to unpublish all pages')
+        } finally {
+            setIsDeletingAll(false)
+            setIsDeleteAllConfirmOpen(false)
+        }
+    }
+
     if (isLoading) {
         return (
             <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)]/50 space-y-3">
@@ -959,7 +977,15 @@ function MyPagesList() {
 
     return (
         <div className="space-y-3 pt-2">
-            <Label text="My Shared Pages" />
+            <div className="flex items-center justify-between">
+                <Label text="My Shared Pages" />
+                <button
+                    onClick={() => setIsDeleteAllConfirmOpen(true)}
+                    className="text-xs font-medium text-[var(--muted-foreground)] hover:text-red-500 transition-colors"
+                >
+                    Delete all
+                </button>
+            </div>
             <div className="space-y-3">
                 {pages.map((page) => {
                     const dateStr = page.publishedAt || page.created_at
@@ -1017,6 +1043,35 @@ function MyPagesList() {
                     )
                 })}
             </div>
+
+            <AlertDialog open={isDeleteAllConfirmOpen} onOpenChange={setIsDeleteAllConfirmOpen}>
+                <AlertDialogContent className="bg-[var(--background)] border border-[var(--border-subtle)] rounded-xl shadow-lg max-w-sm p-6">
+                    <AlertDialogHeader className="gap-3">
+                        <AlertDialogTitle className="text-[var(--foreground)] text-base font-medium flex items-center justify-center mb-1">
+                            Delete all shared pages?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-[var(--muted-foreground)] text-sm text-center leading-relaxed">
+                            This will unpublish all {pages.length} of your shared pages. Their public links will stop working. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-6 flex sm:justify-between w-full gap-2">
+                        <AlertDialogCancel
+                            disabled={isDeletingAll}
+                            className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0"
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <button
+                            onClick={handleUnpublishAll}
+                            disabled={isDeletingAll}
+                            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg h-10 text-sm font-medium transition-colors
+                                bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 disabled:opacity-50"
+                        >
+                            {isDeletingAll ? <Loader2 size={14} className="animate-spin" /> : 'Delete all'}
+                        </button>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
