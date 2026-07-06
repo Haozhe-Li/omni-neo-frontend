@@ -200,7 +200,11 @@ export function PagesPanel({ isOpen, onClose, leftOffset }: PagesPanelProps) {
                     <span className="text-[14px] font-medium text-[var(--foreground)] opacity-90">Pages</span>
                 )}
                 <div className="flex-1" />
-                <button onClick={onClose} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors" title="Close">
+                <button
+                    onClick={() => { if (activeId) setActiveId(null); else onClose() }}
+                    className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                    title={activeId ? 'Back to Pages' : 'Close'}
+                >
                     <X size={18} strokeWidth={1.5} />
                 </button>
             </div>
