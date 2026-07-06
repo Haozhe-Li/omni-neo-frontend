@@ -42,6 +42,11 @@ interface ChatViewProps {
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
+// Temporarily disabled: the LLM-generated title made a follow-up round trip
+// (and a title flip mid-conversation) that wasn't worth it. Threads are
+// titled with the raw first query instead until this is revisited.
+const ENABLE_LLM_TITLE_GENERATION = false
+
 type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
 const SKILLS: { id: SkillId; label: string; desc: string; Icon: React.FC<{ className?: string }> }[] = [
   { id: 'deep-research',   label: 'Deep Research',   desc: 'Get a detailed report',        Icon: Telescope },
@@ -1034,6 +1039,7 @@ export function ChatView({
 
   // ── title ──────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!ENABLE_LLM_TITLE_GENERATION) return
     if (isUntitled(query)) return
     let cancelled = false
     fetch(`${BACKEND_URL}/get_title`, {
