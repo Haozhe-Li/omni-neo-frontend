@@ -5,6 +5,7 @@ import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Cod
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
 import { MarkdownMessage } from '@/components/markdown-message'
+import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import type { ChartArtifact, ReportArtifact } from '@/lib/types'
 
 const EChartsChart = dynamic(
@@ -396,7 +397,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             </button>
             {/* Share dropdown */}
             {shareOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] py-1.5 z-50 overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in-95">
+              <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] py-1.5 z-50 overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in-95">
                 <button 
                   onClick={() => { handleCopy(); setShareOpen(false); }}
                   className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
@@ -405,8 +406,14 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                   {copied ? 'Copied!' : 'Copy full text'}
                 </button>
                 <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                <button 
-                  onClick={() => { 
+                {active.kind === 'report' && (
+                  <>
+                    <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} />
+                    <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+                  </>
+                )}
+                <button
+                  onClick={() => {
                     setShareOpen(false)
                     handleDownload('markdown')
                   }}

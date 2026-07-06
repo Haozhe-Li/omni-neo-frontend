@@ -111,7 +111,7 @@ function MapTextFallback({ spec }: { spec: MapSpec }) {
 // and hands the resolved coordinates to LightChatMiniMap. Shows a placeholder
 // while the JSON is still streaming or geocoding is in progress. Falls back to
 // a plain text list if all geocoding fails.
-function InlineMap({ source }: { source: string }) {
+export function InlineMap({ source }: { source: string }) {
   const [points, setPoints] = useState<LightChatMapPoint[]>([])
   const [geocodingDone, setGeocodingDone] = useState(false)
 
@@ -181,7 +181,7 @@ function InlineMap({ source }: { source: string }) {
 
 // Renders an ```echarts fenced block inline. While the block is still streaming
 // in, its JSON is incomplete and won't parse — show the placeholder until it does.
-function InlineEcharts({ source }: { source: string }) {
+export function InlineEcharts({ source }: { source: string }) {
   let option: any = null
   try {
     option = JSON.parse(source.trim())

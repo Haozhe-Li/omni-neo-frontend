@@ -13,6 +13,7 @@ import { SourcesPanel } from '@/components/sources-panel'
 import { ToolActivity } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
+import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { StreamingText } from '@/components/streaming-text'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
@@ -575,7 +576,7 @@ export function ChatView({
               {shareDropdownOpen === r.id && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShareDropdownOpen(null)} />
-                  <div className="absolute right-0 top-full mt-1.5 w-48 bg-[var(--card)] border border-[var(--border-subtle)] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] z-50 py-1.5 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-1.5 w-64 bg-[var(--card)] border border-[var(--border-subtle)] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] z-50 py-1.5 overflow-hidden">
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
@@ -589,6 +590,8 @@ export function ChatView({
                       {shareCopied === r.id ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
                       {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
                     </button>
+                    <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+                    <ShareToPagesMenu title={r.title || 'report'} content={r.content || ''} />
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                     <button
                       onClick={() => {
