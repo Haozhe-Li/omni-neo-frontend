@@ -66,6 +66,16 @@ function isUntitled(t?: string) {
   return !n || n === 'untitled' || n === 'untitled chat'
 }
 
+const TAB_TITLE_CHAR_LIMIT = 20
+
+function toTabTitle(chatTitle: string) {
+  const trimmed = chatTitle.trim()
+  if (!trimmed) return 'Omni Knows'
+  const truncated =
+    trimmed.length > TAB_TITLE_CHAR_LIMIT ? `${trimmed.slice(0, TAB_TITLE_CHAR_LIMIT)}…` : trimmed
+  return `${truncated} | Omni Knows`
+}
+
 const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf' | 'html') => {
   const title = r.title || 'report'
   const content = `# ${title}\n\n${r.content || ''}`
@@ -1072,6 +1082,18 @@ export function ChatView({
       cancelled = true
     }
   }, [query, threadId, fetchWithAuth])
+
+  // Mirror the chat title onto the browser tab so a copied /thread/{id} link
+  // is recognizable at a glance. Reverts to the site default on unmount (new
+  // chat / navigating away) rather than leaking a stale title.
+  useEffect(() => {
+    const chatTitle = title || query
+    if (isUntitled(chatTitle)) return
+    document.title = toTabTitle(chatTitle)
+    return () => {
+      document.title = 'Omni Knows'
+    }
+  }, [title, query])
 
   // ── scroll model ────────────────────────────────────────────────────────
   // No autoscroll while streaming. Instead: when a query is sent we pin it near
