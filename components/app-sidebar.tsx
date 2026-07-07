@@ -1001,7 +1001,7 @@ export function AppSidebar({
                                 ))}
                             </div>
                         ) : (
-                            searchQuery && !isSearchPending && (
+                            searchQuery.trim() && !isSearchPending && (
                                 <div className="py-8 text-center text-sm text-[var(--muted-foreground)]">
                                     No results found
                                 </div>
