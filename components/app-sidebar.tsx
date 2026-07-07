@@ -541,11 +541,14 @@ export function AppSidebar({
         return [...extra, ...history].sort((a, b) => b.timestamp - a.timestamp)
     }, [history, optimisticThreads])
 
-    const filteredHistory = searchQuery ? (searchResults ?? []) : displayHistory
+const trimmedSearchQuery = searchQuery.trim()
+const filteredHistory = trimmedSearchQuery
+    ? (debouncedSearchQuery === trimmedSearchQuery ? (searchResults ?? []) : [])
+    : displayHistory
 
-    // While waiting on the debounce or the in-flight request, suppress the
-    // "No results" flash rather than rendering it prematurely.
-    const isSearchPending = !!searchQuery && (debouncedSearchQuery !== searchQuery.trim() || isSearchLoading)
+// While waiting on the debounce or the in-flight request, suppress the
+// "No results" flash rather than rendering it prematurely.
+const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimmedSearchQuery || isSearchLoading)
 
     const searchGroupedHistory = useMemo(() => {
         const today: StoredChat[] = []
