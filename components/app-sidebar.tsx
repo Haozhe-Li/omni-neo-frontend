@@ -66,6 +66,10 @@ export function AppSidebar({
     // them (a brand-new thread has no title yet, so /api/threads filters it out).
     const [optimisticThreads, setOptimisticThreads] = useState<Map<string, StoredChat>>(new Map())
     const [searchQuery, setSearchQuery] = useState('')
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
+    const [searchResults, setSearchResults] = useState<StoredChat[] | null>(null)
+    const [isSearchLoading, setIsSearchLoading] = useState(false)
+    const searchRequestIdRef = useRef(0)
     const [isSearchVisible, setIsSearchVisible] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
@@ -199,6 +203,45 @@ export function AppSidebar({
         } catch { }
         finally { setIsSyncing(false) }
     }, [isSignedIn, fetchWithAuth])
+
+    // Debounce the search box before hitting the backend (200ms).
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 200)
+        return () => clearTimeout(handler)
+    }, [searchQuery])
+
+    // Query the backend full-text search endpoint instead of matching locally.
+    useEffect(() => {
+        if (!debouncedSearchQuery) {
+            setSearchResults(null)
+            setIsSearchLoading(false)
+            return
+        }
+        const requestId = ++searchRequestIdRef.current
+        setIsSearchLoading(true)
+        const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+        fetchWithAuth(`${backendUrl}/api/threads/search?q=${encodeURIComponent(debouncedSearchQuery)}&limit=20`)
+            .then(async (res) => {
+                if (requestId !== searchRequestIdRef.current) return
+                if (!res.ok) { setSearchResults([]); return }
+                const data = await res.json()
+                const results: StoredChat[] = Array.isArray(data.results)
+                    ? data.results.map((r: any) => ({
+                        thread_id: r.thread_id,
+                        query: r.title || 'Untitled Chat',
+                        timestamp: new Date(r.updated_at).getTime(),
+                        model: 'auto',
+                    }))
+                    : []
+                setSearchResults(results)
+            })
+            .catch(() => {
+                if (requestId === searchRequestIdRef.current) setSearchResults([])
+            })
+            .finally(() => {
+                if (requestId === searchRequestIdRef.current) setIsSearchLoading(false)
+            })
+    }, [debouncedSearchQuery, fetchWithAuth])
 
     // Listen for gen:start / gen:stop events from the chat view.
     // gen:start optimistically inserts the thread so it shows immediately (a
@@ -352,6 +395,7 @@ export function AppSidebar({
         if (typeof window !== 'undefined') {
             const removedLocalItems = removeThreadLocalCache(threadToDelete)
             setHistory(prev => prev.filter(item => item.thread_id !== threadToDelete))
+            setSearchResults(prev => prev ? prev.filter(item => item.thread_id !== threadToDelete) : prev)
 
             if (!isSignedIn) {
                 // Guest mode: local-only
@@ -412,21 +456,30 @@ export function AppSidebar({
         let deletedCount = 0
         let failedCount = 0
 
-        for (const chat of history) {
-            if (isSignedIn) {
+        if (isSignedIn) {
+            const threadIds = history.map(chat => chat.thread_id)
+            const BATCH_SIZE = 100 // backend truncates anything beyond this per request
+            for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+                const batch = threadIds.slice(i, i + BATCH_SIZE)
                 try {
-                    const res = await fetchWithAuth(`${backendUrl}/api/threads/${chat.thread_id}`, { method: 'DELETE' })
+                    const res = await fetchWithAuth(`${backendUrl}/api/threads/batch-delete`, {
+                        method: 'POST',
+                        body: JSON.stringify({ thread_ids: batch }),
+                    })
                     if (res.ok) {
-                        deletedCount++
+                        const data = await res.json()
+                        const batchDeleted = Array.isArray(data.deleted) ? data.deleted.length : 0
+                        deletedCount += batchDeleted
+                        failedCount += batch.length - batchDeleted
                     } else {
-                        failedCount++
+                        failedCount += batch.length
                     }
                 } catch {
-                    failedCount++
+                    failedCount += batch.length
                 }
-            } else {
-                deletedCount++
             }
+        } else {
+            deletedCount = history.length
         }
 
         // Force clear ALL local history regardless of cloud state
@@ -488,9 +541,11 @@ export function AppSidebar({
         return [...extra, ...history].sort((a, b) => b.timestamp - a.timestamp)
     }, [history, optimisticThreads])
 
-    const filteredHistory = displayHistory.filter(chat =>
-        chat.query.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredHistory = searchQuery ? (searchResults ?? []) : displayHistory
+
+    // While waiting on the debounce or the in-flight request, suppress the
+    // "No results" flash rather than rendering it prematurely.
+    const isSearchPending = !!searchQuery && (debouncedSearchQuery !== searchQuery.trim() || isSearchLoading)
 
     const searchGroupedHistory = useMemo(() => {
         const today: StoredChat[] = []
@@ -946,7 +1001,7 @@ export function AppSidebar({
                                 ))}
                             </div>
                         ) : (
-                            searchQuery && (
+                            searchQuery && !isSearchPending && (
                                 <div className="py-8 text-center text-sm text-[var(--muted-foreground)]">
                                     No results found
                                 </div>
