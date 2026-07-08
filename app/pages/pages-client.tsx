@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { BookOpen, Search, ArrowUpDown } from 'lucide-react'
-import { PagesGrid, type PageSummary } from '@/components/pages-grid'
+import { PagesGrid, PagesHero, type PageSummary } from '@/components/pages-grid'
 
 export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
     const [searchQuery, setSearchQuery] = useState('')
@@ -31,6 +31,10 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
     }, [initialPages, searchQuery, sortBy])
 
     return (
+        <div className="h-full overflow-y-auto custom-scrollbar">
+        <div className="max-w-6xl mx-auto px-6">
+        <PagesHero />
+        <div className="border-t border-[var(--border-subtle)]/40" />
         <section className="py-8 sm:py-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-2">
@@ -76,5 +80,20 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
                 <PagesGrid pages={filteredAndSortedPages} getHref={(p) => `/pages/${p.id}`} />
             )}
         </section>
+        <footer className="w-full py-6 hidden md:flex flex-col gap-4 justify-center items-center animate-fade-up">
+            <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
+                <p>
+                    &copy; {new Date().getFullYear()}{' '}
+                    <a href="https://omniknows.xyz" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors font-[family-name:var(--font-plex)]">Omni Knows</a>
+                    {'. All rights reserved.'}
+                </p>
+                <p>
+                    Made with love by{' '}
+                    <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors">Haozhe Li</a>
+                </p>
+            </div>
+        </footer>
+        </div>
+        </div>
     )
 }
