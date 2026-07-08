@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { BookOpen, Search, ArrowUpDown } from 'lucide-react'
-import { PagesGrid, type PageSummary } from '@/components/pages-grid'
+import { BookOpen, Search, ArrowUpDown, ExternalLink } from 'lucide-react'
+import { PagesGrid, PagesHero, type PageSummary } from '@/components/pages-grid'
 
 export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
     const [searchQuery, setSearchQuery] = useState('')
@@ -31,6 +31,10 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
     }, [initialPages, searchQuery, sortBy])
 
     return (
+        <div className="h-full overflow-y-auto custom-scrollbar">
+        <div className="max-w-6xl mx-auto px-6">
+        <PagesHero />
+        <div className="border-t border-[var(--border-subtle)]/40" />
         <section className="py-8 sm:py-10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-2">
@@ -76,5 +80,15 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
                 <PagesGrid pages={filteredAndSortedPages} getHref={(p) => `/pages/${p.id}`} />
             )}
         </section>
+        <footer className="border-t border-[var(--border-subtle)]/30 py-10 flex items-center justify-between">
+            <span className="text-xs text-[var(--muted-foreground)]">
+                © {new Date().getFullYear()} Omni Knows
+            </span>
+            <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors flex items-center gap-1">
+                About <ExternalLink className="w-3 h-3" />
+            </a>
+        </footer>
+        </div>
+        </div>
     )
 }

@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen } from 'lucide-react'
-import { PagesPanel } from '@/components/pages-panel'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -76,28 +75,7 @@ export function AppSidebar({
     const [threadToDelete, setThreadToDelete] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
-    const [pagesOpen, setPagesOpen] = useState(false)
-    const [pagesResetKey, setPagesResetKey] = useState(0)
-    const previousPathRef = useRef<string | null>(null)
-
-    // Reflect the embedded Pages panel in the URL (base_url/pages) without a real
-    // navigation, and restore whatever URL was showing before it opened once closed.
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-        if (pagesOpen) {
-            if (previousPathRef.current === null) {
-                previousPathRef.current = window.location.pathname + window.location.search
-            }
-            if (window.location.pathname !== '/pages') {
-                window.history.replaceState({}, '', '/pages')
-            }
-        } else if (previousPathRef.current !== null) {
-            window.history.replaceState({}, '', previousPathRef.current)
-            previousPathRef.current = null
-        }
-    }, [pagesOpen])
-
-    const closePages = useCallback(() => setPagesOpen(false), [])
+    const pagesActive = !!pathname && (pathname === '/pages' || pathname.startsWith('/pages/'))
 
     useEffect(() => { setMounted(true) }, [])
 
@@ -656,7 +634,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             <div className="px-3 pb-2 space-y-2">
                 <button
                     onClick={() => {
-                        closePages()
                         setLoadingAction('new-chat')
                         if (onNewChat) onNewChat()
                         setTimeout(() => setLoadingAction(null), 1000)
@@ -685,8 +662,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 {/* Pages */}
                 <button
                     onClick={() => {
-                        setPagesOpen(true)
-                        setPagesResetKey((k) => k + 1)
+                        if (pathname !== '/pages') router.push('/pages')
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
@@ -694,7 +670,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                         hover:bg-[var(--secondary)]
                         transition-all duration-200
                         ${!isExpanded ? 'justify-center' : ''}
-                        ${pagesOpen
+                        ${pagesActive
                             ? 'bg-[var(--secondary)] text-[var(--foreground)]'
                             : 'text-[var(--foreground)]'}
                     `}
@@ -713,7 +689,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 {/* History Toggle Button */}
                 <button
                     onClick={() => {
-                        closePages()
                         setIsSearchVisible(true)
                     }}
                     className={`
@@ -740,7 +715,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                             <button
                                 key={chat.thread_id}
                                 onClick={() => {
-                                    closePages()
                                     if (currentThreadId !== chat.thread_id) {
                                         setLoadingAction(`thread_${chat.thread_id}`)
                                         if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
@@ -813,7 +787,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
                 <button
                     onClick={() => {
-                        closePages()
                         if (pathname !== '/settings') {
                             setLoadingAction('settings')
                             router.push('/settings')
@@ -1117,8 +1090,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 >
                     {SidebarContent}
                 </aside>
-
-                <PagesPanel key={pagesResetKey} isOpen={pagesOpen} onClose={closePages} leftOffset="0px" />
             </>
         )
     }
@@ -1137,7 +1108,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             >
                 {SidebarContent}
             </aside>
-            <PagesPanel key={pagesResetKey} isOpen={pagesOpen} onClose={closePages} leftOffset={isExpanded ? '16rem' : '4rem'} />
         </>
     )
 }
