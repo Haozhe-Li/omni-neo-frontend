@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { BookOpen, Search, ArrowUpDown, ExternalLink } from 'lucide-react'
+import { BookOpen, Search, ArrowUpDown } from 'lucide-react'
 import { PagesGrid, PagesHero, type PageSummary } from '@/components/pages-grid'
 
 export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
@@ -80,13 +80,18 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
                 <PagesGrid pages={filteredAndSortedPages} getHref={(p) => `/pages/${p.id}`} />
             )}
         </section>
-        <footer className="border-t border-[var(--border-subtle)]/30 py-10 flex items-center justify-between">
-            <span className="text-xs text-[var(--muted-foreground)]">
-                © {new Date().getFullYear()} Omni Knows
-            </span>
-            <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors flex items-center gap-1">
-                About <ExternalLink className="w-3 h-3" />
-            </a>
+        <footer className="w-full py-6 hidden md:flex flex-col gap-4 justify-center items-center animate-fade-up">
+            <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
+                <p>
+                    &copy; {new Date().getFullYear()}{' '}
+                    <a href="https://omniknows.xyz" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors font-[family-name:var(--font-plex)]">Omni Knows</a>
+                    {'. All rights reserved.'}
+                </p>
+                <p>
+                    Made with love by{' '}
+                    <a href="https://haozhe.li" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-muted-foreground/30 hover:decoration-foreground hover:text-foreground transition-colors">Haozhe Li</a>
+                </p>
+            </div>
         </footer>
         </div>
         </div>

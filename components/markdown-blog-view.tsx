@@ -31,6 +31,8 @@ interface MarkdownBlogViewProps {
   sources?: Source[]
   /** Rendered inside the app shell (sidebar already provides nav) — hides the standalone header/footer. */
   embedded?: boolean
+  /** Hides the section-label eyebrow and the author/date/reading-time row above the title. Defaults to shown. */
+  showMeta?: boolean
 }
 
 function extractNodeText(node: ReactNode): string {
@@ -198,6 +200,7 @@ export function MarkdownBlogView({
   tags = [],
   sources = [],
   embedded = false,
+  showMeta = true,
 }: MarkdownBlogViewProps) {
   return (
     <div className={embedded ? 'bg-transparent' : 'blog-shell min-h-screen bg-background'}>
@@ -224,15 +227,17 @@ export function MarkdownBlogView({
       <main className={embedded ? '' : 'px-4 py-8 sm:px-6 sm:py-10'}>
         <article className={embedded ? 'mx-auto w-full max-w-[880px]' : 'mx-auto w-full max-w-[880px] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-sm sm:p-8'}>
           <header className="border-b border-border/70 pb-6">
-            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{sectionLabel}</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{title}</h1>
+            {showMeta && <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{sectionLabel}</p>}
+            <h1 className={`${showMeta ? 'mt-2' : ''} text-2xl font-semibold tracking-tight text-foreground sm:text-3xl`}>{title}</h1>
             {excerpt && <p className="mt-4 text-base leading-7 text-muted-foreground">{excerpt}</p>}
 
-            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <span>{author}</span>
-              {publishedAt && <span>{publishedAt}</span>}
-              {readingTime && <span>{readingTime}</span>}
-            </div>
+            {showMeta && (
+              <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                <span>{author}</span>
+                {publishedAt && <span>{publishedAt}</span>}
+                {readingTime && <span>{readingTime}</span>}
+              </div>
+            )}
 
             {tags.length > 0 && (
               <ul className="mt-4 flex flex-wrap gap-2">

@@ -325,10 +325,7 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
           Pages
         </button>
 
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <FileText size={16} strokeWidth={1.5} className="text-[var(--foreground)] opacity-60 shrink-0" />
-          <span className="text-[14px] font-medium text-[var(--foreground)] truncate opacity-90">{title}</span>
-        </div>
+        <div className="flex-1" />
 
         <div className="flex items-center gap-1.5 shrink-0">
           {/* View / Code Toggle */}
@@ -412,7 +409,7 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
             <div className="px-4 py-8 sm:px-6 sm:py-10">
               <MarkdownBlogView
                 embedded
-                sectionLabel="Pages"
+                showMeta={false}
                 title={title}
                 markdown={markdown}
                 author={author}
