@@ -1,3 +1,5 @@
+import type { Source } from './types'
+
 /**
  * Preprocesses markdown content to fix math delimiters and other formatting issues.
  * Specifically handles display math wrapped in [ ] and inline math in ( )
@@ -58,6 +60,31 @@ export function extractCitedNumbers(content: string): Set<number> {
     if (!content) return nums
     for (const match of content.matchAll(/\[(\d+)\](?!\()/g)) nums.add(Number(match[1]))
     return nums
+}
+
+export interface LabeledSource {
+    source: Source
+    /** Display number — the source's real citation number (`n`) when known, else its position. */
+    label: number
+}
+
+// Splits sources into ones the text actually cites inline (`[n]`) and ones that
+// were only fetched/read. Shared by every surface that lists an answer's
+// sources (chat drawer, published Pages report) so "used" means the same thing
+// everywhere. Falls back to a flat, unsplit list (`split: false`) when there's
+// no citation data to go on — e.g. older content saved before `n` was tracked —
+// so that content keeps looking exactly as it did before.
+export function partitionSources(
+    sources: Source[],
+    citedNumbers?: Set<number>
+): { used: LabeledSource[]; unused: LabeledSource[]; split: boolean } {
+    const labeled = sources.map((s, i) => ({ source: s, label: s.n ?? i + 1 }))
+    if (!citedNumbers || citedNumbers.size === 0) {
+        return { used: [], unused: labeled, split: false }
+    }
+    const used = labeled.filter(({ source }) => typeof source.n === 'number' && citedNumbers.has(source.n))
+    const unused = labeled.filter(({ source }) => !(typeof source.n === 'number' && citedNumbers.has(source.n)))
+    return { used, unused, split: true }
 }
 
 export function preprocessMarkdown(content: any, citationNumbers?: Set<number>): string {

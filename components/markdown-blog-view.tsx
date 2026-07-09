@@ -9,14 +9,14 @@ import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download } from 'lucide-react'
+import { Copy, Check, ChevronDown, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
 import { InlineEcharts, InlineMap, CitationBadge, resolveCitationSources } from '@/components/markdown-message'
 import type { Source } from '@/lib/types'
 import { SourceItem } from '@/components/source-item'
-import { preprocessMarkdown } from '@/lib/markdown'
+import { extractCitedNumbers, partitionSources, preprocessMarkdown } from '@/lib/markdown'
 
 interface MarkdownBlogViewProps {
   title: string
@@ -222,6 +222,14 @@ export function MarkdownBlogView({
   }, [sources])
   const citationNumbers = useMemo(() => new Set(citationMap.keys()), [citationMap])
   const markdownComponents = useMemo(() => buildMarkdownComponents(citationMap), [citationMap])
+  // Which source numbers the article actually cites inline, so References can
+  // separate those from sources that were only fetched during research.
+  const citedNumbers = useMemo(() => extractCitedNumbers(markdown), [markdown])
+  const { used: usedSources, unused: unusedSources, split: sourcesSplit } = useMemo(
+    () => partitionSources(sources, citedNumbers),
+    [sources, citedNumbers]
+  )
+  const [showUnused, setShowUnused] = useState(false)
 
   return (
     <div className={embedded ? 'bg-transparent' : 'blog-shell min-h-screen bg-background'}>
@@ -285,11 +293,48 @@ export function MarkdownBlogView({
             {sources.length > 0 && (
               <div className="mt-12 border-t border-border/70 pt-8">
                 <h3 className="mb-6 text-xl font-semibold tracking-tight text-foreground">References</h3>
-                <div className="flex flex-col gap-3">
-                  {sources.map((source, idx) => (
-                    <SourceItem key={idx} source={source} index={idx} />
-                  ))}
-                </div>
+
+                {sourcesSplit ? (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      {usedSources.map(({ source, label }) => (
+                        <SourceItem key={label} source={source} index={label - 1} label={label} />
+                      ))}
+                    </div>
+
+                    {unusedSources.length > 0 && (
+                      <div className="mt-5">
+                        <button
+                          type="button"
+                          onClick={() => setShowUnused((v) => !v)}
+                          className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showUnused ? 'rotate-180' : ''}`} />
+                          {unusedSources.length} more source{unusedSources.length === 1 ? '' : 's'} read but not cited
+                        </button>
+                        <div
+                          className={`grid transition-all duration-300 ease-in-out ${
+                            showUnused ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0'
+                          }`}
+                        >
+                          <div className="overflow-hidden">
+                            <div className="flex flex-col gap-3">
+                              {unusedSources.map(({ source, label }) => (
+                                <SourceItem key={label} source={source} index={label - 1} label={label} />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {sources.map((source, idx) => (
+                      <SourceItem key={idx} source={source} index={idx} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </section>

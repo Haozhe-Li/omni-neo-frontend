@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react'
 import type { Source } from '@/lib/types'
+import { partitionSources } from '@/lib/markdown'
 
 function domainOf(url: string) {
   try {
@@ -34,20 +35,6 @@ function SourceCard({ source, label }: { source: Source; label: number }) {
       )}
     </a>
   )
-}
-
-// Splits sources into ones the answer actually cited inline (`[n]`) and ones
-// that were only fetched/read. Falls back to a flat, unsplit list when there's
-// no citation data to go on (e.g. older messages from before `n` was tracked),
-// so those threads keep looking exactly as they did before.
-function partitionSources(sources: Source[], citedNumbers?: Set<number>) {
-  const labeled = sources.map((s, i) => ({ source: s, label: s.n ?? i + 1 }))
-  if (!citedNumbers || citedNumbers.size === 0) {
-    return { used: [] as typeof labeled, unused: labeled, split: false }
-  }
-  const used = labeled.filter(({ source }) => typeof source.n === 'number' && citedNumbers.has(source.n))
-  const unused = labeled.filter(({ source }) => !(typeof source.n === 'number' && citedNumbers.has(source.n)))
-  return { used, unused, split: true }
 }
 
 function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumbers?: Set<number> }) {
