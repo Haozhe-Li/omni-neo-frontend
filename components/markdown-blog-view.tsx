@@ -298,7 +298,7 @@ export function MarkdownBlogView({
                   <>
                     <div className="flex flex-col gap-3">
                       {usedSources.map(({ source, label }) => (
-                        <SourceItem key={label} source={source} index={label - 1} label={label} />
+                        <SourceItem key={label} source={source} index={label - 1} label={label} showNumber={false} />
                       ))}
                     </div>
 
@@ -320,7 +320,7 @@ export function MarkdownBlogView({
                           <div className="overflow-hidden">
                             <div className="flex flex-col gap-3">
                               {unusedSources.map(({ source, label }) => (
-                                <SourceItem key={label} source={source} index={label - 1} label={label} />
+                                <SourceItem key={label} source={source} index={label - 1} label={label} showNumber={false} />
                               ))}
                             </div>
                           </div>
@@ -331,7 +331,7 @@ export function MarkdownBlogView({
                 ) : (
                   <div className="flex flex-col gap-3">
                     {sources.map((source, idx) => (
-                      <SourceItem key={idx} source={source} index={idx} />
+                      <SourceItem key={idx} source={source} index={idx} showNumber={false} />
                     ))}
                   </div>
                 )}
