@@ -41,13 +41,15 @@ function IconBtn({
 interface AnswerFooterProps {
   content: string
   sources?: Source[]
+  /** This message's own fetched sources (not the thread-wide merged list) — the only valid fallback when the answer cites nothing. */
+  ownSources?: Source[]
   onOpenSources?: (sources: Source[], citedNumbers: Set<number>) => void
   onRegenerate?: (mode: AgentMode) => void
   isLastMessage?: boolean
   regeneratedWith?: AgentMode
 }
 
-export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, isLastMessage, regeneratedWith }: AnswerFooterProps) {
+export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRegenerate, isLastMessage, regeneratedWith }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
@@ -56,17 +58,23 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
   // Which source numbers the answer text actually cites inline (`[n]`), so the
   // sources panel can separate those from sources that were merely fetched.
   const citedNumbers = useMemo(() => extractCitedNumbers(content), [content])
-  // `sources` is now the thread-wide accumulated list (citations can reach
+  // `sources` is the thread-wide accumulated list (citations can reach
   // earlier turns), so the footer badge shows only what THIS answer actually
   // cites rather than every source fetched across the whole conversation.
   const { used: usedSources, split } = useMemo(
     () => partitionSources(sources ?? [], citedNumbers),
     [sources, citedNumbers]
   )
-  // Fall back to the flat list when the split leaves nothing "used" (e.g.
-  // legacy sources saved before `n` was tracked), so the button never just
-  // disappears for content that otherwise clearly has sources.
-  const badgeSources = split && usedSources.length > 0 ? usedSources.map((u) => u.source) : sources ?? []
+  // Fall back to this message's OWN fetched sources (not the thread-wide
+  // `sources` list) when it cites nothing inline — e.g. legacy sources saved
+  // before `n` was tracked. Falling back to the thread-wide list here would
+  // resurface every earlier turn's sources on messages that fetched none of
+  // their own (e.g. a plain "hi" reply after a sourced turn).
+  const badgeSources = split && usedSources.length > 0 ? usedSources.map((u) => u.source) : ownSources ?? []
+  // Panel gets the full thread-wide list when split (so it can still show the
+  // "fetched but unused" section for this answer's citations); otherwise the
+  // same own-sources fallback the badge uses.
+  const sourcesForPanel = split && usedSources.length > 0 ? sources ?? [] : ownSources ?? []
   const hasSources = badgeSources.length > 0
 
   // Close regen dropdown on outside click
@@ -139,7 +147,7 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
 
         {hasSources && (
           <button
-            onClick={() => onOpenSources?.(sources ?? [], citedNumbers)}
+            onClick={() => onOpenSources?.(sourcesForPanel, citedNumbers)}
             className="ml-1 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95"
           >
             <span className="flex -space-x-1.5">

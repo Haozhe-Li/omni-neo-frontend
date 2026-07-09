@@ -44,6 +44,11 @@ interface ChatViewProps {
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
+// Module-level so the array identity is stable across renders — passing a
+// fresh `['...']` literal as a prop every render would re-run TextSelectionMenu's
+// effect (tearing down and re-adding its document listeners) on every re-render.
+const ASSISTANT_MESSAGE_SELECTORS = ['[data-selection-scope="assistant-message"]']
+
 // Temporarily disabled: the LLM-generated title made a follow-up round trip
 // (and a title flip mid-conversation) that wasn't worth it. Threads are
 // titled with the raw first query instead until this is revisited.
@@ -1457,7 +1462,7 @@ export function ChatView({
           containerRef={scrollRef}
           threadId={threadId}
           onFollowUp={handleAskOmni}
-          allowedSelectors={['[data-selection-scope="assistant-message"]']}
+          allowedSelectors={ASSISTANT_MESSAGE_SELECTORS}
         />
         {/* Header */}
         <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-between px-4 z-30 sticky top-0">
@@ -1757,6 +1762,7 @@ export function ChatView({
                           <AnswerFooter
                             content={parsed.text}
                             sources={mergedSources}
+                            ownSources={msg.sources}
                             onOpenSources={openSources}
                             isLastMessage={i === messages.length - 1}
                             onRegenerate={(rewindMode) => handleRewind(undefined, rewindMode)}

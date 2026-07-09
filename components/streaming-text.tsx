@@ -25,14 +25,17 @@ const BASE_CPS = 80 // characters/sec revealed at minimum
 const CATCHUP = 4 // proportional drain: a bigger backlog reveals faster
 
 /**
- * Buffered typewriter: reveals the answer character-by-character at a smooth,
- * self-pacing rate rather than dumping whole lines/blocks or jittering one token
- * at a time. Driven by a single rAF loop that interpolates the shown length
- * toward the content length each frame.
+ * Always renders through the same `Typewriter` element regardless of `animate`,
+ * rather than switching between `<Typewriter>` and a bare `<MarkdownMessage>`.
+ * Swapping element types at this position made React unmount and recreate the
+ * whole answer's DOM the instant a message finished streaming (`animate` flips
+ * true -> false) — which silently collapses any browser text selection anchored
+ * inside it (the Selection API drops a selection when its nodes are removed),
+ * hiding the follow-up/check-source popup with no error. Keeping one stable
+ * element type lets React patch the existing nodes in place instead.
  */
 export function StreamingText({ content, animate, sources }: StreamingTextProps) {
-  if (!animate) return <MarkdownMessage content={content} sources={sources} />
-  return <Typewriter content={content} sources={sources} />
+  return <Typewriter content={content} animate={animate} sources={sources} />
 }
 
 // Never leave a fenced code block half-open mid-reveal: if the visible slice has
@@ -48,14 +51,21 @@ function trimDanglingFence(s: string): string {
   return s + '\n```'
 }
 
-function Typewriter({ content, sources }: { content: string; sources?: Source[] }) {
+function Typewriter({ content, animate, sources }: { content: string; animate: boolean; sources?: Source[] }) {
   // Latest content is read off a ref so the rAF loop can stay mounted once.
   const contentRef = useRef(content)
   contentRef.current = content
-  const shownRef = useRef(0)
-  const [shown, setShown] = useState(0)
+  const shownRef = useRef(animate ? 0 : content.length)
+  const [shown, setShown] = useState(shownRef.current)
 
   useEffect(() => {
+    if (!animate) {
+      // Not animating (historical message, or streaming just finished): reveal
+      // everything immediately instead of running the rAF reveal loop.
+      shownRef.current = contentRef.current.length
+      setShown(shownRef.current)
+      return
+    }
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
@@ -77,8 +87,8 @@ function Typewriter({ content, sources }: { content: string; sources?: Source[] 
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [animate])
 
   const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
-  return <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} />
+  return <MarkdownMessage content={animate ? trimDanglingFence(slice) : contentRef.current} sources={sources} />
 }
