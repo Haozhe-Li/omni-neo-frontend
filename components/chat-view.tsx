@@ -1757,6 +1757,7 @@ export function ChatView({
                           <AnswerFooter
                             content={parsed.text}
                             sources={mergedSources}
+                            ownSources={msg.sources}
                             onOpenSources={openSources}
                             isLastMessage={i === messages.length - 1}
                             onRegenerate={(rewindMode) => handleRewind(undefined, rewindMode)}
