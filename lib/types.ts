@@ -47,6 +47,9 @@ export interface Source {
   title: string
   url: string
   content?: string
+  /** Citation number this source is referenced by as `[n]` in the answer text. Scoped to a single message. */
+  n?: number
+  date?: string
 }
 
 export interface ToolStep {

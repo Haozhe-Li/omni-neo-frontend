@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { MarkdownMessage } from '@/components/markdown-message'
+import type { Source } from '@/lib/types'
 
 interface StreamingTextProps {
   /** The full (report-stripped) answer accumulated so far. */
@@ -12,6 +13,8 @@ interface StreamingTextProps {
    * just finished).
    */
   animate: boolean
+  /** Sources for this message, used to render `[n]` markers as citation badges. */
+  sources?: Source[]
 }
 
 // Reveal pacing. The cursor advances at a steady base rate, and faster when it's
@@ -27,9 +30,9 @@ const CATCHUP = 4 // proportional drain: a bigger backlog reveals faster
  * at a time. Driven by a single rAF loop that interpolates the shown length
  * toward the content length each frame.
  */
-export function StreamingText({ content, animate }: StreamingTextProps) {
-  if (!animate) return <MarkdownMessage content={content} />
-  return <Typewriter content={content} />
+export function StreamingText({ content, animate, sources }: StreamingTextProps) {
+  if (!animate) return <MarkdownMessage content={content} sources={sources} />
+  return <Typewriter content={content} sources={sources} />
 }
 
 // Never leave a fenced code block half-open mid-reveal: if the visible slice has
@@ -45,7 +48,7 @@ function trimDanglingFence(s: string): string {
   return s + '\n```'
 }
 
-function Typewriter({ content }: { content: string }) {
+function Typewriter({ content, sources }: { content: string; sources?: Source[] }) {
   // Latest content is read off a ref so the rAF loop can stay mounted once.
   const contentRef = useRef(content)
   contentRef.current = content
@@ -77,5 +80,5 @@ function Typewriter({ content }: { content: string }) {
   }, [])
 
   const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
-  return <MarkdownMessage content={trimDanglingFence(slice)} />
+  return <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} />
 }

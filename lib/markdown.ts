@@ -23,16 +23,31 @@ function transformMath(text: string): string {
         .replace(/\[\s*(\\.*|.*(\\text|\\frac|\\sum|\\approx|\\times).*?)\s*\]/g, '$$$1$$')
 }
 
-export function preprocessMarkdown(content: any): string {
+// Rewrites `[n]` inline citation markers into `[n](citation:n)` so they parse
+// as ordinary markdown links (intercepted by a custom `a` renderer) instead of
+// literal bracketed text. Only markers with a known source are rewritten —
+// stray `[3]` with no matching source is left as plain text. Must run before
+// transformMath, since a citation-marker-only line like `[1]` would otherwise
+// be mistaken for a display-math block.
+function transformCitations(text: string, citationNumbers?: Set<number>): string {
+    if (!citationNumbers || citationNumbers.size === 0) return text
+    return text.replace(/(?<!\])\[(\d+)\](?!\()/g, (match, n) => {
+        return citationNumbers.has(Number(n)) ? `[${n}](citation:${n})` : match
+    })
+}
+
+export function preprocessMarkdown(content: any, citationNumbers?: Set<number>): string {
     if (!content) return ''
 
     // Ensure content is a string before using .replace
     const text = typeof content === 'string' ? content : String(content)
 
-    // Split out fenced code blocks and only run the math transforms on the prose
-    // between them. The capturing group keeps the fences in the result array.
+    // Split out fenced code blocks and only run citation/math transforms on the
+    // prose between them. The capturing group keeps the fences in the result array.
     return text
         .split(/(```[\s\S]*?```)/g)
-        .map((segment) => (segment.startsWith('```') ? segment : transformMath(segment)))
+        .map((segment) =>
+            segment.startsWith('```') ? segment : transformMath(transformCitations(segment, citationNumbers))
+        )
         .join('')
 }
