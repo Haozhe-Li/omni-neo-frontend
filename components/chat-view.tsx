@@ -473,8 +473,10 @@ export function ChatView({
   // Sources drawer (small right-hand panel, opened from an answer's footer).
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [activeSources, setActiveSources] = useState<Source[]>([])
-  const openSources = useCallback((s: Source[]) => {
+  const [activeCitedNumbers, setActiveCitedNumbers] = useState<Set<number>>(new Set())
+  const openSources = useCallback((s: Source[], citedNumbers: Set<number>) => {
     setActiveSources(s)
+    setActiveCitedNumbers(citedNumbers)
     setSourcesOpen(true)
   }, [])
 
@@ -2132,7 +2134,7 @@ export function ChatView({
       )}
 
       {/* Sources drawer — small overlay panel, slides in over the right edge */}
-      <SourcesPanel sources={activeSources} open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
+      <SourcesPanel sources={activeSources} citedNumbers={activeCitedNumbers} open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
     </div>
   )
 }

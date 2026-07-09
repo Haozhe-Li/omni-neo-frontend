@@ -11,7 +11,7 @@ function domainOf(url: string) {
   }
 }
 
-function SourceCard({ source, index }: { source: Source; index: number }) {
+function SourceCard({ source, label }: { source: Source; label: number }) {
   const domain = domainOf(source.url)
   return (
     <a
@@ -26,7 +26,7 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
           <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
-        <span className="shrink-0 text-[11px] font-mono text-[var(--muted-foreground)]/70">{index + 1}</span>
+        <span className="shrink-0 text-[11px] font-mono text-[var(--muted-foreground)]/70">{label}</span>
       </div>
       <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{source.title}</div>
       {source.content && (
@@ -36,8 +36,66 @@ function SourceCard({ source, index }: { source: Source; index: number }) {
   )
 }
 
+// Splits sources into ones the answer actually cited inline (`[n]`) and ones
+// that were only fetched/read. Falls back to a flat, unsplit list when there's
+// no citation data to go on (e.g. older messages from before `n` was tracked),
+// so those threads keep looking exactly as they did before.
+function partitionSources(sources: Source[], citedNumbers?: Set<number>) {
+  const labeled = sources.map((s, i) => ({ source: s, label: s.n ?? i + 1 }))
+  if (!citedNumbers || citedNumbers.size === 0) {
+    return { used: [] as typeof labeled, unused: labeled, split: false }
+  }
+  const used = labeled.filter(({ source }) => typeof source.n === 'number' && citedNumbers.has(source.n))
+  const unused = labeled.filter(({ source }) => !(typeof source.n === 'number' && citedNumbers.has(source.n)))
+  return { used, unused, split: true }
+}
+
+function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumbers?: Set<number> }) {
+  const { used, unused, split } = partitionSources(sources, citedNumbers)
+
+  if (!split) {
+    return (
+      <>
+        {sources.map((s, i) => (
+          <SourceCard key={i} source={s} label={s.n ?? i + 1} />
+        ))}
+      </>
+    )
+  }
+
+  return (
+    <>
+      {used.length > 0 && (
+        <>
+          <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+            {used.length} source{used.length === 1 ? '' : 's'} used
+          </p>
+          {used.map(({ source, label }) => (
+            <SourceCard key={label} source={source} label={label} />
+          ))}
+        </>
+      )}
+      {unused.length > 0 && (
+        <>
+          {used.length > 0 && <div className="border-t border-[var(--border-subtle)] pt-3" />}
+          <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+            {unused.length} source{unused.length === 1 ? '' : 's'} read but not used
+          </p>
+          {unused.map(({ source, label }) => (
+            <SourceCard key={label} source={source} label={label} />
+          ))}
+        </>
+      )}
+    </>
+  )
+}
+
 interface SourcesPanelProps {
   sources: Source[]
+  /** Source numbers (`Source.n`) actually cited inline in the answer text, used
+   * to split "used" sources from ones that were only fetched. Omit or pass an
+   * empty set to show the flat, unsplit list. */
+  citedNumbers?: Set<number>
   open: boolean
   onClose: () => void
 }
@@ -46,7 +104,7 @@ interface SourcesPanelProps {
  * A small right-hand drawer that lists the answer's sources (Perplexity-style),
  * opened on demand from the answer footer instead of expanding inline.
  */
-export function SourcesPanel({ sources, open, onClose }: SourcesPanelProps) {
+export function SourcesPanel({ sources, citedNumbers, open, onClose }: SourcesPanelProps) {
   return (
     <>
       {/* Mobile: Full-screen overlay */}
@@ -61,9 +119,7 @@ export function SourcesPanel({ sources, open, onClose }: SourcesPanelProps) {
             </button>
           </div>
           <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
-            {sources.map((s, i) => (
-              <SourceCard key={i} source={s} index={i} />
-            ))}
+            <SourcesList sources={sources} citedNumbers={citedNumbers} />
           </div>
         </div>
       )}
@@ -85,9 +141,7 @@ export function SourcesPanel({ sources, open, onClose }: SourcesPanelProps) {
             </button>
           </div>
           <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
-            {sources.map((s, i) => (
-              <SourceCard key={i} source={s} index={i} />
-            ))}
+            <SourcesList sources={sources} citedNumbers={citedNumbers} />
           </div>
         </div>
       </div>
