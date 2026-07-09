@@ -11,6 +11,8 @@ interface SourceItemProps {
      * instead of the default `index + 1`. Used when sources are split into
      * groups and `index` no longer matches their original position. */
     label?: number
+    /** Hides the numbered badge entirely. Defaults to shown. */
+    showNumber?: boolean
 }
 
 function getSourceDomain(url: string) {
@@ -21,7 +23,7 @@ function getSourceDomain(url: string) {
     }
 }
 
-export function SourceItem({ source, index, label }: SourceItemProps) {
+export function SourceItem({ source, index, label, showNumber = true }: SourceItemProps) {
     const [isExpanded, setIsExpanded] = useState(false)
 
     return (
@@ -30,9 +32,11 @@ export function SourceItem({ source, index, label }: SourceItemProps) {
             className={`flex flex-col gap-2 rounded-lg border border-border/40 bg-card p-3 transition-colors hover:bg-accent/5 ${source.content ? 'cursor-pointer' : ''}`}
         >
             <div className="flex items-center gap-3">
-                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10 text-[10px] font-mono font-medium text-accent">
-                    {label ?? index + 1}
-                </span>
+                {showNumber && (
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10 text-[10px] font-mono font-medium text-accent">
+                        {label ?? index + 1}
+                    </span>
+                )}
                 <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded-sm bg-secondary flex items-center justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
