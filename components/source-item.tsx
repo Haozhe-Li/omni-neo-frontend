@@ -7,6 +7,10 @@ import type { Source } from '@/lib/types'
 interface SourceItemProps {
     source: Source
     index: number
+    /** Overrides the displayed number (e.g. the source's real citation number)
+     * instead of the default `index + 1`. Used when sources are split into
+     * groups and `index` no longer matches their original position. */
+    label?: number
 }
 
 function getSourceDomain(url: string) {
@@ -17,7 +21,7 @@ function getSourceDomain(url: string) {
     }
 }
 
-export function SourceItem({ source, index }: SourceItemProps) {
+export function SourceItem({ source, index, label }: SourceItemProps) {
     const [isExpanded, setIsExpanded] = useState(false)
 
     return (
@@ -27,7 +31,7 @@ export function SourceItem({ source, index }: SourceItemProps) {
         >
             <div className="flex items-center gap-3">
                 <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10 text-[10px] font-mono font-medium text-accent">
-                    {index + 1}
+                    {label ?? index + 1}
                 </span>
                 <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded-sm bg-secondary flex items-center justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

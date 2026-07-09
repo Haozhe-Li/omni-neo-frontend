@@ -1,7 +1,9 @@
 'use client'
 
-import { X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronDown, X } from 'lucide-react'
 import type { Source } from '@/lib/types'
+import { partitionSources } from '@/lib/markdown'
 
 function domainOf(url: string) {
   try {
@@ -11,7 +13,7 @@ function domainOf(url: string) {
   }
 }
 
-function SourceCard({ source, label }: { source: Source; label: number }) {
+function SourceCard({ source }: { source: Source }) {
   const domain = domainOf(source.url)
   return (
     <a
@@ -26,7 +28,6 @@ function SourceCard({ source, label }: { source: Source; label: number }) {
           <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
         </span>
         <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
-        <span className="shrink-0 text-[11px] font-mono text-[var(--muted-foreground)]/70">{label}</span>
       </div>
       <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{source.title}</div>
       {source.content && (
@@ -36,28 +37,17 @@ function SourceCard({ source, label }: { source: Source; label: number }) {
   )
 }
 
-// Splits sources into ones the answer actually cited inline (`[n]`) and ones
-// that were only fetched/read. Falls back to a flat, unsplit list when there's
-// no citation data to go on (e.g. older messages from before `n` was tracked),
-// so those threads keep looking exactly as they did before.
-function partitionSources(sources: Source[], citedNumbers?: Set<number>) {
-  const labeled = sources.map((s, i) => ({ source: s, label: s.n ?? i + 1 }))
-  if (!citedNumbers || citedNumbers.size === 0) {
-    return { used: [] as typeof labeled, unused: labeled, split: false }
-  }
-  const used = labeled.filter(({ source }) => typeof source.n === 'number' && citedNumbers.has(source.n))
-  const unused = labeled.filter(({ source }) => !(typeof source.n === 'number' && citedNumbers.has(source.n)))
-  return { used, unused, split: true }
-}
-
 function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumbers?: Set<number> }) {
   const { used, unused, split } = partitionSources(sources, citedNumbers)
+  const [showUnused, setShowUnused] = useState(false)
+  // Collapse back down whenever we're showing a different answer's sources.
+  useEffect(() => setShowUnused(false), [sources])
 
   if (!split) {
     return (
       <>
         {sources.map((s, i) => (
-          <SourceCard key={i} source={s} label={s.n ?? i + 1} />
+          <SourceCard key={i} source={s} />
         ))}
       </>
     )
@@ -71,20 +61,28 @@ function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumber
             {used.length} source{used.length === 1 ? '' : 's'} used
           </p>
           {used.map(({ source, label }) => (
-            <SourceCard key={label} source={source} label={label} />
+            <SourceCard key={label} source={source} />
           ))}
         </>
       )}
       {unused.length > 0 && (
-        <>
-          {used.length > 0 && <div className="border-t border-[var(--border-subtle)] pt-3" />}
-          <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        <div className={used.length > 0 ? 'border-t border-[var(--border-subtle)] pt-3' : ''}>
+          <button
+            type="button"
+            onClick={() => setShowUnused((v) => !v)}
+            className="flex w-full items-center gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+          >
+            <ChevronDown size={12} className={`shrink-0 transition-transform duration-200 ${showUnused ? 'rotate-180' : ''}`} />
             {unused.length} source{unused.length === 1 ? '' : 's'} read but not used
-          </p>
-          {unused.map(({ source, label }) => (
-            <SourceCard key={label} source={source} label={label} />
-          ))}
-        </>
+          </button>
+          <div className={`grid transition-all duration-300 ease-in-out ${showUnused ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0'}`}>
+            <div className="space-y-3 overflow-hidden">
+              {unused.map(({ source, label }) => (
+                <SourceCard key={label} source={source} />
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
