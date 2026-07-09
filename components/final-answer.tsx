@@ -497,7 +497,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
       {!isReadOnly && (
         <TextSelectionMenu
           containerRef={containerRef}
-          sources={sources}
+          showCheckSource={false}
           onFollowUp={onFollowUp}
           allowedSelectors={['[data-selection-scope="canvas-body"]']}
         />

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
@@ -15,6 +15,7 @@ import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { StreamingText } from '@/components/streaming-text'
+import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
 import { getMemories, appendQueryToMemoryQueue } from '@/lib/memories'
@@ -437,6 +438,9 @@ export function ChatView({
         ]
   )
   const [input, setInput] = useState('')
+  // Text quoted via the "Ask Omni" text-selection action, shown as a chip above
+  // the composer and attached to the next outgoing message as `follow_up_content`.
+  const [followUpText, setFollowUpText] = useState('')
   const [isLoading, setIsLoading] = useState(() => (preloadedThread ? !!preloadedThread.is_generating : true))
   const [mode, setMode] = useState<AgentMode>(() => preloadedThread?.messages?.[0]?.mode ?? initialMode)
   // A user-set title (persisted backend-side) always wins over the raw first
@@ -478,6 +482,14 @@ export function ChatView({
     setActiveSources(s)
     setActiveCitedNumbers(citedNumbers)
     setSourcesOpen(true)
+  }, [])
+
+  // "Ask Omni" from the text-selection menu: quote the selected passage above
+  // the composer instead of sending immediately, so the user can add their
+  // actual question before it goes out.
+  const handleAskOmni = useCallback((text: string) => {
+    setFollowUpText(text)
+    setTimeout(() => inputRef.current?.focus(), 50)
   }, [])
 
   // Open the panel and collapse the app sidebar (they compete for width).
@@ -644,7 +656,7 @@ export function ChatView({
           </h1>
 
           <div className="relative z-0 text-[15px] leading-relaxed text-[var(--foreground)] opacity-90">
-            <MarkdownMessage content={stripInteractiveBlocks(r.content || 'Drafting report...')} />
+            <MarkdownMessage content={stripInteractiveBlocks(r.content || 'Drafting report...')} sources={r.sources} />
           </div>
 
           {/* Gradient Fade-out at the bottom */}
@@ -676,6 +688,26 @@ export function ChatView({
   const [pinTick, setPinTick] = useState(0)
   const requestPin = useCallback(() => setPinTick((t) => t + 1), [])
 
+  // Source numbering is accumulated across the whole thread now (not reset
+  // per turn), and the model can cite a source fetched in an earlier turn
+  // without it appearing in the current message's own `sources` array. So
+  // citation resolution needs a thread-wide `n -> source` map built from
+  // every message's `sources`, not just the message being rendered.
+  const mergedSources = useMemo(() => {
+    const byNumber = new Map<number, Source>()
+    const unnumbered: Source[] = []
+    for (const m of messages) {
+      for (const s of m.sources ?? []) {
+        if (typeof s.n === 'number') {
+          if (!byNumber.has(s.n)) byNumber.set(s.n, s)
+        } else {
+          unnumbered.push(s)
+        }
+      }
+    }
+    return [...unnumbered, ...[...byNumber.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s)]
+  }, [messages])
+
   // Reports stream inline as <report> blocks; questions appear as <question>
   // blocks. Both are stripped from the displayed text and rendered separately.
   const parsedByIndex = useMemo(
@@ -698,12 +730,12 @@ export function ChatView({
             return { type: 'text' as const, content: pq.text }
           })
           .filter((seg) => seg.type !== 'text' || seg.content.trim())
-        // A report's `[n]` citations share the owning message's source numbering,
-        // so carry `m.sources` along for the panel to resolve them against.
-        const reports = withReports.reports.map((r) => ({ ...r, sources: m.sources }))
+        // A report's `[n]` citations can reach any source fetched so far in the
+        // thread, so resolve against the thread-wide merged map, not just `m.sources`.
+        const reports = withReports.reports.map((r) => ({ ...r, sources: mergedSources }))
         return { text, reports, question, questionPending, segments }
       }),
-    [messages]
+    [messages, mergedSources]
   )
 
   // Flatten artifacts/reports across the whole conversation for the panel.
@@ -711,7 +743,7 @@ export function ChatView({
   const parsedReports: ParsedReport[] = parsedByIndex.flatMap((p) => p.reports)
   // Older threads stored reports as a separate array (pre inline-streaming);
   // keep rendering those so historical conversations don't lose their reports.
-  const legacyReports: ReportArtifact[] = messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? m.sources })))
+  const legacyReports: ReportArtifact[] = messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? mergedSources })))
   const allReports: ReportArtifact[] = [...parsedReports, ...legacyReports]
   const draftingReport = parsedReports.some((r) => !r.complete)
   const hasPanelContent = allArtifacts.length > 0 || allReports.length > 0 || draftingReport
@@ -934,7 +966,7 @@ export function ChatView({
 
   // ── send a turn ────────────────────────────────────────────────────────
   const runQuery = useCallback(
-    async (queryText: string, baseHistory: ChatMessage[], fileIds?: Record<string, string>[]) => {
+    async (queryText: string, baseHistory: ChatMessage[], fileIds?: Record<string, string>[], followUpContent?: string) => {
       setIsLoading(true)
       // The assistant reply will be appended right after baseHistory.
       setStreamingIndex(baseHistory.length)
@@ -956,6 +988,7 @@ export function ChatView({
         if (Object.keys(personalization).length) payload.personalization = personalization
         if (fileIds && fileIds.length) payload.attached_file_ids = fileIds
         if (activeSkill) payload.skill = activeSkill
+        if (followUpContent) payload.follow_up_content = followUpContent
         appendQueryToMemoryQueue(queryText)
 
         const res = await fetchWithAuth(`${BACKEND_URL}/chat`, {
@@ -1308,15 +1341,18 @@ export function ChatView({
     const readyFiles = attachedFiles.filter((f) => f.status === 'ready')
     if (!input.trim() && readyFiles.length === 0) return
     const activeFiles = readyFiles.map((f) => ({ id: f.id!, name: f.name, type: f.type }))
+    const followUpAtSend = followUpText.trim()
     const userMsg: ChatMessage = {
       role: 'user',
       content: input,
       ...(activeFiles.length ? { attachedFiles: activeFiles } : {}),
+      ...(followUpAtSend ? { follow_up_content: followUpAtSend } : {}),
     }
     const baseHistory = [...messages, userMsg]
     const queryText = input
     setInput('')
     setAttachedFiles([])
+    setFollowUpText('')
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
     }
@@ -1326,7 +1362,7 @@ export function ChatView({
     setStreamingIndex(baseHistory.length)
     requestPin() // pin this new query to the top
     const fileIds = activeFiles.map((f) => ({ [f.id]: f.name }))
-    await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined)
+    await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined, followUpAtSend || undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1417,6 +1453,12 @@ export function ChatView({
     <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
       {/* Main column */}
       <div className="flex flex-col h-full relative min-w-0 flex-1 transition-all duration-300">
+        <TextSelectionMenu
+          containerRef={scrollRef}
+          threadId={threadId}
+          onFollowUp={handleAskOmni}
+          allowedSelectors={['[data-selection-scope="assistant-message"]']}
+        />
         {/* Header */}
         <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-between px-4 z-30 sticky top-0">
           <div className="flex items-center gap-2">
@@ -1564,6 +1606,12 @@ export function ChatView({
                       </div>
                     ) : (
                       <div className="rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[15px] text-foreground whitespace-pre-wrap break-words min-w-0 overflow-hidden">
+                        {msg.follow_up_content && (
+                          <div className="mb-2 pb-2 border-b border-[var(--border)]/50 flex items-start gap-1.5 text-[13px] text-muted-foreground italic">
+                            <MessageSquarePlus size={13} className="mt-0.5 shrink-0 opacity-70" />
+                            <span className="line-clamp-3">{msg.follow_up_content}</span>
+                          </div>
+                        )}
                         {msg.content}
                       </div>
                     )}
@@ -1612,7 +1660,7 @@ export function ChatView({
                                         key={`text-${i}-${bi}-${si}`}
                                         content={parseQuestion(seg.content).text}
                                         animate={isCurrentlyStreaming && isLastBlock}
-                                        sources={msg.sources}
+                                        sources={mergedSources}
                                       />
                                     ) : null
                                   ) : (
@@ -1635,7 +1683,7 @@ export function ChatView({
                             {/* answer text and inline report cards, in source order */}
                             {parsed.segments.map((seg, si) =>
                               seg.type === 'text' ? (
-                                <StreamingText key={`text-${i}-${si}`} content={seg.content} animate={i === streamingIndex} sources={msg.sources} />
+                                <StreamingText key={`text-${i}-${si}`} content={seg.content} animate={i === streamingIndex} sources={mergedSources} />
                               ) : (
                                 <div key={`report-wrap-${i}-${si}`} className="my-3 w-full">
                                   {renderReportCard(seg.report)}
@@ -1708,7 +1756,7 @@ export function ChatView({
                         {(parsed.text || msg.stoppedByUser) && !(i === streamingIndex && isLoading) ? (
                           <AnswerFooter
                             content={parsed.text}
-                            sources={msg.sources}
+                            sources={mergedSources}
                             onOpenSources={openSources}
                             isLastMessage={i === messages.length - 1}
                             onRegenerate={(rewindMode) => handleRewind(undefined, rewindMode)}
@@ -1750,6 +1798,24 @@ export function ChatView({
               {attachedFiles.length > 0 && (
                 <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
+                </div>
+              )}
+              {followUpText && (
+                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-start gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/50 px-3 py-2">
+                    <MessageSquarePlus size={14} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
+                    <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-[var(--muted-foreground)] line-clamp-2">
+                      {followUpText}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setFollowUpText('')}
+                      title="Remove quoted text"
+                      className="shrink-0 p-0.5 rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
                 </div>
               )}
               <textarea

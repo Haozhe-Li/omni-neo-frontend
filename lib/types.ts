@@ -47,7 +47,13 @@ export interface Source {
   title: string
   url: string
   content?: string
-  /** Citation number this source is referenced by as `[n]` in the answer text. Scoped to a single message. */
+  /**
+   * Citation number this source is referenced by as `[n]` in the answer text.
+   * Accumulated across the whole thread (not reset per turn) — a later
+   * message's `[n]` may point at a source that first appeared in an earlier
+   * message's `sources` array, so resolving `[n]` requires merging every
+   * message's `sources` in the thread into one `n -> source` map.
+   */
   n?: number
   date?: string
 }

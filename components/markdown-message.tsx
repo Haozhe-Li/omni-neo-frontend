@@ -458,7 +458,12 @@ function buildMarkdownComponents(citationMap: Map<number, Source>): Components {
 interface MarkdownMessageProps {
   content: string
   className?: string
-  /** Sources for this message, used to render `[n]` markers as citation badges. */
+  /**
+   * Sources used to render `[n]` markers as citation badges. Since citation
+   * numbering accumulates across the thread, callers should pass the
+   * thread-wide merged `n -> source` list, not just this message's own
+   * freshly-fetched sources — a `[n]` here may point at an earlier turn's source.
+   */
   sources?: Source[]
 }
 

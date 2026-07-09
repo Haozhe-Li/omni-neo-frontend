@@ -2,7 +2,7 @@ import { useRef, useLayoutEffect, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { BookOpen, Copy, MessageSquarePlus, X, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Source } from '@/lib/types'
+import { useApi } from '@/hooks/useApi'
 import {
     Dialog,
     DialogContent,
@@ -11,15 +11,30 @@ import {
     DialogDescription,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+
+const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+
+// Single best-match result from `POST /check_source`. `null` means no
+// confident match was found across the thread's accumulated sources.
+interface SourceMatch {
+    n: number
+    title: string
+    url: string
+    chunk: string
+    score: number
+}
+
 interface TextSelectionMenuProps {
     containerRef: React.RefObject<HTMLElement | null>
-    sources?: Source[]
+    /** Needed to scope `/check_source` lookups to this thread's accumulated sources. */
+    threadId?: string
     showCheckSource?: boolean
     onFollowUp?: (text: string) => void
     allowedSelectors?: string[]
 }
 
-export function TextSelectionMenu({ containerRef, sources = [], showCheckSource = true, onFollowUp, allowedSelectors = [] }: TextSelectionMenuProps) {
+export function TextSelectionMenu({ containerRef, threadId, showCheckSource = true, onFollowUp, allowedSelectors = [] }: TextSelectionMenuProps) {
+    const { fetchWithAuth } = useApi()
     // We use ref-based positioning for performance (avoiding re-renders on scroll)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -28,7 +43,7 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
     const [selectedText, setSelectedText] = useState('')
     // We keep track of the range to query its current position during scroll
     const activeRangeRef = useRef<Range | null>(null)
-    const [verifiedSource, setVerifiedSource] = useState<Source | null>(null)
+    const [verifiedSource, setVerifiedSource] = useState<SourceMatch | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
 
     // Use useLayoutEffect to prevent initial flash at 0,0 by updating position before paint
@@ -147,36 +162,35 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
         const textToVerify = selectedText
         window.getSelection()?.removeAllRanges()
 
+        if (textToVerify.length < 10) {
+            toast.error('Selection is too short to check')
+            return
+        }
+        if (!threadId) {
+            toast.error('Check source is unavailable here')
+            return
+        }
+
         const toastId = toast.loading('Checking source...')
 
         try {
-            const apiEndpoint = process.env.NEXT_PUBLIC_BACKEND_URL
-                ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/check_source`
-                : '/api/check_source'
-
-            const response = await fetch(apiEndpoint, {
+            const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    thread_id: threadId,
                     text_selection: textToVerify,
-                    source: {
-                        final_sources: sources
-                    }
                 }),
             })
-
-            if (!response.ok) throw new Error('Failed to verify source')
 
             const data = await response.json()
             toast.dismiss(toastId)
 
-            if (data && data.title) {
-                // Found a matching source
-                setVerifiedSource(data)
-            } else {
-                // No matching source found
-                setVerifiedSource(null)
+            if (!response.ok) {
+                toast.error(data?.error || 'Failed to verify source')
+                return
             }
+
+            setVerifiedSource(data?.match ?? null)
             setIsDialogOpen(true)
 
         } catch (error) {
@@ -256,7 +270,10 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
                                 <div className="px-6 py-6 flex flex-col gap-6">
                                     {/* Title & Link */}
                                     <div className="flex flex-col gap-2">
-                                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Source Title</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Source [{verifiedSource.n}]</span>
+                                            <span className="text-xs font-medium text-accent/80">{Math.round(verifiedSource.score * 100)}% match</span>
+                                        </div>
                                         <a
                                             href={verifiedSource.url}
                                             target="_blank"
@@ -269,11 +286,11 @@ export function TextSelectionMenu({ containerRef, sources = [], showCheckSource 
                                     </div>
 
                                     {/* Content */}
-                                    {verifiedSource.content && (
+                                    {verifiedSource.chunk && (
                                         <div className="flex flex-col gap-2">
                                             <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Passage Context</span>
                                             <div className="bg-muted/30 rounded-lg p-5 border border-border/40 font-serif text-[15px] leading-relaxed whitespace-pre-wrap text-foreground/90 select-text">
-                                                {verifiedSource.content}
+                                                {verifiedSource.chunk}
                                             </div>
                                         </div>
                                     )}

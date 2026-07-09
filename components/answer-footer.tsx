@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw, Zap, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import type { AgentMode, Source } from '@/lib/types'
-import { extractCitedNumbers } from '@/lib/markdown'
+import { extractCitedNumbers, partitionSources } from '@/lib/markdown'
 
 function domainOf(url: string) {
   try {
@@ -53,10 +53,21 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
   const [disliked, setDisliked] = useState(false)
   const [regenOpen, setRegenOpen] = useState(false)
   const regenRef = useRef<HTMLDivElement>(null)
-  const hasSources = !!sources && sources.length > 0
   // Which source numbers the answer text actually cites inline (`[n]`), so the
   // sources panel can separate those from sources that were merely fetched.
   const citedNumbers = useMemo(() => extractCitedNumbers(content), [content])
+  // `sources` is now the thread-wide accumulated list (citations can reach
+  // earlier turns), so the footer badge shows only what THIS answer actually
+  // cites rather than every source fetched across the whole conversation.
+  const { used: usedSources, split } = useMemo(
+    () => partitionSources(sources ?? [], citedNumbers),
+    [sources, citedNumbers]
+  )
+  // Fall back to the flat list when the split leaves nothing "used" (e.g.
+  // legacy sources saved before `n` was tracked), so the button never just
+  // disappears for content that otherwise clearly has sources.
+  const badgeSources = split && usedSources.length > 0 ? usedSources.map((u) => u.source) : sources ?? []
+  const hasSources = badgeSources.length > 0
 
   // Close regen dropdown on outside click
   useEffect(() => {
@@ -128,11 +139,11 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
 
         {hasSources && (
           <button
-            onClick={() => onOpenSources?.(sources!, citedNumbers)}
+            onClick={() => onOpenSources?.(sources ?? [], citedNumbers)}
             className="ml-1 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95"
           >
             <span className="flex -space-x-1.5">
-              {sources!.slice(0, 4).map((s, i) => (
+              {badgeSources.slice(0, 4).map((s, i) => (
                 <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--background)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
@@ -140,7 +151,7 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
               ))}
             </span>
             <span>
-              {sources!.length} source{sources!.length > 1 ? 's' : ''}
+              {badgeSources.length} source{badgeSources.length > 1 ? 's' : ''}
             </span>
           </button>
         )}
