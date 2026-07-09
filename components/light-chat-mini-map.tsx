@@ -60,6 +60,25 @@ function FitBounds({ points }: { points: LightChatMapPoint[] }) {
   return null
 }
 
+// Leaflet snapshots the container's clientWidth/clientHeight when the map is
+// created and never re-measures it on its own. On a hard page refresh the
+// surrounding layout (sidebar width, fonts, scrollbars) can still be settling
+// when this mounts, so the map is born with a stale size and its tiles end up
+// misaligned once the container reaches its final dimensions. Watch the
+// container with a ResizeObserver and re-sync whenever it actually changes.
+function MapResizeSync() {
+  const map = useMap()
+  useEffect(() => {
+    const container = map.getContainer()
+    map.invalidateSize()
+
+    const observer = new ResizeObserver(() => map.invalidateSize())
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [map])
+  return null
+}
+
 /* ─── main ─── */
 
 export function LightChatMiniMap({ points }: { points: LightChatMapPoint[] }) {
@@ -97,6 +116,7 @@ export function LightChatMiniMap({ points }: { points: LightChatMapPoint[] }) {
         >
           <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
           <FitBounds points={points} />
+          <MapResizeSync />
 
           {ordered.map((p, i) => {
             const num = p.position ?? i + 1

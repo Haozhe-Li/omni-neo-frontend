@@ -49,6 +49,17 @@ function transformCitations(text: string, citationNumbers?: Set<number>): string
     })
 }
 
+// Scans raw (untransformed) message content for `[n]` inline citation markers
+// and returns the set of numbers actually cited in the text. Used to tell
+// sources the model cited from sources it merely fetched but never referenced
+// (excludes `[1](url)`-style markdown links, same guard as transformCitations).
+export function extractCitedNumbers(content: string): Set<number> {
+    const nums = new Set<number>()
+    if (!content) return nums
+    for (const match of content.matchAll(/\[(\d+)\](?!\()/g)) nums.add(Number(match[1]))
+    return nums
+}
+
 export function preprocessMarkdown(content: any, citationNumbers?: Set<number>): string {
     if (!content) return ''
 

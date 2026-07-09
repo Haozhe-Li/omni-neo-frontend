@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw, Zap, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import type { AgentMode, Source } from '@/lib/types'
+import { extractCitedNumbers } from '@/lib/markdown'
 
 function domainOf(url: string) {
   try {
@@ -40,7 +41,7 @@ function IconBtn({
 interface AnswerFooterProps {
   content: string
   sources?: Source[]
-  onOpenSources?: (sources: Source[]) => void
+  onOpenSources?: (sources: Source[], citedNumbers: Set<number>) => void
   onRegenerate?: (mode: AgentMode) => void
   isLastMessage?: boolean
   regeneratedWith?: AgentMode
@@ -53,6 +54,9 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
   const [regenOpen, setRegenOpen] = useState(false)
   const regenRef = useRef<HTMLDivElement>(null)
   const hasSources = !!sources && sources.length > 0
+  // Which source numbers the answer text actually cites inline (`[n]`), so the
+  // sources panel can separate those from sources that were merely fetched.
+  const citedNumbers = useMemo(() => extractCitedNumbers(content), [content])
 
   // Close regen dropdown on outside click
   useEffect(() => {
@@ -124,7 +128,7 @@ export function AnswerFooter({ content, sources, onOpenSources, onRegenerate, is
 
         {hasSources && (
           <button
-            onClick={() => onOpenSources?.(sources!)}
+            onClick={() => onOpenSources?.(sources!, citedNumbers)}
             className="ml-1 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95"
           >
             <span className="flex -space-x-1.5">
