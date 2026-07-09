@@ -45,6 +45,11 @@ interface Asset {
   url: string
 }
 
+// Module-level so the array identity is stable across renders — a fresh
+// `['...']` literal every render would re-run TextSelectionMenu's effect
+// (tearing down and re-adding its document listeners) on every re-render.
+const CANVAS_BODY_SELECTORS = ['[data-selection-scope="canvas-body"]']
+
 interface FinalAnswerProps {
   answer: string
   sources: Source[]
@@ -499,7 +504,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
           containerRef={containerRef}
           showCheckSource={false}
           onFollowUp={onFollowUp}
-          allowedSelectors={['[data-selection-scope="canvas-body"]']}
+          allowedSelectors={CANVAS_BODY_SELECTORS}
         />
       )}
 
