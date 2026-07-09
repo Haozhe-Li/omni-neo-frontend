@@ -591,7 +591,7 @@ export function ChatView({
                       {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
                     </button>
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                    <ShareToPagesMenu title={r.title || 'report'} content={r.content || ''} />
+                    <ShareToPagesMenu title={r.title || 'report'} content={r.content || ''} sources={r.sources} />
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                     <button
                       onClick={() => {
@@ -695,7 +695,10 @@ export function ChatView({
             return { type: 'text' as const, content: pq.text }
           })
           .filter((seg) => seg.type !== 'text' || seg.content.trim())
-        return { text, reports: withReports.reports, question, questionPending, segments }
+        // A report's `[n]` citations share the owning message's source numbering,
+        // so carry `m.sources` along for the panel to resolve them against.
+        const reports = withReports.reports.map((r) => ({ ...r, sources: m.sources }))
+        return { text, reports, question, questionPending, segments }
       }),
     [messages]
   )
@@ -705,7 +708,7 @@ export function ChatView({
   const parsedReports: ParsedReport[] = parsedByIndex.flatMap((p) => p.reports)
   // Older threads stored reports as a separate array (pre inline-streaming);
   // keep rendering those so historical conversations don't lose their reports.
-  const legacyReports: ReportArtifact[] = messages.flatMap((m) => m.reports ?? [])
+  const legacyReports: ReportArtifact[] = messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? m.sources })))
   const allReports: ReportArtifact[] = [...parsedReports, ...legacyReports]
   const draftingReport = parsedReports.some((r) => !r.complete)
   const hasPanelContent = allArtifacts.length > 0 || allReports.length > 0 || draftingReport
@@ -1461,10 +1464,10 @@ export function ChatView({
                 if (messages[i].role === 'user') { lastUserIdx = i; break }
               }
               return messages.map((msg, i) => (
-              <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? (editingIndex === i ? 'items-stretch' : 'items-end') : 'items-start'}`}>
                 {msg.role === 'user' ? (
                   <>
-                  <div className="group relative flex flex-row items-end gap-1 max-w-[85%]">
+                  <div className={`group relative flex flex-row items-end gap-1 ${editingIndex === i ? 'w-full' : 'max-w-[85%]'}`}>
                     {/* Hover action row — left of bubble */}
                     {editingIndex !== i && (
                       <div className="flex items-center gap-0.5 mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
@@ -1491,40 +1494,44 @@ export function ChatView({
                     )}
 
                     {editingIndex === i ? (
-                      /* Inline edit area */
-                      <div className="w-full min-w-[260px] max-w-[560px] rounded-2xl bg-[var(--secondary)] px-4 py-3 flex flex-col gap-2">
-                        <textarea
-                          ref={editRef}
-                          value={editText}
-                          onChange={(e) => {
-                            setEditText(e.target.value)
-                            e.target.style.height = 'auto'
-                            e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Escape') setEditingIndex(null)
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault()
-                              if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) }
-                            }
-                          }}
-                          rows={1}
-                          className="w-full resize-none bg-transparent text-[15px] text-[var(--foreground)] leading-relaxed focus:outline-none custom-scrollbar"
-                          style={{ minHeight: '28px' }}
-                        />
+                      /* Inline edit area — full width to match the answer column, with
+                         Cancel/Done sitting below the box (Perplexity-style) rather than
+                         crammed inside it. */
+                      <div className="w-full flex flex-col gap-3">
+                        <div className="w-full rounded-2xl bg-[var(--secondary)] px-4 py-3">
+                          <textarea
+                            ref={editRef}
+                            value={editText}
+                            onChange={(e) => {
+                              setEditText(e.target.value)
+                              e.target.style.height = 'auto'
+                              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setEditingIndex(null)
+                              if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault()
+                                if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) }
+                              }
+                            }}
+                            rows={1}
+                            className="w-full resize-none bg-transparent text-[15px] text-[var(--foreground)] leading-relaxed focus:outline-none custom-scrollbar"
+                            style={{ minHeight: '28px' }}
+                          />
+                        </div>
                         <div className="flex justify-end items-center gap-2">
                           <button
                             onClick={() => setEditingIndex(null)}
-                            className="px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] rounded-lg hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-colors"
+                            className="px-5 py-2 text-[14px] font-medium rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
                           >
                             Cancel
                           </button>
                           <button
                             disabled={!editText.trim()}
                             onClick={() => { if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) } }}
-                            className="px-3 py-1.5 text-[12px] font-medium rounded-lg bg-[var(--accent)] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                            className="px-5 py-2 text-[14px] font-medium rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
                           >
-                            Send
+                            Done
                           </button>
                         </div>
                       </div>

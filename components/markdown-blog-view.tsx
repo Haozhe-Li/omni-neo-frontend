@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
@@ -13,7 +13,7 @@ import { Copy, Check, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
-import { InlineEcharts, InlineMap } from '@/components/markdown-message'
+import { InlineEcharts, InlineMap, CitationBadge, resolveCitationSources } from '@/components/markdown-message'
 import type { Source } from '@/lib/types'
 import { SourceItem } from '@/components/source-item'
 import { preprocessMarkdown } from '@/lib/markdown'
@@ -83,17 +83,7 @@ function CodeCopyButton({ getText }: { getText: () => string }) {
   )
 }
 
-const markdownComponents: Components = {
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-accent underline decoration-accent/40 underline-offset-4 transition-colors duration-200 hover:decoration-accent"
-    >
-      {children}
-    </a>
-  ),
+const baseMarkdownComponents: Omit<Components, 'a'> = {
   pre: ({ children }: any) => {
     const cls = children?.props?.className || ''
     if (cls.includes('language-mermaid') || cls.includes('language-echarts') || cls.includes('language-map')) {
@@ -188,6 +178,29 @@ const markdownComponents: Components = {
   ),
 }
 
+// `a` is built per-render so it can close over the page's citation map: a
+// `citation:n` href (synthesized by preprocessMarkdown from a `[n]` marker)
+// renders as the same CitationBadge used in chat, instead of a plain link.
+function buildMarkdownComponents(citationMap: Map<number, Source>): Components {
+  return {
+    ...baseMarkdownComponents,
+    a: ({ href, children }) => {
+      const sources = resolveCitationSources(href, children, citationMap)
+      if (sources.length > 0) return <CitationBadge sources={sources} />
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-accent underline decoration-accent/40 underline-offset-4 transition-colors duration-200 hover:decoration-accent"
+        >
+          {children}
+        </a>
+      )
+    },
+  }
+}
+
 export function MarkdownBlogView({
   title,
   markdown,
@@ -202,6 +215,14 @@ export function MarkdownBlogView({
   embedded = false,
   showMeta = true,
 }: MarkdownBlogViewProps) {
+  const citationMap = useMemo(() => {
+    const map = new Map<number, Source>()
+    for (const s of sources) if (typeof s.n === 'number') map.set(s.n, s)
+    return map
+  }, [sources])
+  const citationNumbers = useMemo(() => new Set(citationMap.keys()), [citationMap])
+  const markdownComponents = useMemo(() => buildMarkdownComponents(citationMap), [citationMap])
+
   return (
     <div className={embedded ? 'bg-transparent' : 'blog-shell min-h-screen bg-background'}>
       {/* ─── Minimal brand bar ─── */}
@@ -258,7 +279,7 @@ export function MarkdownBlogView({
 
           <section className="blog-markdown markdown-body pt-7 text-[16px] leading-[1.8] text-foreground">
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]} components={markdownComponents}>
-              {preprocessMarkdown(markdown)}
+              {preprocessMarkdown(markdown, citationNumbers)}
             </ReactMarkdown>
 
             {sources.length > 0 && (

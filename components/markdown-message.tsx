@@ -9,7 +9,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download, BarChart3, MapPin } from 'lucide-react'
+import { Copy, Check, Download, BarChart3, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
@@ -210,39 +210,90 @@ function domainOf(url: string) {
   }
 }
 
-// Renders a `[n]` inline citation marker (rewritten to a `citation:n` link by
-// preprocessMarkdown) as a small pill showing the source's domain, with a
-// hover card revealing the title, date, url and snippet.
-function CitationBadge({ source }: { source: Source }) {
-  const domain = domainOf(source.url)
+// Renders a `[n]` inline citation marker (rewritten to a `citation:n` — or,
+// for a run of adjacent markers, `citation:n1,n2,...` — link by preprocessMarkdown)
+// as a small pill showing the (first) source's domain, plus a `+N` count when
+// it bundles more than one. Hovering reveals a card with the title, date, url
+// and snippet, paged with arrows when there's more than one source.
+export function CitationBadge({ sources }: { sources: Source[] }) {
+  const [idx, setIdx] = useState(0)
+  const current = sources[Math.min(idx, sources.length - 1)]
+  const primaryDomain = domainOf(sources[0].url)
+  const currentDomain = domainOf(current.url)
+  const extra = sources.length - 1
+
   return (
-    <HoverCard openDelay={150} closeDelay={100}>
+    <HoverCard openDelay={150} closeDelay={100} onOpenChange={(open) => { if (!open) setIdx(0) }}>
       <HoverCardTrigger asChild>
         <a
-          href={source.url}
+          href={sources[0].url}
           target="_blank"
           rel="noopener noreferrer"
-          className="mx-0.5 inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle text-[11px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors"
+          className="mx-0.5 inline-flex items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors"
         >
-          {domain}
+          {primaryDomain}
+          {extra > 0 && <span className="ml-1 opacity-70">+{extra}</span>}
         </a>
       </HoverCardTrigger>
-      <HoverCardContent className="w-80">
-        <div className="mb-1.5 flex items-center gap-2">
-          <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
-          </span>
-          <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
-          {source.date && (
-            <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{source.date}</span>
-          )}
-        </div>
-        <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{source.title}</div>
-        {source.content && (
-          <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{source.content}</p>
+      <HoverCardContent className="w-80 p-0 overflow-hidden">
+        {sources.length > 1 && (
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-subtle)]">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={idx === 0}
+                onClick={() => setIdx((i) => Math.max(0, i - 1))}
+                className="p-0.5 rounded text-[var(--muted-foreground)] disabled:opacity-30 hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-[11px] font-medium text-[var(--muted-foreground)] tabular-nums">
+                {idx + 1}/{sources.length}
+              </span>
+              <button
+                type="button"
+                disabled={idx === sources.length - 1}
+                onClick={() => setIdx((i) => Math.min(sources.length - 1, i + 1))}
+                className="p-0.5 rounded text-[var(--muted-foreground)] disabled:opacity-30 hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="flex -space-x-1.5">
+                {sources.slice(0, 3).map((s, i) => (
+                  <span key={i} className="h-3.5 w-3.5 rounded-full ring-1 ring-[var(--card)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                  </span>
+                ))}
+              </span>
+              <span className="text-[11px] text-[var(--muted-foreground)]">{sources.length} sources</span>
+            </div>
+          </div>
         )}
-        <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{source.url}</div>
+        <a
+          href={current.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block p-3 no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-colors"
+        >
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`https://www.google.com/s2/favicons?domain=${currentDomain}&sz=64`} alt="" className="h-full w-full object-cover" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{currentDomain}</span>
+            {current.date && (
+              <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
+            )}
+          </div>
+          <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{current.title}</div>
+          {current.content && (
+            <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{current.content}</p>
+          )}
+          <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{current.url}</div>
+        </a>
       </HoverCardContent>
     </HoverCard>
   )
@@ -357,13 +408,42 @@ const baseMarkdownComponents: Omit<Components, 'a'> = {
   ),
 }
 
+// Resolves an `a` node's href/children to the citation sources it refers to, if
+// any — shared by every markdown surface in the app (chat, report panel, published
+// Pages view) so they all recognize citations the same way instead of each
+// reimplementing this matching logic with its own subtle differences.
+//
+// Handles both `citation:n` / `citation:n1,n2,...` synthetic links (produced by
+// preprocessMarkdown from `[n]` markers) and the case where the model already
+// emitted a real markdown link (`[1](https://...)`) — transformCitations
+// deliberately leaves those alone (its `(?!\()` guard) so it doesn't mangle
+// genuine links, so a link whose visible text is just a number matching a known
+// source is treated as a citation too.
+export function resolveCitationSources(
+  href: string | undefined,
+  children: ReactNode,
+  citationMap: Map<number, Source>
+): Source[] {
+  const citationMatch = /^citation:([\d,]+)$/.exec(href ?? '')
+  let sources: Source[] = citationMatch
+    ? (citationMatch[1].split(',').map((n) => citationMap.get(Number(n))).filter(Boolean) as Source[])
+    : []
+  if (sources.length === 0) {
+    const text = extractNodeText(children).trim()
+    if (/^\d+$/.test(text)) {
+      const single = citationMap.get(Number(text))
+      if (single) sources = [single]
+    }
+  }
+  return sources
+}
+
 function buildMarkdownComponents(citationMap: Map<number, Source>): Components {
   return {
     ...baseMarkdownComponents,
     a: ({ href, children }) => {
-      const citationMatch = /^citation:(\d+)$/.exec(href ?? '')
-      const source = citationMatch ? citationMap.get(Number(citationMatch[1])) : undefined
-      if (source) return <CitationBadge source={source} />
+      const sources = resolveCitationSources(href, children, citationMap)
+      if (sources.length > 0) return <CitationBadge sources={sources} />
       return (
         <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
           {children}

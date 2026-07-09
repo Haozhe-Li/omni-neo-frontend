@@ -408,7 +408,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                 <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                 {active.kind === 'report' && (
                   <>
-                    <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} />
+                    <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} sources={active.report?.sources} />
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                   </>
                 )}
@@ -487,7 +487,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             {viewMode === 'view' ? (
               <>
                 <h1 className="text-[28px] leading-tight font-semibold text-[var(--foreground)] mb-8 tracking-tight opacity-90">{active.report.title}</h1>
-                {active.report.content ? <MarkdownMessage content={active.report.content} /> : null}
+                {active.report.content ? <MarkdownMessage content={active.report.content} sources={active.report.sources} /> : null}
 
               </>
             ) : (

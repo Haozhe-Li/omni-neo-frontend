@@ -29,10 +29,23 @@ function transformMath(text: string): string {
 // stray `[3]` with no matching source is left as plain text. Must run before
 // transformMath, since a citation-marker-only line like `[1]` would otherwise
 // be mistaken for a display-math block.
+//
+// Runs of adjacent markers for the same claim (`[1][2][3]`, emitted back-to-back
+// by the model) are then merged into a single link carrying every number
+// (`citation:1,2,3`), so the UI renders one combined badge instead of a pill
+// per citation.
 function transformCitations(text: string, citationNumbers?: Set<number>): string {
     if (!citationNumbers || citationNumbers.size === 0) return text
-    return text.replace(/(?<!\])\[(\d+)\](?!\()/g, (match, n) => {
+    // No `(?<!\])` guard here: that would also block the very common case of
+    // adjacent markers (`[1][2]`) by rejecting the second one because it's
+    // preceded by the first's `]`. Reference-style links (`[text][1]`) are not
+    // a real concern for model-generated answers.
+    const withLinks = text.replace(/\[(\d+)\](?!\()/g, (match, n) => {
         return citationNumbers.has(Number(n)) ? `[${n}](citation:${n})` : match
+    })
+    return withLinks.replace(/(?:\[\d+\]\(citation:\d+\))+/g, (run) => {
+        const nums = [...run.matchAll(/\[(\d+)\]\(citation:\d+\)/g)].map((m) => m[1])
+        return nums.length > 1 ? `[${nums[0]}](citation:${nums.join(',')})` : run
     })
 }
 

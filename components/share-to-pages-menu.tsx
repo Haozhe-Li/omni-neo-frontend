@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { Globe, ChevronDown, Loader2, Check, Copy, ExternalLink, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
-import type { PublishDuration } from '@/lib/types'
+import type { PublishDuration, Source } from '@/lib/types'
 
 interface ShareToPagesMenuProps {
   title: string
   content: string
+  /** Sources referenced by `[n]` in `content` — carried along so the published page can render citation badges instead of bare bracket numbers. */
+  sources?: Source[]
 }
 
 const DURATIONS: { value: PublishDuration; label: string }[] = [
@@ -22,7 +24,7 @@ const DURATIONS: { value: PublishDuration; label: string }[] = [
  * dropdowns in artifact-panel.tsx / chat-view.tsx. Matches their existing
  * flat, low-saturation menu styling rather than pulling in Radix.
  */
-export function ShareToPagesMenu({ title, content }: ShareToPagesMenuProps) {
+export function ShareToPagesMenu({ title, content, sources }: ShareToPagesMenuProps) {
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
   const [expanded, setExpanded] = useState(false)
@@ -77,7 +79,7 @@ export function ShareToPagesMenu({ title, content }: ShareToPagesMenuProps) {
       const res = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, answer: content, duration, publishToPages, forceUpdate: true }),
+        body: JSON.stringify({ title, answer: content, duration, publishToPages, forceUpdate: true, sources }),
       })
       if (!res.ok) throw new Error('publish failed')
       const { id } = await res.json()

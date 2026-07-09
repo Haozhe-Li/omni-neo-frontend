@@ -71,6 +71,8 @@ export interface ReportArtifact {
   content: string
   // false while the report is still streaming into the reader; undefined/true once done.
   complete?: boolean
+  /** Sources from the owning message, carried along so `[n]` citations inside the report body resolve. */
+  sources?: Source[]
 }
 
 export interface WidgetData {
