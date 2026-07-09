@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -14,6 +14,8 @@ import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
+import type { Source } from '@/lib/types'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 
 const LightChatMiniMap = dynamic(
   () => import('@/components/light-chat-mini-map').then((m) => m.LightChatMiniMap),
@@ -198,6 +200,54 @@ export function InlineEcharts({ source }: { source: string }) {
   )
 }
 
+// ── Inline citations ────────────────────────────────────────────────────────
+
+function domainOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+// Renders a `[n]` inline citation marker (rewritten to a `citation:n` link by
+// preprocessMarkdown) as a small pill showing the source's domain, with a
+// hover card revealing the title, date, url and snippet.
+function CitationBadge({ source }: { source: Source }) {
+  const domain = domainOf(source.url)
+  return (
+    <HoverCard openDelay={150} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mx-0.5 inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle text-[11px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors"
+        >
+          {domain}
+        </a>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-80">
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
+          {source.date && (
+            <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{source.date}</span>
+          )}
+        </div>
+        <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{source.title}</div>
+        {source.content && (
+          <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{source.content}</p>
+        )}
+        <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{source.url}</div>
+      </HoverCardContent>
+    </HoverCard>
+  )
+}
+
 function extractNodeText(node: ReactNode): string {
   if (node == null) return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -228,12 +278,12 @@ function CopyButton({ getText }: { getText: () => string }) {
 // Faithful port of the original answer styling: 16px body, leading-[1.8],
 // accent links, mermaid + code copy. Kept identical so the new chat reads the
 // same as the legacy canvas/light answers.
-const markdownComponents: Components = {
-  a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
-      {children}
-    </a>
-  ),
+//
+// `a` is built per-render (via buildMarkdownComponents) so it can close over
+// the message's citation map: a `citation:n` href (synthesized by
+// preprocessMarkdown from a `[n]` marker) renders as a CitationBadge instead
+// of a plain link.
+const baseMarkdownComponents: Omit<Components, 'a'> = {
   pre: ({ children }: any) => {
     const cls = children?.props?.className || ''
     if (cls.includes('language-mermaid') || cls.includes('language-echarts') || cls.includes('language-map')) return <>{children}</>
@@ -307,21 +357,47 @@ const markdownComponents: Components = {
   ),
 }
 
+function buildMarkdownComponents(citationMap: Map<number, Source>): Components {
+  return {
+    ...baseMarkdownComponents,
+    a: ({ href, children }) => {
+      const citationMatch = /^citation:(\d+)$/.exec(href ?? '')
+      const source = citationMatch ? citationMap.get(Number(citationMatch[1])) : undefined
+      if (source) return <CitationBadge source={source} />
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
+          {children}
+        </a>
+      )
+    },
+  }
+}
+
 interface MarkdownMessageProps {
   content: string
   className?: string
+  /** Sources for this message, used to render `[n]` markers as citation badges. */
+  sources?: Source[]
 }
 
 /** GitHub-flavoured Markdown renderer matching the original answer styling. */
-export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '' }: MarkdownMessageProps) {
+export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources }: MarkdownMessageProps) {
+  const citationMap = useMemo(() => {
+    const map = new Map<number, Source>()
+    for (const s of sources ?? []) if (typeof s.n === 'number') map.set(s.n, s)
+    return map
+  }, [sources])
+  const citationNumbers = useMemo(() => new Set(citationMap.keys()), [citationMap])
+  const components = useMemo(() => buildMarkdownComponents(citationMap), [citationMap])
+
   return (
     <div className={`text-[16px] text-foreground break-words ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeRaw, rehypeKatex, rehypeHighlight]}
-        components={markdownComponents}
+        components={components}
       >
-        {preprocessMarkdown(content)}
+        {preprocessMarkdown(content, citationNumbers)}
       </ReactMarkdown>
     </div>
   )

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { MarkdownMessage } from '@/components/markdown-message'
+import type { Source } from '@/lib/types'
 
 interface StreamingTextProps {
   /** The full (report-stripped) answer accumulated so far. */
@@ -12,6 +13,8 @@ interface StreamingTextProps {
    * just finished).
    */
   animate: boolean
+  /** Sources for this message, used to render `[n]` markers as citation badges. */
+  sources?: Source[]
 }
 
 // Reveal pacing. The cursor advances at a steady base rate, and faster when it's
@@ -27,32 +30,25 @@ const CATCHUP = 4 // proportional drain: a bigger backlog reveals faster
  * at a time. Driven by a single rAF loop that interpolates the shown length
  * toward the content length each frame.
  */
-export function StreamingText({ content, animate }: StreamingTextProps) {
-  if (!animate) return <MarkdownMessage content={content} />
-  return <Typewriter content={content} />
+export function StreamingText({ content, animate, sources }: StreamingTextProps) {
+  if (!animate) return <MarkdownMessage content={content} sources={sources} />
+  return <Typewriter content={content} sources={sources} />
 }
 
 // Never leave a fenced code block half-open mid-reveal: if the visible slice has
-// an odd number of ``` markers, there's a dangling open fence. For a chart
-// (```echarts) still streaming in, synthesize a closing fence so it renders as
-// the "drawing chart" placeholder instead of vanishing. For any other language,
-// pull back to just before the fence so raw, unterminated code doesn't flash.
+// an odd number of ``` markers, there's a dangling open fence. Synthesize a
+// closing fence so react-markdown treats it as a complete (if still growing)
+// code block and reveals its contents incrementally, rather than the whole
+// block vanishing until the real closing fence arrives.
 function trimDanglingFence(s: string): string {
   let count = 0
-  let lastIdx = -1
   const re = /```/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(s))) {
-    count++
-    lastIdx = m.index
-  }
+  while (re.exec(s)) count++
   if (count % 2 === 0) return s
-  const lang = /^```([a-zA-Z0-9_-]*)/.exec(s.slice(lastIdx))?.[1]?.toLowerCase() ?? ''
-  if (lang === 'echarts' || lang === 'map') return s + '\n```'
-  return s.slice(0, lastIdx)
+  return s + '\n```'
 }
 
-function Typewriter({ content }: { content: string }) {
+function Typewriter({ content, sources }: { content: string; sources?: Source[] }) {
   // Latest content is read off a ref so the rAF loop can stay mounted once.
   const contentRef = useRef(content)
   contentRef.current = content
@@ -84,5 +80,5 @@ function Typewriter({ content }: { content: string }) {
   }, [])
 
   const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
-  return <MarkdownMessage content={trimDanglingFence(slice)} />
+  return <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} />
 }

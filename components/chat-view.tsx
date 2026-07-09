@@ -1578,6 +1578,7 @@ export function ChatView({
                                         key={`text-${i}-${bi}-${si}`}
                                         content={parseQuestion(seg.content).text}
                                         animate={isCurrentlyStreaming && isLastBlock}
+                                        sources={msg.sources}
                                       />
                                     ) : null
                                   ) : (
@@ -1600,7 +1601,7 @@ export function ChatView({
                             {/* answer text and inline report cards, in source order */}
                             {parsed.segments.map((seg, si) =>
                               seg.type === 'text' ? (
-                                <StreamingText key={`text-${i}-${si}`} content={seg.content} animate={i === streamingIndex} />
+                                <StreamingText key={`text-${i}-${si}`} content={seg.content} animate={i === streamingIndex} sources={msg.sources} />
                               ) : (
                                 <div key={`report-wrap-${i}-${si}`} className="my-3 w-full">
                                   {renderReportCard(seg.report)}
