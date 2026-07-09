@@ -13,6 +13,7 @@ import { Copy, Check, Download, BarChart3, MapPin, ChevronLeft, ChevronRight } f
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
+import { brandDomain } from '@/lib/domain'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
 import type { Source } from '@/lib/types'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
@@ -212,13 +213,14 @@ function domainOf(url: string) {
 
 // Renders a `[n]` inline citation marker (rewritten to a `citation:n` — or,
 // for a run of adjacent markers, `citation:n1,n2,...` — link by preprocessMarkdown)
-// as a small pill showing the (first) source's domain, plus a `+N` count when
-// it bundles more than one. Hovering reveals a card with the title, date, url
-// and snippet, paged with arrows when there's more than one source.
+// as a small pill showing the (first) source's brand name, plus a `+N` count
+// when it bundles more than one. Hovering reveals a card with the full
+// hostname, title, date, url and snippet, paged with arrows when there's more
+// than one source.
 export function CitationBadge({ sources }: { sources: Source[] }) {
   const [idx, setIdx] = useState(0)
   const current = sources[Math.min(idx, sources.length - 1)]
-  const primaryDomain = domainOf(sources[0].url)
+  const primaryDomain = brandDomain(sources[0].url)
   const currentDomain = domainOf(current.url)
   const extra = sources.length - 1
 
