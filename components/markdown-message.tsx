@@ -229,10 +229,10 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
           href={sources[0].url}
           target="_blank"
           rel="noopener noreferrer"
-          className="mx-0.5 inline-flex items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors"
+          className="mx-0.5 inline-flex max-w-[140px] items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors"
         >
-          {primaryDomain}
-          {extra > 0 && <span className="ml-1 opacity-70">+{extra}</span>}
+          <span className="min-w-0 truncate">{primaryDomain}</span>
+          {extra > 0 && <span className="ml-1 shrink-0 opacity-70">+{extra}</span>}
         </a>
       </HoverCardTrigger>
       <HoverCardContent className="w-80 p-0 overflow-hidden">
