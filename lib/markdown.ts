@@ -25,6 +25,31 @@ function transformMath(text: string): string {
         .replace(/\[\s*(\\.*|.*(\\text|\\frac|\\sum|\\approx|\\times).*?)\s*\]/g, '$$$1$$')
 }
 
+// CommonMark only treats `**`/`*` as opening/closing emphasis when it isn't
+// directly flanked by punctuation on the inside while an ordinary character
+// sits on the outside (the "flanking" rule). Chinese prose commonly wraps a
+// bolded term straight in quotes with no surrounding space —
+// `一套**"数据操作系统"**，帮助…` — which fails that rule: the `**` right before
+// the quote never opens, so it renders as a literal `**`, and the now-unpaired
+// delimiter can go on to mis-pair with an unrelated `**` later in the
+// document, corrupting rendering well past this one spot.
+//
+// Fix: peel quote/book-title-mark punctuation sitting just inside the `**`
+// markers out to just outside them — `**"foo"**` -> `"**foo**"`. Once there,
+// the `**` is flanked by ordinary text on both sides and always parses.
+// Deliberately excludes `()`/（）, which double as link syntax `[text](url)`,
+// so this can't collide with citations or links.
+const WRAP_OPEN = '["\'“‘「『《【]'
+const WRAP_CLOSE = '["\'”’」』》】]'
+const BOLD_FLANKING_RE = new RegExp(`\\*\\*(${WRAP_OPEN}*)([^\\n]+?)(${WRAP_CLOSE}*)\\*\\*`, 'g')
+
+function fixEmphasisFlanking(text: string): string {
+    return text.replace(BOLD_FLANKING_RE, (match, lead, inner, trail) => {
+        if (!lead && !trail) return match
+        return `${lead}**${inner}**${trail}`
+    })
+}
+
 // Rewrites `[n]` inline citation markers into `[n](citation:n)` so they parse
 // as ordinary markdown links (intercepted by a custom `a` renderer) instead of
 // literal bracketed text. Only markers with a known source are rewritten —
@@ -98,7 +123,9 @@ export function preprocessMarkdown(content: any, citationNumbers?: Set<number>):
     return text
         .split(/(```[\s\S]*?```)/g)
         .map((segment) =>
-            segment.startsWith('```') ? segment : transformMath(transformCitations(segment, citationNumbers))
+            segment.startsWith('```')
+                ? segment
+                : transformMath(transformCitations(fixEmphasisFlanking(segment), citationNumbers))
         )
         .join('')
 }
