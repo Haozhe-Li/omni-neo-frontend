@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, FileText } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Source } from '@/lib/types'
 
 interface SourceItemProps {
@@ -25,6 +26,7 @@ function getSourceDomain(url: string) {
 
 export function SourceItem({ source, index, label, showNumber = true }: SourceItemProps) {
     const [isExpanded, setIsExpanded] = useState(false)
+    const isDocument = !source.url
 
     return (
         <div
@@ -38,12 +40,16 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                     </span>
                 )}
                 <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded-sm bg-secondary flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                        src={`https://www.google.com/s2/favicons?domain=${getSourceDomain(source.url)}&sz=64`}
-                        alt=""
-                        className="h-full w-full object-cover"
-                    />
+                    {isDocument ? (
+                        <FileText className="h-2.5 w-2.5 text-muted-foreground" />
+                    ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                            src={`https://www.google.com/s2/favicons?domain=${getSourceDomain(source.url)}&sz=64`}
+                            alt=""
+                            className="h-full w-full object-cover"
+                        />
+                    )}
                 </div>
                 <span
                     className="flex-1 min-w-0 text-sm text-foreground hover:text-accent transition-colors line-clamp-1 font-medium"
@@ -62,15 +68,27 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                             {isExpanded ? 'Less' : 'More'}
                         </button>
                     )}
-                    <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-muted-foreground/40 hover:text-accent transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
+                    {isDocument ? (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                toast.info('This is a document you uploaded — it can\'t be opened as a link.')
+                            }}
+                            className="text-muted-foreground/40 hover:text-accent transition-colors"
+                        >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                        </button>
+                    ) : (
+                        <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground/40 hover:text-accent transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                    )}
                 </div>
             </div>
 

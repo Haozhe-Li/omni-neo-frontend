@@ -45,6 +45,12 @@ export interface SSEMessage {
 // ── Domain models ──────────────────────────────────────────────────────────
 export interface Source {
   title: string
+  /**
+   * Empty string means this is a user-uploaded document, not a web link —
+   * the backend never assigns a citation an empty `url` otherwise (see
+   * `register_document_citation` in core/utils/citations.py). Treat it as
+   * non-clickable: no favicon fetch, no `<a href>`.
+   */
   url: string
   content?: string
   /**

@@ -6,12 +6,30 @@
 // The backend's rerank LLM is instructed to copy the excerpt character-for-
 // character from the chunk, so an exact `indexOf` is the common case. The
 // whitespace/case-normalized fallback below covers the LLM collapsing a
-// newline to a space or drifting on casing — anything beyond that just
-// renders unhighlighted rather than guessing.
+// newline to a space or drifting on casing.
+//
+// Display policy: when the excerpt is found, show it highlighted plus up to
+// `CONTEXT_LINES` lines of surrounding context on each side — not the whole
+// chunk, which can run long. When it can't be found at all, fall back to a
+// plain, unhighlighted prefix of the chunk (`FALLBACK_CHARS`) rather than
+// guessing at a match.
+
+const CONTEXT_LINES = 2
+const FALLBACK_CHARS = 200
 
 export interface HighlightSegment {
   text: string
   highlight: boolean
+}
+
+interface MatchRange {
+  start: number
+  end: number
+}
+
+interface LineRange {
+  start: number
+  end: number
 }
 
 function buildNormalizedMap(source: string): { normalized: string; map: number[] } {
@@ -39,9 +57,9 @@ function normalizeExcerpt(s: string): string {
   return s.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
-export function highlightExcerpt(chunk: string, excerptRaw: string): HighlightSegment[] {
+function findMatchRange(chunk: string, excerptRaw: string): MatchRange | null {
   const excerpt = (excerptRaw || '').trim()
-  if (!excerpt) return [{ text: chunk, highlight: false }]
+  if (!excerpt) return null
 
   let start = chunk.indexOf(excerpt)
   let end = start === -1 ? -1 : start + excerpt.length
@@ -57,13 +75,56 @@ export function highlightExcerpt(chunk: string, excerptRaw: string): HighlightSe
     }
   }
 
-  if (start === -1 || end <= start) {
-    return [{ text: chunk, highlight: false }]
+  if (start === -1 || end <= start) return null
+  return { start, end }
+}
+
+// "Lines" for context-window purposes: real newlines when the chunk has any,
+// otherwise sentence boundaries — chunks are usually one continuous
+// paragraph, so without this a chunk with no "\n" would count as a single
+// line and the context window would degenerate to "the whole chunk".
+function splitIntoLines(text: string): LineRange[] {
+  const sepRe = text.includes('\n') ? /\n+/g : /(?<=[.!?。！？])\s+/g
+  const lines: LineRange[] = []
+  let cursor = 0
+  let m: RegExpExecArray | null
+  while ((m = sepRe.exec(text))) {
+    lines.push({ start: cursor, end: m.index })
+    cursor = m.index + m[0].length
+  }
+  lines.push({ start: cursor, end: text.length })
+  return lines
+}
+
+function lineIndexAt(lines: LineRange[], pos: number): number {
+  for (let i = 0; i < lines.length; i++) {
+    if (pos >= lines[i].start && pos <= lines[i].end) return i
+  }
+  return lines.length - 1
+}
+
+export function highlightExcerpt(chunk: string, excerptRaw: string): HighlightSegment[] {
+  const match = findMatchRange(chunk, excerptRaw)
+  if (!match) {
+    const truncated = chunk.length > FALLBACK_CHARS
+    return [{ text: chunk.slice(0, FALLBACK_CHARS).trimEnd() + (truncated ? '…' : ''), highlight: false }]
   }
 
+  const lines = splitIntoLines(chunk)
+  const startLineIdx = lineIndexAt(lines, match.start)
+  const endLineIdx = lineIndexAt(lines, Math.max(match.start, match.end - 1))
+  const windowStart = lines[Math.max(0, startLineIdx - CONTEXT_LINES)].start
+  const windowEnd = lines[Math.min(lines.length - 1, endLineIdx + CONTEXT_LINES)].end
+
   const segments: HighlightSegment[] = []
-  if (start > 0) segments.push({ text: chunk.slice(0, start), highlight: false })
-  segments.push({ text: chunk.slice(start, end), highlight: true })
-  if (end < chunk.length) segments.push({ text: chunk.slice(end), highlight: false })
+  const prefix = chunk.slice(windowStart, match.start)
+  if (windowStart > 0 || prefix) {
+    segments.push({ text: (windowStart > 0 ? '…' : '') + prefix, highlight: false })
+  }
+  segments.push({ text: chunk.slice(match.start, match.end), highlight: true })
+  const suffix = chunk.slice(match.end, windowEnd)
+  if (windowEnd < chunk.length || suffix) {
+    segments.push({ text: suffix + (windowEnd < chunk.length ? '…' : ''), highlight: false })
+  }
   return segments
 }

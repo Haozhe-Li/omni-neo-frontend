@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw, Zap, Sparkles } from 'lucide-react'
+import { Copy, Check, FileText, Share2, ThumbsUp, ThumbsDown, RotateCcw, Zap, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import type { AgentMode, Source } from '@/lib/types'
 import { extractCitedNumbers, partitionSources } from '@/lib/markdown'
@@ -156,8 +156,12 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
             <span className="flex -space-x-1.5">
               {badgeSources.slice(0, 4).map((s, i) => (
                 <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--background)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                  {s.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <FileText size={9} className="text-[var(--muted-foreground)]" />
+                  )}
                 </span>
               ))}
             </span>

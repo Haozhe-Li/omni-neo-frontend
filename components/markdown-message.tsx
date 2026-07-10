@@ -9,7 +9,8 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download, BarChart3, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Copy, Check, Download, BarChart3, FileText, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
+import { toast } from 'sonner'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
@@ -217,25 +218,34 @@ function domainOf(url: string) {
 // when it bundles more than one. Hovering reveals a card with the full
 // hostname, title, date, url and snippet, paged with arrows when there's more
 // than one source.
+const notifyUploadedDocument = () =>
+  toast.info("This is a document you uploaded — it can't be opened as a link.")
+
 export function CitationBadge({ sources }: { sources: Source[] }) {
   const [idx, setIdx] = useState(0)
   const current = sources[Math.min(idx, sources.length - 1)]
-  const primaryDomain = brandDomain(sources[0].url)
+  const primaryIsDocument = !sources[0].url
+  const currentIsDocument = !current.url
+  const primaryLabel = primaryIsDocument ? 'Document' : brandDomain(sources[0].url)
   const currentDomain = domainOf(current.url)
   const extra = sources.length - 1
+  const triggerClassName =
+    'mx-0.5 inline-flex max-w-[140px] items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors'
 
   return (
     <HoverCard openDelay={150} closeDelay={100} onOpenChange={(open) => { if (!open) setIdx(0) }}>
       <HoverCardTrigger asChild>
-        <a
-          href={sources[0].url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mx-0.5 inline-flex max-w-[140px] items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <span className="min-w-0 truncate">{primaryDomain}</span>
-          {extra > 0 && <span className="ml-1 shrink-0 opacity-70">+{extra}</span>}
-        </a>
+        {primaryIsDocument ? (
+          <button type="button" onClick={notifyUploadedDocument} className={triggerClassName}>
+            <span className="min-w-0 truncate">{primaryLabel}</span>
+            {extra > 0 && <span className="ml-1 shrink-0 opacity-70">+{extra}</span>}
+          </button>
+        ) : (
+          <a href={sources[0].url} target="_blank" rel="noopener noreferrer" className={triggerClassName}>
+            <span className="min-w-0 truncate">{primaryLabel}</span>
+            {extra > 0 && <span className="ml-1 shrink-0 opacity-70">+{extra}</span>}
+          </a>
+        )}
       </HoverCardTrigger>
       <HoverCardContent className="w-80 p-0 overflow-hidden">
         {sources.length > 1 && (
@@ -265,8 +275,12 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
               <span className="flex -space-x-1.5">
                 {sources.slice(0, 3).map((s, i) => (
                   <span key={i} className="h-3.5 w-3.5 rounded-full ring-1 ring-[var(--card)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                    {s.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <FileText size={8} className="text-[var(--muted-foreground)]" />
+                    )}
                   </span>
                 ))}
               </span>
@@ -274,28 +288,50 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
             </div>
           </div>
         )}
-        <a
-          href={current.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block p-3 no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-colors"
-        >
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`https://www.google.com/s2/favicons?domain=${currentDomain}&sz=64`} alt="" className="h-full w-full object-cover" />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{currentDomain}</span>
-            {current.date && (
-              <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
+        {currentIsDocument ? (
+          <button
+            type="button"
+            onClick={notifyUploadedDocument}
+            className="block w-full p-3 text-left no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-colors"
+          >
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
+                <FileText size={11} className="text-[var(--muted-foreground)]" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">Uploaded document</span>
+              {current.date && (
+                <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
+              )}
+            </div>
+            <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{current.title}</div>
+            {current.content && (
+              <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{current.content}</p>
             )}
-          </div>
-          <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{current.title}</div>
-          {current.content && (
-            <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{current.content}</p>
-          )}
-          <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{current.url}</div>
-        </a>
+          </button>
+        ) : (
+          <a
+            href={current.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block p-3 no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-colors"
+          >
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`https://www.google.com/s2/favicons?domain=${currentDomain}&sz=64`} alt="" className="h-full w-full object-cover" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{currentDomain}</span>
+              {current.date && (
+                <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
+              )}
+            </div>
+            <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{current.title}</div>
+            {current.content && (
+              <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{current.content}</p>
+            )}
+            <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{current.url}</div>
+          </a>
+        )}
       </HoverCardContent>
     </HoverCard>
   )

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { BookOpen, ChevronDown, Loader2, X } from 'lucide-react'
+import { BookOpen, ChevronDown, FileText, Loader2, X } from 'lucide-react'
+import { toast } from 'sonner'
 import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
 import { partitionSources } from '@/lib/markdown'
 import { highlightExcerpt } from '@/lib/highlight'
@@ -14,47 +15,70 @@ function domainOf(url: string) {
   }
 }
 
-function SourceCard({ source }: { source: Source }) {
-  const domain = domainOf(source.url)
+const notifyUploadedDocument = () =>
+  toast.info("This is a document you uploaded — it can't be opened as a link.")
+
+// Favicon + domain/title row shared by SourceCard and CheckSourceCard — a
+// user-uploaded document (source.url === '') gets a generic file icon and a
+// label instead, and isn't clickable. Takes a structural {url} rather than
+// `Source` so it also accepts a `CheckSourceMatch`.
+function SourceCardHeader({ source }: { source: { url: string } }) {
+  const isDocument = !source.url
   return (
-    <a
-      href={source.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--secondary)]/60"
-    >
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
-      </div>
+    <div className="mb-1.5 flex items-center gap-2">
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
+        {isDocument ? (
+          <FileText size={11} className="text-[var(--muted-foreground)]" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`https://www.google.com/s2/favicons?domain=${domainOf(source.url)}&sz=64`}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        )}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">
+        {isDocument ? 'Uploaded document' : domainOf(source.url)}
+      </span>
+    </div>
+  )
+}
+
+function SourceCard({ source }: { source: Source }) {
+  const isDocument = !source.url
+  const body = (
+    <>
+      <SourceCardHeader source={source} />
       <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{source.title}</div>
       {source.content && (
         <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-3">{source.content}</p>
       )}
+    </>
+  )
+  const className =
+    'block rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--secondary)]/60'
+
+  if (isDocument) {
+    return (
+      <button type="button" onClick={notifyUploadedDocument} className={`${className} w-full text-left`}>
+        {body}
+      </button>
+    )
+  }
+  return (
+    <a href={source.url} target="_blank" rel="noopener noreferrer" className={className}>
+      {body}
     </a>
   )
 }
 
 function CheckSourceCard({ match }: { match: CheckSourceMatch }) {
-  const domain = domainOf(match.url)
+  const isDocument = !match.url
   const segments = highlightExcerpt(match.chunk, match.excerpt)
-  return (
-    <a
-      href={match.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--secondary)]/60"
-    >
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
-      </div>
+  const body = (
+    <>
+      <SourceCardHeader source={match} />
       <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{match.title}</div>
       <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)]">
         {segments.map((seg, i) =>
@@ -70,6 +94,21 @@ function CheckSourceCard({ match }: { match: CheckSourceMatch }) {
           )
         )}
       </p>
+    </>
+  )
+  const className =
+    'block rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--secondary)]/60'
+
+  if (isDocument) {
+    return (
+      <button type="button" onClick={notifyUploadedDocument} className={`${className} w-full text-left`}>
+        {body}
+      </button>
+    )
+  }
+  return (
+    <a href={match.url} target="_blank" rel="noopener noreferrer" className={className}>
+      {body}
     </a>
   )
 }
