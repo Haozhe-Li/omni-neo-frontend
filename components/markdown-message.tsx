@@ -242,12 +242,12 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
         {primaryIsDocument ? (
           <button type="button" onClick={notifyUploadedDocument} className={triggerClassName}>
             <span className="min-w-0 truncate">{primaryLabel}</span>
-            {extra > 0 && <span className="ml-1 shrink-0 opacity-70">+{extra}</span>}
+            {extra > 0 && <span className="ml-1 shrink-0 font-semibold text-[var(--foreground)]">+{extra}</span>}
           </button>
         ) : (
           <a href={sources[0].url} target="_blank" rel="noopener noreferrer" className={triggerClassName}>
             <span className="min-w-0 truncate">{primaryLabel}</span>
-            {extra > 0 && <span className="ml-1 shrink-0 opacity-70">+{extra}</span>}
+            {extra > 0 && <span className="ml-1 shrink-0 font-semibold text-[var(--foreground)]">+{extra}</span>}
           </a>
         )}
       </HoverCardTrigger>
