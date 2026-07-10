@@ -31,11 +31,12 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
   useEffect(() => {
     if (!isLoaded) return
 
-    if (!isSignedIn) {
-      setStatus('unauthenticated')
-      return
-    }
-
+    // Don't gate on isSignedIn: fetchWithAuth already carries the guest's
+    // persisted X-Guest-Id when there's no Clerk token, and the backend
+    // recognizes a guest as the owner of their own threads. Bailing out here
+    // for every signed-out visitor — including one revisiting a thread they
+    // themselves created as a guest — was the bug; let the actual request
+    // decide via its status code instead.
     let cancelled = false
     setStatus('checking')
 

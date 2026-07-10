@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ChevronDown, X } from 'lucide-react'
-import type { Source } from '@/lib/types'
+import { BookOpen, ChevronDown, Loader2, X } from 'lucide-react'
+import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
 import { partitionSources } from '@/lib/markdown'
+import { highlightExcerpt } from '@/lib/highlight'
 
 function domainOf(url: string) {
   try {
@@ -34,6 +35,98 @@ function SourceCard({ source }: { source: Source }) {
         <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-3">{source.content}</p>
       )}
     </a>
+  )
+}
+
+function CheckSourceCard({ match }: { match: CheckSourceMatch }) {
+  const domain = domainOf(match.url)
+  const segments = highlightExcerpt(match.chunk, match.excerpt)
+  return (
+    <a
+      href={match.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--secondary)]/60"
+    >
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" className="h-full w-full object-cover" />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{domain}</span>
+      </div>
+      <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{match.title}</div>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)]">
+        {segments.map((seg, i) =>
+          seg.highlight ? (
+            <mark
+              key={i}
+              className="box-decoration-clone rounded-[3px] bg-[color-mix(in_srgb,var(--accent)_28%,transparent)] px-0.5 text-[var(--foreground)]"
+            >
+              {seg.text}
+            </mark>
+          ) : (
+            <span key={i}>{seg.text}</span>
+          )
+        )}
+      </p>
+    </a>
+  )
+}
+
+function CheckSourceCardSkeleton({ delay }: { delay: number }) {
+  return (
+    <div
+      className="animate-pulse rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <div className="h-4 w-4 shrink-0 rounded-sm bg-[var(--border-subtle)]" />
+        <div className="h-2 w-20 rounded-full bg-[var(--border-subtle)]" />
+      </div>
+      <div className="h-2.5 w-4/5 rounded-full bg-[var(--border-subtle)]" />
+      <div className="mt-2.5 space-y-1.5">
+        <div className="h-2 w-full rounded-full bg-[var(--border-subtle)]/60" />
+        <div className="h-2 w-3/4 rounded-full bg-[var(--border-subtle)]/60" />
+      </div>
+    </div>
+  )
+}
+
+function CheckSourceView({ state }: { state: CheckSourceState }) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] px-3 py-2.5">
+        <p className="line-clamp-4 text-[13px] leading-relaxed text-[var(--foreground)]/90">{state.claim}</p>
+      </div>
+
+      <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+        {state.status === 'loading' ? 'Checking sources' : 'Sources that support this claim'}
+      </p>
+
+      {state.status === 'loading' ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <CheckSourceCardSkeleton key={i} delay={i * 120} />
+          ))}
+        </div>
+      ) : state.matches.length > 0 ? (
+        <div className="space-y-3">
+          {state.matches.map((m, i) => (
+            <CheckSourceCard key={`${m.n}-${i}`} match={m} />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 px-2 py-10 text-center">
+          <div className="rounded-full bg-[var(--secondary)]/60 p-3">
+            <BookOpen size={20} className="text-[var(--muted-foreground)]/60" />
+          </div>
+          <p className="max-w-[220px] text-[12.5px] leading-relaxed text-[var(--muted-foreground)]">
+            No source in this thread directly supports this passage — it may combine multiple sources or general knowledge.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -96,29 +189,58 @@ interface SourcesPanelProps {
   citedNumbers?: Set<number>
   open: boolean
   onClose: () => void
+  /** When set, the panel shows the "check source" view (a claim + the source
+   * passages that support it, Perplexity-style) instead of the plain source
+   * list. `null`/omitted falls back to normal browse mode. */
+  checkSource?: CheckSourceState | null
+}
+
+function PanelHeaderTitle({ sources, checkSource }: { sources: Source[]; checkSource?: CheckSourceState | null }) {
+  if (checkSource) {
+    return checkSource.status === 'loading' ? (
+      <span className="flex items-center gap-1.5 text-[15px] font-medium text-[var(--foreground)] opacity-90">
+        <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />
+        Checking sources…
+      </span>
+    ) : (
+      <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
+        {checkSource.matches.length} source{checkSource.matches.length === 1 ? '' : 's'} found
+      </span>
+    )
+  }
+  return (
+    <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
+      {sources.length} source{sources.length === 1 ? '' : 's'}
+    </span>
+  )
+}
+
+function PanelBody({ sources, citedNumbers, checkSource }: { sources: Source[]; citedNumbers?: Set<number>; checkSource?: CheckSourceState | null }) {
+  return (
+    <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
+      {checkSource ? <CheckSourceView state={checkSource} /> : <SourcesList sources={sources} citedNumbers={citedNumbers} />}
+    </div>
+  )
 }
 
 /**
  * A small right-hand drawer that lists the answer's sources (Perplexity-style),
- * opened on demand from the answer footer instead of expanding inline.
+ * opened on demand from the answer footer instead of expanding inline. Also
+ * doubles as the "check source" result view when `checkSource` is set.
  */
-export function SourcesPanel({ sources, citedNumbers, open, onClose }: SourcesPanelProps) {
+export function SourcesPanel({ sources, citedNumbers, open, onClose, checkSource }: SourcesPanelProps) {
   return (
     <>
       {/* Mobile: Full-screen overlay */}
       {open && (
         <div className="fixed inset-0 z-50 bg-[var(--background)] flex flex-col sm:hidden animate-in fade-in slide-in-from-bottom-8 duration-300">
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
-            <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
-              {sources.length} source{sources.length === 1 ? '' : 's'}
-            </span>
+            <PanelHeaderTitle sources={sources} checkSource={checkSource} />
             <button onClick={onClose} className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Close">
               <X size={18} />
             </button>
           </div>
-          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
-            <SourcesList sources={sources} citedNumbers={citedNumbers} />
-          </div>
+          <PanelBody sources={sources} citedNumbers={citedNumbers} checkSource={checkSource} />
         </div>
       )}
 
@@ -131,16 +253,12 @@ export function SourcesPanel({ sources, citedNumbers, open, onClose }: SourcesPa
       >
         <div className="flex h-full w-[320px] lg:w-[360px] flex-col bg-[var(--background)]">
           <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
-            <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
-              {sources.length} source{sources.length === 1 ? '' : 's'}
-            </span>
+            <PanelHeaderTitle sources={sources} checkSource={checkSource} />
             <button onClick={onClose} className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Close">
               <X size={18} />
             </button>
           </div>
-          <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto p-4">
-            <SourcesList sources={sources} citedNumbers={citedNumbers} />
-          </div>
+          <PanelBody sources={sources} citedNumbers={citedNumbers} checkSource={checkSource} />
         </div>
       </div>
     </>

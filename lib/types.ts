@@ -58,6 +58,31 @@ export interface Source {
   date?: string
 }
 
+/**
+ * One `POST /check_source` result: a chunk that the backend's vector search +
+ * LLM rerank both agreed genuinely supports a highlighted claim.
+ * `excerpt` is a verbatim quote lifted from `chunk` by the rerank step (same
+ * language as the source, never translated/paraphrased) — the frontend
+ * fuzzy-matches it against `chunk` to render a precise highlight, mirroring
+ * Perplexity's "sources that support this claim" panel.
+ */
+export interface CheckSourceMatch {
+  n: number
+  title: string
+  url: string
+  chunk: string
+  excerpt: string
+  score: number
+  turn: number | null
+}
+
+/** Drives the sources panel's "check source" view (see `sources-panel.tsx`). */
+export interface CheckSourceState {
+  status: 'loading' | 'done'
+  claim: string
+  matches: CheckSourceMatch[]
+}
+
 export interface ToolStep {
   tool: string
   args: any

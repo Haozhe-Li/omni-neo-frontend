@@ -23,7 +23,7 @@ import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
-import type { AgentMode, ChatMessage, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
+import type { AgentMode, ChatMessage, CheckSourceState, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 
 interface ChatViewProps {
   query: string
@@ -479,15 +479,53 @@ export function ChatView({
   const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState<string | null>(null)
 
-  // Sources drawer (small right-hand panel, opened from an answer's footer).
+  // Sources drawer (small right-hand panel, opened from an answer's footer,
+  // or repurposed to show `/check_source` results — see `checkSourceState`).
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const [activeSources, setActiveSources] = useState<Source[]>([])
   const [activeCitedNumbers, setActiveCitedNumbers] = useState<Set<number>>(new Set())
+  const [checkSourceState, setCheckSourceState] = useState<CheckSourceState | null>(null)
   const openSources = useCallback((s: Source[], citedNumbers: Set<number>) => {
     setActiveSources(s)
     setActiveCitedNumbers(citedNumbers)
+    setCheckSourceState(null)
     setSourcesOpen(true)
   }, [])
+
+  // "Check source" from the text-selection menu: `turn` is the assistant
+  // message index the highlighted claim came from (see data-message-index
+  // below) — the backend confines matches to sources introduced at or
+  // before that turn so an early answer can't "see" a later turn's sources.
+  const handleCheckSource = useCallback(
+    async (claim: string, turn: number) => {
+      if (!threadId) {
+        toast.error('Check source is unavailable here')
+        return
+      }
+      setCheckSourceState({ status: 'loading', claim, matches: [] })
+      setSourcesOpen(true)
+      try {
+        const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
+          method: 'POST',
+          body: JSON.stringify({ thread_id: threadId, text_selection: claim, turn }),
+        })
+        const data = await response.json()
+        if (!response.ok) {
+          toast.error(data?.error || 'Failed to check source')
+          setCheckSourceState(null)
+          setSourcesOpen(false)
+          return
+        }
+        setCheckSourceState({ status: 'done', claim, matches: data?.matches ?? [] })
+      } catch (error) {
+        console.error('Check source error:', error)
+        toast.error('Failed to check source')
+        setCheckSourceState(null)
+        setSourcesOpen(false)
+      }
+    },
+    [threadId, fetchWithAuth]
+  )
 
   // "Ask Omni" from the text-selection menu: quote the selected passage above
   // the composer instead of sending immediately, so the user can add their
@@ -989,7 +1027,12 @@ export function ChatView({
       }
       try {
         const personalization = await buildPersonalization()
-        const payload: any = { query: queryText, thread_id: threadId, mode }
+        // `turn`: the array index the new assistant message will land at —
+        // same value used for `setStreamingIndex` above. Every citation this
+        // exchange produces is stamped with it (see core/utils/citations.py),
+        // so `/check_source` can later confine a claim to sources visible by
+        // its turn.
+        const payload: any = { query: queryText, thread_id: threadId, mode, turn: baseHistory.length }
         if (Object.keys(personalization).length) payload.personalization = personalization
         if (fileIds && fileIds.length) payload.attached_file_ids = fileIds
         if (activeSkill) payload.skill = activeSkill
@@ -1310,7 +1353,7 @@ export function ChatView({
 
       try {
         const personalization = await buildPersonalization()
-        const payload: any = { mode: effectiveMode }
+        const payload: any = { mode: effectiveMode, turn: baseHistory.length }
         if (newQuery !== undefined) payload.new_query = newQuery
         if (Object.keys(personalization).length) payload.personalization = personalization
 
@@ -1460,8 +1503,8 @@ export function ChatView({
       <div className="flex flex-col h-full relative min-w-0 flex-1 transition-all duration-300">
         <TextSelectionMenu
           containerRef={scrollRef}
-          threadId={threadId}
           onFollowUp={handleAskOmni}
+          onCheckSource={handleCheckSource}
           allowedSelectors={ASSISTANT_MESSAGE_SELECTORS}
         />
         {/* Header */}
@@ -2205,8 +2248,15 @@ export function ChatView({
         </div>
       )}
 
-      {/* Sources drawer — small overlay panel, slides in over the right edge */}
-      <SourcesPanel sources={activeSources} citedNumbers={activeCitedNumbers} open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
+      {/* Sources drawer — small overlay panel, slides in over the right edge.
+          Doubles as the check-source result view when checkSourceState is set. */}
+      <SourcesPanel
+        sources={activeSources}
+        citedNumbers={activeCitedNumbers}
+        open={sourcesOpen}
+        onClose={() => { setSourcesOpen(false); setCheckSourceState(null) }}
+        checkSource={checkSourceState}
+      />
     </div>
   )
 }

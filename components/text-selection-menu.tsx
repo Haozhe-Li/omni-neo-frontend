@@ -1,40 +1,24 @@
 import { useRef, useLayoutEffect, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { BookOpen, Copy, MessageSquarePlus, X, ExternalLink } from 'lucide-react'
+import { BookOpen, Copy, MessageSquarePlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { useApi } from '@/hooks/useApi'
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogDescription,
-} from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
-
-const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-
-// Single best-match result from `POST /check_source`. `null` means no
-// confident match was found across the thread's accumulated sources.
-interface SourceMatch {
-    n: number
-    title: string
-    url: string
-    chunk: string
-    score: number
-}
 
 interface TextSelectionMenuProps {
     containerRef: React.RefObject<HTMLElement | null>
-    /** Needed to scope `/check_source` lookups to this thread's accumulated sources. */
-    threadId?: string
     showCheckSource?: boolean
+    /**
+     * Called with the selected text and the turn (assistant message index —
+     * see `data-message-index` in chat-view.tsx) it was selected from. The
+     * caller owns the actual `/check_source` request and result display
+     * (the sources panel, in check-source mode) — this component only knows
+     * about text selection, not the thread's sources state.
+     */
+    onCheckSource?: (text: string, turn: number) => void
     onFollowUp?: (text: string) => void
     allowedSelectors?: string[]
 }
 
-export function TextSelectionMenu({ containerRef, threadId, showCheckSource = true, onFollowUp, allowedSelectors = [] }: TextSelectionMenuProps) {
-    const { fetchWithAuth } = useApi()
+export function TextSelectionMenu({ containerRef, showCheckSource = true, onCheckSource, onFollowUp, allowedSelectors = [] }: TextSelectionMenuProps) {
     // We use ref-based positioning for performance (avoiding re-renders on scroll)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -43,8 +27,9 @@ export function TextSelectionMenu({ containerRef, threadId, showCheckSource = tr
     const [selectedText, setSelectedText] = useState('')
     // We keep track of the range to query its current position during scroll
     const activeRangeRef = useRef<Range | null>(null)
-    const [verifiedSource, setVerifiedSource] = useState<SourceMatch | null>(null)
-    const [isDialogOpen, setIsDialogOpen] = useState(false)
+    // Which assistant message (turn) the current selection lives in, resolved
+    // from the closest `[data-message-index]` ancestor at selection time.
+    const messageIndexRef = useRef<number | null>(null)
 
     // Use useLayoutEffect to prevent initial flash at 0,0 by updating position before paint
     useLayoutEffect(() => {
@@ -122,6 +107,15 @@ export function TextSelectionMenu({ containerRef, threadId, showCheckSource = tr
 
             activeRangeRef.current = selection.getRangeAt(0)
             setSelectedText(selection.toString().trim())
+
+            const anchorEl =
+                selection.anchorNode?.nodeType === Node.ELEMENT_NODE
+                    ? (selection.anchorNode as Element)
+                    : selection.anchorNode?.parentElement ?? null
+            const messageEl = anchorEl?.closest('[data-message-index]')
+            const rawIndex = messageEl?.getAttribute('data-message-index')
+            messageIndexRef.current = rawIndex !== null && rawIndex !== undefined ? Number(rawIndex) : null
+
             setIsVisible(true)
         }
 
@@ -157,47 +151,18 @@ export function TextSelectionMenu({ containerRef, threadId, showCheckSource = tr
         window.getSelection()?.removeAllRanges()
     }
 
-    const handleCheckSource = async () => {
+    const handleCheckSource = () => {
         setIsVisible(false)
         const textToVerify = selectedText
+        const turn = messageIndexRef.current
         window.getSelection()?.removeAllRanges()
 
-        if (textToVerify.length < 10) {
-            toast.error('Selection is too short to check')
-            return
-        }
-        if (!threadId) {
+        if (turn === null || !onCheckSource) {
             toast.error('Check source is unavailable here')
             return
         }
 
-        const toastId = toast.loading('Checking source...')
-
-        try {
-            const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
-                method: 'POST',
-                body: JSON.stringify({
-                    thread_id: threadId,
-                    text_selection: textToVerify,
-                }),
-            })
-
-            const data = await response.json()
-            toast.dismiss(toastId)
-
-            if (!response.ok) {
-                toast.error(data?.error || 'Failed to verify source')
-                return
-            }
-
-            setVerifiedSource(data?.match ?? null)
-            setIsDialogOpen(true)
-
-        } catch (error) {
-            console.error('Check source error:', error)
-            toast.dismiss(toastId)
-            toast.error('Failed to check source')
-        }
+        onCheckSource(textToVerify, turn)
     }
 
     const handleFollowUp = () => {
@@ -248,72 +213,7 @@ export function TextSelectionMenu({ containerRef, threadId, showCheckSource = tr
         document.body
     ) : null
 
-    return (
-        <>
-            {menuPortal}
-
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden outline-none">
-                    <DialogHeader className="px-6 py-4 border-b border-border/50 shrink-0">
-                        <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-                            <BookOpen className={`h-5 w-5 ${verifiedSource ? 'text-accent' : 'text-muted-foreground'}`} />
-                            {verifiedSource ? 'Source Verified' : 'No Match Found'}
-                        </DialogTitle>
-                        <DialogDescription className="sr-only">
-                            {verifiedSource ? 'Details of the verified source' : 'No matching source found in the provided references'}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                        <ScrollArea className="flex-1 h-full">
-                            {verifiedSource ? (
-                                <div className="px-6 py-6 flex flex-col gap-6">
-                                    {/* Title & Link */}
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Source [{verifiedSource.n}]</span>
-                                            <span className="text-xs font-medium text-accent/80">{Math.round(verifiedSource.score * 100)}% match</span>
-                                        </div>
-                                        <a
-                                            href={verifiedSource.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-start gap-2 text-lg font-medium text-foreground hover:text-accent transition-colors leading-tight group"
-                                        >
-                                            {verifiedSource.title}
-                                            <ExternalLink className="h-4 w-4 mt-1 opacity-50 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                                        </a>
-                                    </div>
-
-                                    {/* Content */}
-                                    {verifiedSource.chunk && (
-                                        <div className="flex flex-col gap-2">
-                                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Passage Context</span>
-                                            <div className="bg-muted/30 rounded-lg p-5 border border-border/40 font-serif text-[15px] leading-relaxed whitespace-pre-wrap text-foreground/90 select-text">
-                                                {verifiedSource.chunk}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="px-6 py-12 flex flex-col items-center justify-center text-center gap-4 h-full">
-                                    <div className="p-4 rounded-full bg-muted/50">
-                                        <BookOpen className="h-8 w-8 text-muted-foreground/50" />
-                                    </div>
-                                    <div className="max-w-md space-y-2">
-                                        <h3 className="text-lg font-medium text-foreground">No Matching Source</h3>
-                                        <p className="text-sm text-muted-foreground leading-relaxed">
-                                            The selected text could not be directly matched to any of the provided sources. This might be a synthesis / translation of multiple sources or general knowledge.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </ScrollArea>
-                    </div>
-                </DialogContent>
-            </Dialog>
-        </>
-    )
+    return menuPortal
 }
 
 function MenuButton({ onClick, icon, label }: { onClick: () => void; icon: React.ReactNode; label: string }) {

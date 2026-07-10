@@ -58,23 +58,26 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
   // Which source numbers the answer text actually cites inline (`[n]`), so the
   // sources panel can separate those from sources that were merely fetched.
   const citedNumbers = useMemo(() => extractCitedNumbers(content), [content])
-  // `sources` is the thread-wide accumulated list (citations can reach
-  // earlier turns), so the footer badge shows only what THIS answer actually
-  // cites rather than every source fetched across the whole conversation.
+  // "Used" resolves against the thread-wide list because a citation can reach
+  // an earlier turn's source (e.g. this answer cites [30], fetched two turns
+  // ago) — that's the one case where crossing turn boundaries is correct.
   const { used: usedSources, split } = useMemo(
     () => partitionSources(sources ?? [], citedNumbers),
     [sources, citedNumbers]
   )
-  // Fall back to this message's OWN fetched sources (not the thread-wide
-  // `sources` list) when it cites nothing inline — e.g. legacy sources saved
-  // before `n` was tracked. Falling back to the thread-wide list here would
-  // resurface every earlier turn's sources on messages that fetched none of
-  // their own (e.g. a plain "hi" reply after a sourced turn).
+  // "Unused" ("fetched but not cited") must NOT cross turn boundaries — it's
+  // scoped to this message's OWN fetched sources only. Using the thread-wide
+  // list here would fold every earlier turn's uncited sources into this
+  // turn's "read but not used" section.
+  const unusedOwnSources = useMemo(
+    () => (ownSources ?? []).filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n))),
+    [ownSources, citedNumbers]
+  )
   const badgeSources = split && usedSources.length > 0 ? usedSources.map((u) => u.source) : ownSources ?? []
-  // Panel gets the full thread-wide list when split (so it can still show the
-  // "fetched but unused" section for this answer's citations); otherwise the
-  // same own-sources fallback the badge uses.
-  const sourcesForPanel = split && usedSources.length > 0 ? sources ?? [] : ownSources ?? []
+  // Panel gets exactly "cited (any turn) + this turn's own unused" — never the
+  // raw thread-wide list, which is what let earlier turns' sources leak in.
+  const sourcesForPanel =
+    split && usedSources.length > 0 ? [...usedSources.map((u) => u.source), ...unusedOwnSources] : ownSources ?? []
   const hasSources = badgeSources.length > 0
 
   // Close regen dropdown on outside click
