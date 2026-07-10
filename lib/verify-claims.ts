@@ -57,7 +57,16 @@ function scoreSentence(raw: string): number {
 // checked: citation links are always fully contained in one sentence in
 // practice, and a wrap failure here just means one fewer badge, not broken
 // rendering (the `<span>` tag itself can't break on odd brackets).
+//
+// Backtick-delimited inline code is refused outright, not just checked for
+// balance: fenced ``` blocks are already excluded line-by-line before a
+// sentence is even considered (see `collectCandidateSpans`), but a single
+// prose line can still contain an inline `` `code span` `` mid-sentence —
+// e.g. "the function `calc(x)[1]` returns y[2]." A verify mark must never
+// land on or straddle code, so any candidate containing a backtick at all
+// is dropped, even if wrapping it wouldn't technically break the markdown.
 function isSafeToWrap(text: string): boolean {
+    if (text.includes('`')) return false
     const boldMarkers = text.match(/\*\*/g)
     return !boldMarkers || boldMarkers.length % 2 === 0
 }

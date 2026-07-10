@@ -23,9 +23,8 @@ import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
-import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
+import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
-import { normalizeCitationPlacement } from '@/lib/markdown'
 
 interface ChatViewProps {
   query: string
@@ -775,7 +774,10 @@ export function ChatView({
           .filter((seg) => seg.type !== 'text' || seg.content.trim())
         // A report's `[n]` citations can reach any source fetched so far in the
         // thread, so resolve against the thread-wide merged map, not just `m.sources`.
-        const reports = withReports.reports.map((r) => ({ ...r, sources: mergedSources }))
+        // `verifiedClaims` is carried the same way — the panel that renders
+        // this report gets it as a plain field instead of doing its own
+        // lookup into `ChatMessage.reportVerifiedClaims`.
+        const reports = withReports.reports.map((r) => ({ ...r, sources: mergedSources, verifiedClaims: m.reportVerifiedClaims?.[r.id] }))
         return { text, reports, question, questionPending, segments }
       }),
     [messages, mergedSources]
@@ -783,11 +785,20 @@ export function ChatView({
 
   // Flatten artifacts/reports across the whole conversation for the panel.
   const allArtifacts: ChartArtifact[] = messages.flatMap((m) => m.artifacts ?? [])
-  const parsedReports: ParsedReport[] = parsedByIndex.flatMap((p) => p.reports)
+  const parsedReports: ParsedReport[] = useMemo(() => parsedByIndex.flatMap((p) => p.reports), [parsedByIndex])
   // Older threads stored reports as a separate array (pre inline-streaming);
   // keep rendering those so historical conversations don't lose their reports.
-  const legacyReports: ReportArtifact[] = messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? mergedSources })))
-  const allReports: ReportArtifact[] = [...parsedReports, ...legacyReports]
+  // Memoized (unlike `allArtifacts`, whose consumers don't mind) because the
+  // report objects flow into the panel's MarkdownMessage: a fresh object per
+  // ChatView render — i.e. per composer keystroke — would swap the `sources`
+  // array identity under MarkdownMessage, rebuilding its ReactMarkdown
+  // component map and remounting every citation badge mid-view (replaying
+  // their mount fade-in as a visible flicker while typing).
+  const legacyReports: ReportArtifact[] = useMemo(
+    () => messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? mergedSources, verifiedClaims: m.reportVerifiedClaims?.[r.id] }))),
+    [messages, mergedSources]
+  )
+  const allReports: ReportArtifact[] = useMemo(() => [...parsedReports, ...legacyReports], [parsedReports, legacyReports])
   const draftingReport = parsedReports.some((r) => !r.complete)
   const hasPanelContent = allArtifacts.length > 0 || allReports.length > 0 || draftingReport
 
@@ -835,22 +846,24 @@ export function ChatView({
   // other field on `ChatMessage` — so the dashed underline survives a
   // refresh instead of living only in throwaway component state.
   const persistVerifiedClaim = useCallback(
-    (messageIndex: number, claim: { id: string; start: number; end: number; claim: string }) => {
-      // Functional update, not a `messagesRef.current` read-then-write: two
-      // candidates from the same message can confirm within the same tick
-      // (the backend caches `/check_source`, so near-simultaneous hits are
-      // routine, not a rare edge case), and reading a ref that only catches
-      // up after the next render would silently drop whichever one lost the
-      // race instead of appending both.
-      setMessages((prev) => {
-        const msg = prev[messageIndex]
-        if (!msg) return prev
-        const next = prev.map((m, i) =>
-          i === messageIndex ? { ...m, verifiedClaims: [...(m.verifiedClaims ?? []), claim] } : m
-        )
-        syncToBackend(next, titleRef.current)
-        return next
-      })
+    (messageIndex: number, claim: VerifiedClaim) => {
+      // Read-modify-write against `messagesRef` with an EAGER ref update —
+      // not a functional setMessages whose updater also fires the sync:
+      // React treats updaters as pure and is allowed to re-invoke or discard
+      // them (StrictMode re-runs them on purpose), so a network call inside
+      // one can fire twice. Writing the ref immediately keeps two
+      // confirmations landing in the same tick composing (the second read
+      // already sees the first's append) instead of racing on a ref that
+      // only catches up after the next render.
+      const prev = messagesRef.current
+      const msg = prev[messageIndex]
+      if (!msg) return
+      const next = prev.map((m, i) =>
+        i === messageIndex ? { ...m, verifiedClaims: [...(m.verifiedClaims ?? []), claim] } : m
+      )
+      messagesRef.current = next
+      setMessages(next)
+      syncToBackend(next, titleRef.current)
     },
     [syncToBackend]
   )
@@ -927,6 +940,113 @@ export function ChatView({
     [handleCheckSource]
   )
 
+  // Same "verify claim" background check as above, scoped to `<report>`
+  // content instead of a message's own prose. A report's `MarkdownMessage`
+  // renders `report.content` (its own string), not the owning message's, so
+  // its verify spans need their own offsets and their own persisted slot —
+  // `ChatMessage.reportVerifiedClaims`, keyed by report id, rather than
+  // reusing `verifiedClaims`. `id`s follow `parseReports`' deterministic
+  // `m<messageIndex>[-b<n>]-report-<n>` scheme, so the owning message index
+  // is recovered by parsing the id rather than needing it passed around.
+  const reportMessageIndex = useCallback((reportId: string): number | null => {
+    const m = reportId.match(/^m(\d+)/)
+    return m ? Number(m[1]) : null
+  }, [])
+
+  // Same eager-ref pattern as persistVerifiedClaim above, and for the same
+  // reasons (pure updaters, same-tick composition).
+  const persistReportVerifiedClaim = useCallback(
+    (messageIndex: number, reportId: string, claim: VerifiedClaim) => {
+      const prev = messagesRef.current
+      const msg = prev[messageIndex]
+      if (!msg) return
+      const nextForReport = [...(msg.reportVerifiedClaims?.[reportId] ?? []), claim]
+      const next = prev.map((m, i) =>
+        i === messageIndex
+          ? { ...m, reportVerifiedClaims: { ...(m.reportVerifiedClaims ?? {}), [reportId]: nextForReport } }
+          : m
+      )
+      messagesRef.current = next
+      setMessages(next)
+      syncToBackend(next, titleRef.current)
+    },
+    [syncToBackend]
+  )
+
+  const runReportVerifyExtraction = useCallback(
+    async (messageIndex: number, reportId: string, content: string) => {
+      if (!threadId) return
+      const candidates = extractClaimCandidates(content, 5)
+      if (candidates.length === 0) return
+      const CONCURRENCY = 3
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < candidates.length) {
+          const candidate = candidates[cursor++]
+          try {
+            const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
+              method: 'POST',
+              body: JSON.stringify({ thread_id: threadId, text_selection: candidate.query, turn: messageIndex }),
+            })
+            if (!response.ok) continue
+            const data = await response.json()
+            const matches: CheckSourceMatch[] = data?.matches ?? []
+            if (matches.length > 0) {
+              persistReportVerifiedClaim(messageIndex, reportId, {
+                id: candidate.id,
+                start: candidate.start,
+                end: candidate.end,
+                claim: candidate.query,
+              })
+            }
+          } catch {
+            // Silent, same as the message-level version — opportunistic
+            // background enrichment, nothing to surface an error for.
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker))
+    },
+    [threadId, fetchWithAuth, persistReportVerifiedClaim]
+  )
+
+  // A report can finish streaming independently of its owning message (the
+  // model keeps narrating after `</report>` closes), so there's no single
+  // "streamingIndex flipped away" moment to hook the way the message-level
+  // effect does — instead, scan every report and fire once per report id.
+  // The `verifyProcessedRef.has(messageIndex)` gate scopes the sweep to
+  // turns that finished streaming *this session* (that set is only ever
+  // added to by the message-level effect above, which runs earlier in the
+  // same commit since effects fire in definition order): a thread opened
+  // from history has complete reports everywhere, and sweeping those would
+  // re-fire /check_source for content whose hits were already persisted to
+  // `reportVerifiedClaims` when it originally streamed. Reports with an
+  // unparseable id (the legacy `msg.reports` format predates the
+  // deterministic id scheme) are skipped rather than guessed at.
+  const reportVerifyProcessedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    for (const r of allReports) {
+      if (r.complete === false) continue
+      if (reportVerifyProcessedRef.current.has(r.id)) continue
+      const messageIndex = reportMessageIndex(r.id)
+      if (messageIndex === null || !verifyProcessedRef.current.has(messageIndex)) continue
+      reportVerifyProcessedRef.current.add(r.id)
+      if (!r.content?.trim()) continue
+      runReportVerifyExtraction(messageIndex, r.id, r.content)
+    }
+  }, [allReports, reportMessageIndex, runReportVerifyExtraction])
+
+  const handleReportVerifiedClaimClick = useCallback(
+    (reportId: string, id: string) => {
+      const messageIndex = reportMessageIndex(reportId)
+      if (messageIndex === null) return
+      const entry = messagesRef.current[messageIndex]?.reportVerifiedClaims?.[reportId]?.find((v) => v.id === id)
+      if (!entry) return
+      handleCheckSource(entry.claim, messageIndex)
+    },
+    [handleCheckSource, reportMessageIndex]
+  )
+
   // One stable callback per message index, handed to `MarkdownMessage` as
   // `onVerifiedClaimClick` below. Binding `i` inline at the render site
   // (`(id) => handleVerifiedClaimClick(i, id)`) would create a fresh
@@ -997,17 +1117,6 @@ export function ChatView({
         if (last && last.type === 'tools') last.steps.push(step)
         else blocks.push({ type: 'tools', steps: [step] })
       }
-
-      // Citations arrive interleaved with prose mid-stream, often glued
-      // right in front of trailing punctuation ("...520 万美元[1][2]。").
-      // `MarkdownMessage` hides them entirely while streaming and only
-      // shows the normalized order once a turn is done — this is the one
-      // place that reordering actually happens, applied once to whatever
-      // ends up as the message's *stored* content (and each text block's,
-      // since a message with `blocks` renders those instead of `content`
-      // directly), not recomputed on every render.
-      const normalizeFinalBlocks = (finalBlocks: MessageBlock[]): MessageBlock[] =>
-        finalBlocks.map((b) => (b.type === 'text' ? { ...b, content: normalizeCitationPlacement(b.content) } : b))
 
       const patchAssistant = () => {
         setMessages([
@@ -1093,12 +1202,17 @@ export function ChatView({
             }
             case 'stopped': {
               clearSlowHint()
-              const finalText = normalizeCitationPlacement(
-                text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
-              )
+              // NEVER rewrite `text`/`blocks` here (e.g. to normalize citation
+              // placement): the backend records this turn itself server-side
+              // and reconciles /sync payloads against that record by content.
+              // Syncing a mutated copy fails that match and the whole turn
+              // comes back DUPLICATED on the next load — one copy ours, one
+              // the backend's raw record. Display cleanup belongs in
+              // preprocessMarkdown (render-time), not in stored content.
+              const finalText = text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, blocks: normalizeFinalBlocks(blocks), widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -1109,12 +1223,12 @@ export function ChatView({
             }
             case 'done': {
               clearSlowHint()
-              const finalText = normalizeCitationPlacement(
+              // Same content-immutability rule as 'stopped' above.
+              const finalText =
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
-              )
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, blocks: normalizeFinalBlocks(blocks), widgets, artifacts, sources, drafting: null, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -1130,7 +1244,7 @@ export function ChatView({
       if (isStoppingRef.current) {
         const stoppedMessages: ChatMessage[] = [
           ...baseHistory,
-          { role: 'assistant', content: normalizeCitationPlacement(text), steps, blocks: normalizeFinalBlocks(blocks), widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+          { role: 'assistant', content: text, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
         ]
         setMessages(stoppedMessages)
         syncToBackend(stoppedMessages, titleRef.current)
@@ -2375,6 +2489,9 @@ export function ChatView({
               activeId={activeArtifactId}
               onSelect={setActiveArtifactId}
               onClose={() => setPanelOpen(false)}
+              onFollowUp={handleAskOmni}
+              onCheckSource={handleCheckSource}
+              onVerifiedClaimClick={handleReportVerifiedClaimClick}
             />
           </div>
         </div>
@@ -2391,6 +2508,9 @@ export function ChatView({
               activeId={activeArtifactId}
               onSelect={setActiveArtifactId}
               onClose={() => setPanelOpen(false)}
+              onFollowUp={handleAskOmni}
+              onCheckSource={handleCheckSource}
+              onVerifiedClaimClick={handleReportVerifiedClaimClick}
             />
           </div>
         </div>

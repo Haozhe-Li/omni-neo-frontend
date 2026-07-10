@@ -100,8 +100,9 @@ function transformCitations(text: string, citationNumbers?: Set<number>): string
 // streaming in: citations arrive interleaved with prose one token at a time,
 // so linking (or even leaving bare `[1]` text visible) would flash pills/
 // brackets into existence one by one as the model happens to emit them.
-// Stripped during the stream, then normalized (`normalizeCitationPlacement`)
-// and revealed together — each with its own fade-in — once it finishes.
+// Stripped during the stream, then revealed together — normalized by
+// `moveCitationsAfterPunctuation`, each with its own fade-in — once it
+// finishes.
 function stripCitationsForStreaming(text: string, citationNumbers?: Set<number>): string {
     if (!citationNumbers || citationNumbers.size === 0) return text
     return text.replace(/\[(\d+)\](?!\()/g, (match, n) => (citationNumbers.has(Number(n)) ? '' : match))
@@ -113,23 +114,20 @@ function stripCitationsForStreaming(text: string, citationNumbers?: Set<number>)
 // stop — which reads oddly since the numbers interrupt the sentence's own
 // punctuation rather than following it. Only touches a run that's directly
 // adjacent (no space) to one of `。！？.!?，,；;：:` immediately following it;
-// a citation that already sits after punctuation, or isn't touching any
-// punctuation at all, is left exactly where it was.
+// a citation that already sits after punctuation (including text this
+// already ran on — it's idempotent), or isn't touching any punctuation at
+// all, is left exactly where it was.
 //
-// Meant to run once, on the final (non-streaming) text, right when a turn
-// finishes — not on every render — so the normalized order is what actually
-// gets persisted (`ChatMessage.content`/`block.content`), not just a
-// display-time illusion.
-export function normalizeCitationPlacement(text: string): string {
-    if (!text) return text
-    return text
-        .split(/(```[\s\S]*?```)/g)
-        .map((segment) =>
-            segment.startsWith('```')
-                ? segment
-                : segment.replace(/((?:\[\d+\])+)([。！？.!?，,；;：:])/g, '$2$1')
-        )
-        .join('')
+// Runs at RENDER time only, as a `preprocessMarkdown` step — never against
+// content that gets stored or synced. The backend records each turn itself
+// server-side and reconciles the frontend's /sync payloads against that
+// record by content, so a frontend that syncs back a rewritten `content`
+// creates a second, unmatched copy of the whole turn — the
+// duplicated-turn-after-refresh bug. Doing it here keeps stored bytes
+// identical to the backend's record while every render surface (chat,
+// report panel, published Pages) still shows the tidied order.
+function moveCitationsAfterPunctuation(segment: string): string {
+    return segment.replace(/((?:\[\d+\])+)([。！？.!?，,；;：:])/g, '$2$1')
 }
 
 // Scans raw (untransformed) message content for `[n]` inline citation markers
@@ -186,7 +184,7 @@ export function preprocessMarkdown(
         .map((segment) =>
             segment.startsWith('```')
                 ? segment
-                : transformMath(citationStep(fixEmphasisFlanking(escapeCurrencyDollars(segment)), citationNumbers))
+                : transformMath(citationStep(fixEmphasisFlanking(escapeCurrencyDollars(moveCitationsAfterPunctuation(segment))), citationNumbers))
         )
         .join('')
 }

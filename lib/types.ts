@@ -110,6 +110,14 @@ export interface ReportArtifact {
   complete?: boolean
   /** Sources from the owning message, carried along so `[n]` citations inside the report body resolve. */
   sources?: Source[]
+  /**
+   * This report's own dashed-underline marks — a copy of the owning
+   * message's `reportVerifiedClaims[this.id]`, carried along the same way
+   * `sources` is so the panel that renders this report doesn't need its own
+   * lookup into `ChatMessage`. Offsets are into *this report's* `content`
+   * string, not the owning message's.
+   */
+  verifiedClaims?: VerifiedClaim[]
 }
 
 export interface WidgetData {
@@ -121,6 +129,16 @@ export interface WidgetData {
 // that arrival order so the UI can render text/tool sections interleaved
 // instead of always showing all tool activity before all text.
 export type MessageBlock = { type: 'text'; content: string } | { type: 'tools'; steps: ToolStep[] }
+
+/** One "verify claim" dashed-underline mark: a span (offsets into whichever
+ * string it was extracted from) plus the cleaned claim text sent to
+ * `/check_source`. See `lib/verify-claims.ts`. */
+export interface VerifiedClaim {
+  id: string
+  start: number
+  end: number
+  claim: string
+}
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -150,7 +168,15 @@ export interface ChatMessage {
    * persisting the full match payload too, since the backend caches that
    * lookup and refetching is cheap.
    */
-  verifiedClaims?: { id: string; start: number; end: number; claim: string }[]
+  verifiedClaims?: VerifiedClaim[]
+  /**
+   * Same idea as `verifiedClaims`, but for `<report>` blocks embedded in
+   * this message's content — keyed by the report's own id (deterministic:
+   * `m<messageIndex>[-b<blockIndex>]-report-<n>`, see `lib/report-parser.ts`)
+   * since a report's `MarkdownMessage` renders its own `content` string, not
+   * the message's, so offsets have to be scoped separately per report.
+   */
+  reportVerifiedClaims?: Record<string, VerifiedClaim[]>
 }
 
 export type PublishDuration = '7d' | '30d' | 'permanent'
