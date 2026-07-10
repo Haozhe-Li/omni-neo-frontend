@@ -351,7 +351,21 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
 // etc.); clicking just hands the id back to the caller, which already has
 // the matches from the background check and opens the sources panel with
 // them directly, no second request.
+//
+// The mark mounts the instant its message's background check confirms a
+// hit — the sentence's text is already sitting there fully visible (it's
+// been on screen since the answer streamed in), so fading the whole span's
+// opacity would flash the *words* too. Instead only the underline itself
+// fades in: mount with a transparent decoration color, flip to the real
+// color one frame later so `transition-colors` has something to animate
+// from — the text never dims, just the dashes settle in under it.
 function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (id: string) => void; children: ReactNode }) {
+  const [revealed, setRevealed] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
   if (!onClick) return <>{children}</>
   return (
     <span
@@ -359,7 +373,7 @@ function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (i
       tabIndex={0}
       onClick={() => onClick(id)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
-      className="cursor-pointer underline decoration-dashed decoration-1 decoration-[var(--muted-foreground)]/50 underline-offset-4 hover:decoration-[var(--foreground)]/70 transition-colors"
+      className={`cursor-pointer underline decoration-dashed decoration-1 underline-offset-4 transition-colors duration-500 ease-out hover:decoration-[var(--foreground)]/70 ${revealed ? 'decoration-[var(--muted-foreground)]/50' : 'decoration-transparent'}`}
       title="Verified — click to see the source"
     >
       {children}

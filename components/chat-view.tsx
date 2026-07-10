@@ -541,7 +541,6 @@ export function ChatView({
       if (candidates.length === 0) return
 
       const CONCURRENCY = 3
-      const confirmed: { id: string; start: number; end: number; claim: string; matches: CheckSourceMatch[] }[] = []
       let cursor = 0
       const worker = async () => {
         while (cursor < candidates.length) {
@@ -555,7 +554,17 @@ export function ChatView({
             const data = await response.json()
             const matches: CheckSourceMatch[] = data?.matches ?? []
             if (matches.length > 0) {
-              confirmed.push({ id: candidate.id, start: candidate.start, end: candidate.end, claim: candidate.query, matches })
+              // Land each hit the moment it's confirmed rather than batching
+              // behind the slowest candidate — an early sentence's dashed
+              // underline shows up as soon as it's found, instead of every
+              // badge in the message popping in together at the end.
+              setVerifiedByMessage((prev) => ({
+                ...prev,
+                [messageIndex]: [
+                  ...(prev[messageIndex] ?? []),
+                  { id: candidate.id, start: candidate.start, end: candidate.end, claim: candidate.query, matches },
+                ],
+              }))
             }
           } catch {
             // Silent — this is opportunistic background enrichment, not a
@@ -564,9 +573,6 @@ export function ChatView({
         }
       }
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker))
-      if (confirmed.length > 0) {
-        setVerifiedByMessage((prev) => ({ ...prev, [messageIndex]: confirmed }))
-      }
     },
     [threadId, fetchWithAuth]
   )
