@@ -13,7 +13,7 @@ import { Copy, Check, ChevronDown, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
-import { InlineEcharts, InlineMap, CitationBadge, resolveCitationSources } from '@/components/markdown-message'
+import { InlineEcharts, InlineMap, CitationBadge, citationUrlTransform, resolveCitationSources } from '@/components/markdown-message'
 import type { Source } from '@/lib/types'
 import { SourceItem } from '@/components/source-item'
 import { extractCitedNumbers, partitionSources, preprocessMarkdown } from '@/lib/markdown'
@@ -286,7 +286,7 @@ export function MarkdownBlogView({
           </header>
 
           <section className="blog-markdown markdown-body pt-7 text-[16px] leading-[1.8] text-foreground">
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]} components={markdownComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex, rehypeRaw]} components={markdownComponents} urlTransform={citationUrlTransform}>
               {preprocessMarkdown(markdown, citationNumbers)}
             </ReactMarkdown>
 

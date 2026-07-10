@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -452,6 +452,16 @@ const baseMarkdownComponents: Omit<Components, 'a'> = {
   ),
 }
 
+// react-markdown's default urlTransform whitelists only http(s)/mailto/irc/xmpp
+// and blanks every other protocol's href — including our synthetic `citation:`
+// links. With the href gone, resolveCitationSources can only fall back on the
+// link's visible text ("1"), which recovers a single source and silently drops
+// the rest of a merged `[1][3]` run (`citation:1,3`). Every ReactMarkdown that
+// renders citations must pass this transform to let `citation:` hrefs through.
+export function citationUrlTransform(url: string): string {
+  return url.startsWith('citation:') ? url : defaultUrlTransform(url)
+}
+
 // Resolves an `a` node's href/children to the citation sources it refers to, if
 // any — shared by every markdown surface in the app (chat, report panel, published
 // Pages view) so they all recognize citations the same way instead of each
@@ -525,6 +535,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({ content, classNam
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeRaw, rehypeKatex, rehypeHighlight]}
         components={components}
+        urlTransform={citationUrlTransform}
       >
         {preprocessMarkdown(content, citationNumbers)}
       </ReactMarkdown>
