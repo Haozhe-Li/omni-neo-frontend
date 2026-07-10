@@ -926,6 +926,23 @@ export function ChatView({
     [handleCheckSource]
   )
 
+  // One stable callback per message index, handed to `MarkdownMessage` as
+  // `onVerifiedClaimClick` below. Binding `i` inline at the render site
+  // (`(id) => handleVerifiedClaimClick(i, id)`) would create a fresh
+  // function every render of `ChatView` — including ones with nothing to do
+  // with this message, like every keystroke in the composer — and since
+  // `MarkdownMessage` folds that callback into the `components.span`
+  // function it hands to `ReactMarkdown`, a new reference there makes React
+  // treat the verified-claim mark as a different component type at that
+  // spot and remount it: its reveal animation resets and the DOM node itself
+  // gets torn down and rebuilt, which is what shows up as a flicker while
+  // typing. Only rebuild the array when the message count actually changes
+  // (not on every content update mid-stream, which doesn't change `.length`).
+  const verifiedClaimClickHandlers = useMemo(
+    () => Array.from({ length: messages.length }, (_, i) => (id: string) => handleVerifiedClaimClick(i, id)),
+    [messages.length, handleVerifiedClaimClick]
+  )
+
   // ── build personalization payload ──────────────────────────────────────
   const buildPersonalization = useCallback(async () => {
     const p: any = {}
@@ -1817,7 +1834,7 @@ export function ChatView({
                                         // that IS the full content verbatim (no report/question
                                         // block stripped it down), otherwise offsets wouldn't line up.
                                         verifiedClaims={parseQuestion(seg.content).text === msg.content ? msg.verifiedClaims : undefined}
-                                        onVerifiedClaimClick={parseQuestion(seg.content).text === msg.content ? (id) => handleVerifiedClaimClick(i, id) : undefined}
+                                        onVerifiedClaimClick={parseQuestion(seg.content).text === msg.content ? verifiedClaimClickHandlers[i] : undefined}
                                       />
                                     ) : null
                                   ) : (
@@ -1846,7 +1863,7 @@ export function ChatView({
                                   animate={i === streamingIndex}
                                   sources={mergedSources}
                                   verifiedClaims={seg.content === msg.content ? msg.verifiedClaims : undefined}
-                                  onVerifiedClaimClick={seg.content === msg.content ? (id) => handleVerifiedClaimClick(i, id) : undefined}
+                                  onVerifiedClaimClick={seg.content === msg.content ? verifiedClaimClickHandlers[i] : undefined}
                                 />
                               ) : (
                                 <div key={`report-wrap-${i}-${si}`} className="my-3 w-full">
