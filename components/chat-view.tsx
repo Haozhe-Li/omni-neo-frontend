@@ -25,6 +25,7 @@ import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
 import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
+import { normalizeCitationPlacement } from '@/lib/markdown'
 
 interface ChatViewProps {
   query: string
@@ -997,6 +998,17 @@ export function ChatView({
         else blocks.push({ type: 'tools', steps: [step] })
       }
 
+      // Citations arrive interleaved with prose mid-stream, often glued
+      // right in front of trailing punctuation ("...520 万美元[1][2]。").
+      // `MarkdownMessage` hides them entirely while streaming and only
+      // shows the normalized order once a turn is done — this is the one
+      // place that reordering actually happens, applied once to whatever
+      // ends up as the message's *stored* content (and each text block's,
+      // since a message with `blocks` renders those instead of `content`
+      // directly), not recomputed on every render.
+      const normalizeFinalBlocks = (finalBlocks: MessageBlock[]): MessageBlock[] =>
+        finalBlocks.map((b) => (b.type === 'text' ? { ...b, content: normalizeCitationPlacement(b.content) } : b))
+
       const patchAssistant = () => {
         setMessages([
           ...baseHistory,
@@ -1081,10 +1093,12 @@ export function ChatView({
             }
             case 'stopped': {
               clearSlowHint()
-              const finalText = text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
+              const finalText = normalizeCitationPlacement(
+                text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
+              )
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks: normalizeFinalBlocks(blocks), widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -1095,11 +1109,12 @@ export function ChatView({
             }
             case 'done': {
               clearSlowHint()
-              const finalText =
+              const finalText = normalizeCitationPlacement(
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
+              )
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks: normalizeFinalBlocks(blocks), widgets, artifacts, sources, drafting: null, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -1115,7 +1130,7 @@ export function ChatView({
       if (isStoppingRef.current) {
         const stoppedMessages: ChatMessage[] = [
           ...baseHistory,
-          { role: 'assistant', content: text, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+          { role: 'assistant', content: normalizeCitationPlacement(text), steps, blocks: normalizeFinalBlocks(blocks), widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
         ]
         setMessages(stoppedMessages)
         syncToBackend(stoppedMessages, titleRef.current)

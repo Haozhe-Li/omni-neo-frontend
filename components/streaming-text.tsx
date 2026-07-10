@@ -96,9 +96,13 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
   const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
   // `verifiedClaims` offsets are computed against the full, final content —
   // only safe to apply once the whole thing is revealed (`!animate`), never
-  // against the still-growing `slice`.
+  // against the still-growing `slice`. Citations are hidden entirely while
+  // `animate` is true (see `hideCitations` on `MarkdownMessage`) — the
+  // normalized, final wording of a `[1][2]` run right before punctuation
+  // isn't settled until the turn is done, so there's nothing correct to
+  // show mid-stream anyway; they all appear together once it flips false.
   return animate ? (
-    <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} />
+    <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} hideCitations />
   ) : (
     <MarkdownMessage content={contentRef.current} sources={sources} verifiedClaims={verifiedClaims} onVerifiedClaimClick={onVerifiedClaimClick} />
   )
