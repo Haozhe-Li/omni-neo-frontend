@@ -73,20 +73,12 @@ function isUntitled(t?: string) {
   return !n || n === 'untitled' || n === 'untitled chat'
 }
 
-const TAB_TITLE_LIMIT = 15
-const CJK_CHAR_PATTERN = /[一-鿿]/
+const TAB_TITLE_LIMIT = 50
 
 function toTabTitle(chatTitle: string) {
   const trimmed = chatTitle.trim()
   if (!trimmed) return 'Omni Knows'
-
-  // Chinese: count by character. English (or anything else): count by word,
-  // since a 15-character cutoff would chop most words in half.
-  if (CJK_CHAR_PATTERN.test(trimmed)) {
-    return trimmed.length > TAB_TITLE_LIMIT ? `${trimmed.slice(0, TAB_TITLE_LIMIT)}…` : trimmed
-  }
-  const words = trimmed.split(/\s+/).filter(Boolean)
-  return words.length > TAB_TITLE_LIMIT ? `${words.slice(0, TAB_TITLE_LIMIT).join(' ')}…` : trimmed
+  return trimmed.length > TAB_TITLE_LIMIT ? `${trimmed.slice(0, TAB_TITLE_LIMIT)}…` : trimmed
 }
 
 const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf' | 'html') => {
@@ -1516,7 +1508,7 @@ export function ChatView({
               </button>
             )}
           </div>
-          <div className="absolute left-1/2 -translate-x-1/2 max-w-[60%] flex items-center gap-1 group">
+          <div className="absolute left-1/2 -translate-x-1/2 max-w-[min(42rem,60%)] flex items-center gap-1 group">
             <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{title || query}</span>
             <button
               title="Edit title"

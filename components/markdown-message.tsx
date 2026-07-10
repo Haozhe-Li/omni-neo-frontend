@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
-import { brandDomain } from '@/lib/domain'
+import { brandDomain, truncateFilename } from '@/lib/domain'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
 import type { Source } from '@/lib/types'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
@@ -212,6 +212,8 @@ function domainOf(url: string) {
   }
 }
 
+const DOCUMENT_LABEL_MAX = 20
+
 // Renders a `[n]` inline citation marker (rewritten to a `citation:n` — or,
 // for a run of adjacent markers, `citation:n1,n2,...` — link by preprocessMarkdown)
 // as a small pill showing the (first) source's brand name, plus a `+N` count
@@ -226,7 +228,9 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
   const current = sources[Math.min(idx, sources.length - 1)]
   const primaryIsDocument = !sources[0].url
   const currentIsDocument = !current.url
-  const primaryLabel = primaryIsDocument ? 'Document' : brandDomain(sources[0].url)
+  const primaryLabel = primaryIsDocument
+    ? truncateFilename(sources[0].title, DOCUMENT_LABEL_MAX, false)
+    : brandDomain(sources[0].url)
   const currentDomain = domainOf(current.url)
   const extra = sources.length - 1
   const triggerClassName =
@@ -298,7 +302,9 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
               <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--secondary)]">
                 <FileText size={11} className="text-[var(--muted-foreground)]" />
               </span>
-              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">Uploaded document</span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">
+                {truncateFilename(current.title, 30, true)}
+              </span>
               {current.date && (
                 <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
               )}

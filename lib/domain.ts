@@ -15,3 +15,12 @@ export function brandDomain(url: string): string {
     return url
   }
 }
+
+// Label for a document-sourced citation/source card: the filename, capped so
+// a long one doesn't just rely on CSS truncation. `keepExtension` is false
+// for the compact inline citation pill (no room for it) and true everywhere
+// else (source cards, hover-card detail) where the extension is useful info.
+export function truncateFilename(filename: string, max: number, keepExtension: boolean): string {
+  const base = keepExtension ? filename : filename.replace(/\.[^./\\]+$/, '')
+  return base.length > max ? `${base.slice(0, max)}…` : base
+}

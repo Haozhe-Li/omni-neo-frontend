@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
 import { partitionSources } from '@/lib/markdown'
 import { highlightExcerpt } from '@/lib/highlight'
+import { truncateFilename } from '@/lib/domain'
 
 function domainOf(url: string) {
   try {
@@ -19,10 +20,10 @@ const notifyUploadedDocument = () =>
   toast.info("This is a document you uploaded — it can't be opened as a link.")
 
 // Favicon + domain/title row shared by SourceCard and CheckSourceCard — a
-// user-uploaded document (source.url === '') gets a generic file icon and a
-// label instead, and isn't clickable. Takes a structural {url} rather than
-// `Source` so it also accepts a `CheckSourceMatch`.
-function SourceCardHeader({ source }: { source: { url: string } }) {
+// user-uploaded document (source.url === '') gets a generic file icon and its
+// filename instead, and isn't clickable. Takes a structural {url, title}
+// rather than `Source` so it also accepts a `CheckSourceMatch`.
+function SourceCardHeader({ source }: { source: { url: string; title: string } }) {
   const isDocument = !source.url
   return (
     <div className="mb-1.5 flex items-center gap-2">
@@ -39,7 +40,7 @@ function SourceCardHeader({ source }: { source: { url: string } }) {
         )}
       </span>
       <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">
-        {isDocument ? 'Uploaded document' : domainOf(source.url)}
+        {isDocument ? truncateFilename(source.title, 30, true) : domainOf(source.url)}
       </span>
     </div>
   )
