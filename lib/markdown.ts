@@ -95,6 +95,43 @@ function transformCitations(text: string, citationNumbers?: Set<number>): string
     })
 }
 
+// Same recognized-number guard as `transformCitations`, but removes the
+// marker outright instead of linking it. Used while an answer is still
+// streaming in: citations arrive interleaved with prose one token at a time,
+// so linking (or even leaving bare `[1]` text visible) would flash pills/
+// brackets into existence one by one as the model happens to emit them.
+// Stripped during the stream, then normalized (`normalizeCitationPlacement`)
+// and revealed together — each with its own fade-in — once it finishes.
+function stripCitationsForStreaming(text: string, citationNumbers?: Set<number>): string {
+    if (!citationNumbers || citationNumbers.size === 0) return text
+    return text.replace(/\[(\d+)\](?!\()/g, (match, n) => (citationNumbers.has(Number(n)) ? '' : match))
+}
+
+// Moves a citation-marker run that landed immediately *before* trailing
+// punctuation to just *after* it instead. The model very often emits
+// "...520 万美元[1][2]。" — the citations glued right in front of the full
+// stop — which reads oddly since the numbers interrupt the sentence's own
+// punctuation rather than following it. Only touches a run that's directly
+// adjacent (no space) to one of `。！？.!?，,；;：:` immediately following it;
+// a citation that already sits after punctuation, or isn't touching any
+// punctuation at all, is left exactly where it was.
+//
+// Meant to run once, on the final (non-streaming) text, right when a turn
+// finishes — not on every render — so the normalized order is what actually
+// gets persisted (`ChatMessage.content`/`block.content`), not just a
+// display-time illusion.
+export function normalizeCitationPlacement(text: string): string {
+    if (!text) return text
+    return text
+        .split(/(```[\s\S]*?```)/g)
+        .map((segment) =>
+            segment.startsWith('```')
+                ? segment
+                : segment.replace(/((?:\[\d+\])+)([。！？.!?，,；;：:])/g, '$2$1')
+        )
+        .join('')
+}
+
 // Scans raw (untransformed) message content for `[n]` inline citation markers
 // and returns the set of numbers actually cited in the text. Used to tell
 // sources the model cited from sources it merely fetched but never referenced
@@ -131,11 +168,16 @@ export function partitionSources(
     return { used, unused, split: true }
 }
 
-export function preprocessMarkdown(content: any, citationNumbers?: Set<number>): string {
+export function preprocessMarkdown(
+    content: any,
+    citationNumbers?: Set<number>,
+    options?: { hideCitations?: boolean }
+): string {
     if (!content) return ''
 
     // Ensure content is a string before using .replace
     const text = typeof content === 'string' ? content : String(content)
+    const citationStep = options?.hideCitations ? stripCitationsForStreaming : transformCitations
 
     // Split out fenced code blocks and only run citation/math transforms on the
     // prose between them. The capturing group keeps the fences in the result array.
@@ -144,7 +186,7 @@ export function preprocessMarkdown(content: any, citationNumbers?: Set<number>):
         .map((segment) =>
             segment.startsWith('```')
                 ? segment
-                : transformMath(transformCitations(fixEmphasisFlanking(escapeCurrencyDollars(segment)), citationNumbers))
+                : transformMath(citationStep(fixEmphasisFlanking(escapeCurrencyDollars(segment)), citationNumbers))
         )
         .join('')
 }

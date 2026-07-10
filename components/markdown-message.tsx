@@ -9,7 +9,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download, BarChart3, FileText, MapPin, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react'
+import { Copy, Check, Download, BarChart3, FileText, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
@@ -234,8 +234,18 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
     : brandDomain(sources[0].url)
   const currentDomain = domainOf(current.url)
   const extra = sources.length - 1
-  const triggerClassName =
-    'mx-0.5 inline-flex max-w-[140px] items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors'
+
+  // Citations are hidden entirely while an answer streams in (see
+  // `hideCitations` in `preprocessMarkdown`) and only reach the page once
+  // streaming finishes, all at once — so every `CitationBadge` mount is a
+  // "first appearance" moment worth a fade-in, not just a re-render to skip.
+  const [revealed, setRevealed] = useState(false)
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
+  const triggerClassName = `mx-0.5 inline-flex max-w-[140px] items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors transition-opacity duration-300 ease-out ${revealed ? 'opacity-100' : 'opacity-0'}`
 
   return (
     <HoverCard openDelay={150} closeDelay={100} onOpenChange={(open) => { if (!open) setIdx(0) }}>
@@ -348,10 +358,8 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
 // by `spliceVerifyMarkers` around a sentence that silently came back with a
 // `/check_source` hit (see `lib/verify-claims.ts`) — as a dashed-underline
 // span. Its own children render normally (bold, a nested citation badge,
-// etc.); hovering shows a small explainer pill (same `HoverCard` used by
-// `CitationBadge`, just a static two-line message — no fetch, nothing to
-// page through), and clicking hands the id back to the caller, which
-// re-runs `/check_source` and opens the sources panel.
+// etc.); clicking hands the id back to the caller, which re-runs
+// `/check_source` and opens the sources panel.
 //
 // The mark mounts the instant its message's background check confirms a
 // hit — the sentence's text is already sitting there fully visible (it's
@@ -360,9 +368,13 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
 // it's a `background-image` dash pattern (not `text-decoration`) so its
 // *size* can be transitioned from 0 to 100% width — reads as the line
 // being drawn left to right — rather than just appearing at full length.
-// `text-decoration` has no equivalent "reveal" hook; a background does,
-// and (per `box-decoration-break`, default `slice`) still paints correctly
-// per line if the sentence wraps.
+// `text-decoration` has no equivalent "reveal" hook; a background does.
+// `box-decoration-break: clone` (not the `slice` default) so a sentence
+// that wraps across 3+ lines gets each line its own independently-correct
+// 0%→100% underline — `slice` computes one shared background sized against
+// the *unwrapped* total width then cuts it across the actual lines, and for
+// 3+ lines that division doesn't come out even, silently dropping whichever
+// middle line got sliced to a near-zero-width sliver.
 function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (id: string) => void; children: ReactNode }) {
   const [revealed, setRevealed] = useState(false)
   useEffect(() => {
@@ -372,48 +384,24 @@ function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (i
 
   if (!onClick) return <>{children}</>
   return (
-    <HoverCard openDelay={150} closeDelay={100}>
-      <HoverCardTrigger asChild>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={() => onClick(id)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
-          className="cursor-pointer transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(to right, var(--verify-line) 0, var(--verify-line) 3px, transparent 3px, transparent 6px)',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'left 1.2em',
-            backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
-            // `slice` (the default) treats a wrapped inline element's
-            // background as ONE continuous image sized/positioned against
-            // its *unwrapped* total width, then slices out whatever portion
-            // falls on each actual line — for 3+ lines that math doesn't
-            // divide evenly, and a middle line can end up sliced a zero-
-            // width sliver of it, silently dropping its underline. `clone`
-            // instead gives every line its own independent, full copy of
-            // the background sized against that line's own width, so each
-            // one reliably gets its own 0%→100% underline.
-            WebkitBoxDecorationBreak: 'clone',
-            boxDecorationBreak: 'clone',
-          }}
-        >
-          {children}
-        </span>
-      </HoverCardTrigger>
-      <HoverCardContent className="w-64 p-3">
-        <div className="flex items-start gap-2">
-          <ShieldCheck size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
-          <div className="space-y-1">
-            <p className="text-[12.5px] leading-snug text-[var(--foreground)]">
-              This claim has been verified by a credible source.
-            </p>
-            <p className="text-[11px] leading-snug text-[var(--muted-foreground)]">Click to view source details.</p>
-          </div>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={() => onClick(id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
+      className="cursor-pointer transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
+      style={{
+        backgroundImage:
+          'repeating-linear-gradient(to right, var(--verify-line) 0, var(--verify-line) 3px, transparent 3px, transparent 6px)',
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'left 1.2em',
+        backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
+        WebkitBoxDecorationBreak: 'clone',
+        boxDecorationBreak: 'clone',
+      }}
+    >
+      {children}
+    </span>
   )
 }
 
@@ -610,10 +598,19 @@ interface MarkdownMessageProps {
    * clicked. The caller already has that id's matches from the background
    * check — this is just a "show them" signal, not a request to refetch. */
   onVerifiedClaimClick?: (id: string) => void
+  /**
+   * Strip `[n]` citation markers entirely instead of rendering them as
+   * badges — used while an answer is still streaming in, so pills don't
+   * flicker into existence one at a time as the model happens to emit `[1]`
+   * tokens. Citations are normalized (`normalizeCitationPlacement`, applied
+   * once to the final content when a turn finishes — not here) and shown
+   * together, each fading in on its own, once streaming ends.
+   */
+  hideCitations?: boolean
 }
 
 /** GitHub-flavoured Markdown renderer matching the original answer styling. */
-export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick }: MarkdownMessageProps) {
+export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick, hideCitations }: MarkdownMessageProps) {
   const citationMap = useMemo(() => {
     const map = new Map<number, Source>()
     for (const s of sources ?? []) if (typeof s.n === 'number') map.set(s.n, s)
@@ -634,7 +631,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({ content, classNam
         components={components}
         urlTransform={citationUrlTransform}
       >
-        {preprocessMarkdown(contentWithVerifyMarkers, citationNumbers)}
+        {preprocessMarkdown(contentWithVerifyMarkers, citationNumbers, { hideCitations })}
       </ReactMarkdown>
     </div>
   )
