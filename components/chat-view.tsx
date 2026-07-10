@@ -521,86 +521,10 @@ export function ChatView({
   )
 
   // "Verify claim" dashed underlines — a silent, best-effort background
-  // sibling of the manual check-source flow above. Once a message finishes
-  // streaming (never for history loaded from `preloadedThread` — see the
-  // effect below), pick up to 5 sentences that look like checkable claims
-  // and fire each through the same `/check_source` endpoint with no loading
-  // state or error toast; whichever come back with a hit get a dashed
-  // underline. Clicking one reuses the matches already fetched here instead
-  // of hitting the backend again.
-  const [verifiedByMessage, setVerifiedByMessage] = useState<
-    Record<number, { id: string; start: number; end: number; claim: string; matches: CheckSourceMatch[] }[]>
-  >({})
+  // sibling of the manual check-source flow above. See the block placed
+  // after `syncToBackend` below (needs it in scope to persist hits).
   const verifyProcessedRef = useRef<Set<number>>(new Set())
   const prevStreamingIndexRef = useRef(-1)
-
-  const runVerifyExtraction = useCallback(
-    async (messageIndex: number, content: string) => {
-      if (!threadId) return
-      const candidates = extractClaimCandidates(content, 5)
-      if (candidates.length === 0) return
-
-      const CONCURRENCY = 3
-      let cursor = 0
-      const worker = async () => {
-        while (cursor < candidates.length) {
-          const candidate = candidates[cursor++]
-          try {
-            const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
-              method: 'POST',
-              body: JSON.stringify({ thread_id: threadId, text_selection: candidate.query, turn: messageIndex }),
-            })
-            if (!response.ok) continue
-            const data = await response.json()
-            const matches: CheckSourceMatch[] = data?.matches ?? []
-            if (matches.length > 0) {
-              // Land each hit the moment it's confirmed rather than batching
-              // behind the slowest candidate — an early sentence's dashed
-              // underline shows up as soon as it's found, instead of every
-              // badge in the message popping in together at the end.
-              setVerifiedByMessage((prev) => ({
-                ...prev,
-                [messageIndex]: [
-                  ...(prev[messageIndex] ?? []),
-                  { id: candidate.id, start: candidate.start, end: candidate.end, claim: candidate.query, matches },
-                ],
-              }))
-            }
-          } catch {
-            // Silent — this is opportunistic background enrichment, not a
-            // user-initiated action, so there's nothing to surface an error for.
-          }
-        }
-      }
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker))
-    },
-    [threadId, fetchWithAuth]
-  )
-
-  // Fires once per message, right as it stops being the actively-streaming
-  // one (`streamingIndex` flips away from it) — not on mount, so a thread
-  // loaded from history never gets retroactively swept for claims to check.
-  useEffect(() => {
-    const prevIndex = prevStreamingIndexRef.current
-    if (prevIndex !== -1 && streamingIndex === -1 && !isLoading && !verifyProcessedRef.current.has(prevIndex)) {
-      verifyProcessedRef.current.add(prevIndex)
-      const msg = messagesRef.current[prevIndex]
-      if (msg?.role === 'assistant' && msg.content?.trim()) {
-        runVerifyExtraction(prevIndex, msg.content)
-      }
-    }
-    prevStreamingIndexRef.current = streamingIndex
-  }, [streamingIndex, isLoading, runVerifyExtraction])
-
-  const handleVerifiedClaimClick = useCallback(
-    (messageIndex: number, id: string) => {
-      const entry = verifiedByMessage[messageIndex]?.find((v) => v.id === id)
-      if (!entry) return
-      setCheckSourceState({ status: 'done', claim: entry.claim, matches: entry.matches })
-      setSourcesOpen(true)
-    },
-    [verifiedByMessage]
-  )
 
   // "Ask Omni" from the text-selection menu: quote the selected passage above
   // the composer instead of sending immediately, so the user can add their
@@ -896,6 +820,127 @@ export function ChatView({
       }).catch(() => {})
     },
     [threadId, mode, fetchWithAuth]
+  )
+
+  // "Verify claim" dashed underlines — a silent, best-effort background
+  // sibling of the manual check-source flow. Once a message finishes
+  // streaming (never for history loaded from `preloadedThread` — see the
+  // effect below), pick up to 5 sentences that look like checkable claims
+  // and fire each through the same `/check_source` endpoint with no loading
+  // state or error toast. A hit gets persisted onto `msg.verifiedClaims`
+  // (span + cleaned claim text only, no match payload — that's re-fetched
+  // from `/check_source` on click, which the backend caches, rather than
+  // synced here too) via `setMessages` + `syncToBackend`, exactly like every
+  // other field on `ChatMessage` — so the dashed underline survives a
+  // refresh instead of living only in throwaway component state.
+  const persistVerifiedClaim = useCallback(
+    (messageIndex: number, claim: { id: string; start: number; end: number; claim: string }) => {
+      // Functional update, not a `messagesRef.current` read-then-write: two
+      // candidates from the same message can confirm within the same tick
+      // (the backend caches `/check_source`, so near-simultaneous hits are
+      // routine, not a rare edge case), and reading a ref that only catches
+      // up after the next render would silently drop whichever one lost the
+      // race instead of appending both.
+      setMessages((prev) => {
+        const msg = prev[messageIndex]
+        if (!msg) return prev
+        const next = prev.map((m, i) =>
+          i === messageIndex ? { ...m, verifiedClaims: [...(m.verifiedClaims ?? []), claim] } : m
+        )
+        syncToBackend(next, titleRef.current)
+        return next
+      })
+    },
+    [syncToBackend]
+  )
+
+  const runVerifyExtraction = useCallback(
+    async (messageIndex: number, content: string) => {
+      if (!threadId) return
+      const candidates = extractClaimCandidates(content, 5)
+      if (candidates.length === 0) return
+
+      const CONCURRENCY = 3
+      let cursor = 0
+      const worker = async () => {
+        while (cursor < candidates.length) {
+          const candidate = candidates[cursor++]
+          try {
+            const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
+              method: 'POST',
+              body: JSON.stringify({ thread_id: threadId, text_selection: candidate.query, turn: messageIndex }),
+            })
+            if (!response.ok) continue
+            const data = await response.json()
+            const matches: CheckSourceMatch[] = data?.matches ?? []
+            if (matches.length > 0) {
+              // Land each hit the moment it's confirmed rather than batching
+              // behind the slowest candidate — an early sentence's dashed
+              // underline shows up as soon as it's found, instead of every
+              // badge in the message popping in together at the end.
+              persistVerifiedClaim(messageIndex, {
+                id: candidate.id,
+                start: candidate.start,
+                end: candidate.end,
+                claim: candidate.query,
+              })
+            }
+          } catch {
+            // Silent — this is opportunistic background enrichment, not a
+            // user-initiated action, so there's nothing to surface an error for.
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, candidates.length) }, worker))
+    },
+    [threadId, fetchWithAuth, persistVerifiedClaim]
+  )
+
+  // Fires once per message, right as it stops being the actively-streaming
+  // one (`streamingIndex` flips away from it) — not on mount, so a thread
+  // loaded from history never gets retroactively swept for claims to check
+  // (whatever it already has in `verifiedClaims` from when it first streamed
+  // in came along for free when the thread loaded).
+  useEffect(() => {
+    const prevIndex = prevStreamingIndexRef.current
+    if (prevIndex !== -1 && streamingIndex === -1 && !isLoading && !verifyProcessedRef.current.has(prevIndex)) {
+      verifyProcessedRef.current.add(prevIndex)
+      const msg = messagesRef.current[prevIndex]
+      if (msg?.role === 'assistant' && msg.content?.trim()) {
+        runVerifyExtraction(prevIndex, msg.content)
+      }
+    }
+    prevStreamingIndexRef.current = streamingIndex
+  }, [streamingIndex, isLoading, runVerifyExtraction])
+
+  // Clicking a dashed underline re-runs `/check_source` for its claim text
+  // instead of relying on a cached match payload — the backend already
+  // caches that lookup, so this is cheap, and it means we only ever have to
+  // persist the tiny span + claim text, not the full match list too.
+  const handleVerifiedClaimClick = useCallback(
+    (messageIndex: number, id: string) => {
+      const entry = messagesRef.current[messageIndex]?.verifiedClaims?.find((v) => v.id === id)
+      if (!entry) return
+      handleCheckSource(entry.claim, messageIndex)
+    },
+    [handleCheckSource]
+  )
+
+  // One stable callback per message index, handed to `MarkdownMessage` as
+  // `onVerifiedClaimClick` below. Binding `i` inline at the render site
+  // (`(id) => handleVerifiedClaimClick(i, id)`) would create a fresh
+  // function every render of `ChatView` — including ones with nothing to do
+  // with this message, like every keystroke in the composer — and since
+  // `MarkdownMessage` folds that callback into the `components.span`
+  // function it hands to `ReactMarkdown`, a new reference there makes React
+  // treat the verified-claim mark as a different component type at that
+  // spot and remount it: its reveal animation resets and the DOM node itself
+  // gets torn down and rebuilt, which is what shows up as a flicker while
+  // typing. Only rebuild the array when the message count actually changes
+  // (not on every content update mid-stream, which doesn't change `.length`).
+  const verifiedClaimClickHandlers = useMemo(
+    () => Array.from({ length: messages.length }, (_, i) => (id: string) => handleVerifiedClaimClick(i, id)),
+    [messages.length, handleVerifiedClaimClick]
   )
 
   // ── build personalization payload ──────────────────────────────────────
@@ -1784,12 +1829,12 @@ export function ChatView({
                                         content={parseQuestion(seg.content).text}
                                         animate={isCurrentlyStreaming && isLastBlock}
                                         sources={mergedSources}
-                                        // `verifiedByMessage[i]`'s offsets are computed against the
+                                        // `msg.verifiedClaims`' offsets are computed against the
                                         // full `msg.content` — only safe to splice into a segment
                                         // that IS the full content verbatim (no report/question
                                         // block stripped it down), otherwise offsets wouldn't line up.
-                                        verifiedClaims={parseQuestion(seg.content).text === msg.content ? verifiedByMessage[i] : undefined}
-                                        onVerifiedClaimClick={parseQuestion(seg.content).text === msg.content ? (id) => handleVerifiedClaimClick(i, id) : undefined}
+                                        verifiedClaims={parseQuestion(seg.content).text === msg.content ? msg.verifiedClaims : undefined}
+                                        onVerifiedClaimClick={parseQuestion(seg.content).text === msg.content ? verifiedClaimClickHandlers[i] : undefined}
                                       />
                                     ) : null
                                   ) : (
@@ -1817,8 +1862,8 @@ export function ChatView({
                                   content={seg.content}
                                   animate={i === streamingIndex}
                                   sources={mergedSources}
-                                  verifiedClaims={seg.content === msg.content ? verifiedByMessage[i] : undefined}
-                                  onVerifiedClaimClick={seg.content === msg.content ? (id) => handleVerifiedClaimClick(i, id) : undefined}
+                                  verifiedClaims={seg.content === msg.content ? msg.verifiedClaims : undefined}
+                                  onVerifiedClaimClick={seg.content === msg.content ? verifiedClaimClickHandlers[i] : undefined}
                                 />
                               ) : (
                                 <div key={`report-wrap-${i}-${si}`} className="my-3 w-full">
