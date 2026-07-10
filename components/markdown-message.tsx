@@ -602,9 +602,10 @@ interface MarkdownMessageProps {
    * Strip `[n]` citation markers entirely instead of rendering them as
    * badges — used while an answer is still streaming in, so pills don't
    * flicker into existence one at a time as the model happens to emit `[1]`
-   * tokens. Citations are normalized (`normalizeCitationPlacement`, applied
-   * once to the final content when a turn finishes — not here) and shown
-   * together, each fading in on its own, once streaming ends.
+   * tokens. Once streaming ends they all show together, each fading in on
+   * its own, with placement normalized inside preprocessMarkdown (render
+   * time only — stored content is never rewritten; see
+   * `moveCitationsAfterPunctuation` in lib/markdown.ts for why that matters).
    */
   hideCitations?: boolean
 }

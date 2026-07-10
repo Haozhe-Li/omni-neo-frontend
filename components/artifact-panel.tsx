@@ -1,12 +1,23 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Code2, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import dynamic from 'next/dynamic'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
+import { TextSelectionMenu } from '@/components/text-selection-menu'
 import type { ChartArtifact, ReportArtifact } from '@/lib/types'
+
+// Report ids follow `parseReports`' deterministic `m<messageIndex>[-b<n>]-
+// report-<n>` scheme (see `lib/report-parser.ts`) — recovering the owning
+// message's index from the id is how `TextSelectionMenu`'s "Check source"
+// and the verify-claim click handler know which turn's sources to scope to,
+// without this panel needing its own copy of the full message list.
+function reportMessageIndex(reportId: string): number | null {
+  const m = reportId.match(/^m(\d+)/)
+  return m ? Number(m[1]) : null
+}
 
 const EChartsChart = dynamic(
   () => import('@/components/echarts-chart').then((m) => m.EChartsChart),
@@ -28,9 +39,17 @@ interface ArtifactPanelProps {
   onSelect: (id: string) => void
   onClose: () => void
   drafting?: boolean
+  /** "Ask Omni" from the report body's text-selection menu — same handler
+   * chat messages use, quotes the selection into the composer. */
+  onFollowUp?: (text: string) => void
+  /** "Check source" from the report body's text-selection menu. */
+  onCheckSource?: (text: string, turn: number) => void
+  /** Called with (reportId, claimId) when a verify-claim dashed underline
+   * inside the active report is clicked. */
+  onVerifiedClaimClick?: (reportId: string, id: string) => void
 }
 
-export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose, drafting }: ArtifactPanelProps) {
+export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose, drafting, onFollowUp, onCheckSource, onVerifiedClaimClick }: ArtifactPanelProps) {
   const items: PanelItem[] = [
     ...reports.map((r) => ({ id: r.id, title: r.title, kind: 'report' as const, report: r })),
     ...artifacts.map((a) => ({ id: a.id, title: a.title, kind: 'chart' as const, chart: a })),
@@ -41,6 +60,19 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [isPdfLoading, setIsPdfLoading] = useState(false)
   const containerRef = useRef<HTMLElement>(null)
+
+  const activeReportId = active?.report?.id
+  // Stable per-report-id callback, not a fresh closure at the render site —
+  // this panel re-renders on every keystroke in the composer (it's a child
+  // of the same ChatView that owns the input box), and MarkdownMessage folds
+  // this callback into the component it hands ReactMarkdown for verify-claim
+  // marks; a new reference on every render would remount every mark on every
+  // keystroke, resetting its reveal animation (the same bug fixed for the
+  // main chat view's citations — see chat-view.tsx's verifiedClaimClickHandlers).
+  const handleVerifiedClaimClick = useMemo(
+    () => (activeReportId && onVerifiedClaimClick ? (id: string) => onVerifiedClaimClick(activeReportId, id) : undefined),
+    [activeReportId, onVerifiedClaimClick]
+  )
 
   const handleDownload = async (format: 'markdown' | 'pdf' | 'html') => {
     if (active.kind !== 'report' || !active.report) return
@@ -483,11 +515,22 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             <EChartsChart option={active.chart.spec} />
           </div>
         ) : active.report ? (
-          <article ref={containerRef} className="max-w-3xl mx-auto">
+          <article
+            ref={containerRef}
+            className="max-w-3xl mx-auto"
+            data-message-index={viewMode === 'view' ? reportMessageIndex(active.report.id) ?? undefined : undefined}
+          >
             {viewMode === 'view' ? (
               <>
                 <h1 className="text-[28px] leading-tight font-semibold text-[var(--foreground)] mb-8 tracking-tight opacity-90">{active.report.title}</h1>
-                {active.report.content ? <MarkdownMessage content={active.report.content} sources={active.report.sources} /> : null}
+                {active.report.content ? (
+                  <MarkdownMessage
+                    content={active.report.content}
+                    sources={active.report.sources}
+                    verifiedClaims={active.report.verifiedClaims}
+                    onVerifiedClaimClick={handleVerifiedClaimClick}
+                  />
+                ) : null}
 
               </>
             ) : (
@@ -500,6 +543,9 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
           </article>
         ) : null}
       </div>
+      {active.kind === 'report' && viewMode === 'view' && (
+        <TextSelectionMenu containerRef={containerRef} onFollowUp={onFollowUp} onCheckSource={onCheckSource} />
+      )}
     </div>
   )
 }
