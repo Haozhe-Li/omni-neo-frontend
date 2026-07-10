@@ -8,6 +8,25 @@ import type { Source } from './types'
  * Fenced code blocks (```...```) are left untouched, so JSON inside an
  * ```echarts``` / ```mermaid``` block never gets mangled by the math rewrites.
  */
+// remark-math treats a bare `$` as an inline-math delimiter (`singleDollarTextMath`,
+// on by default), which collides with plain currency amounts like "$1.25 billion".
+// The model routinely cites two dollar figures in one sentence ("valued at $1.25
+// billion ... raised $125 million"); remark-math then reads the first `$` as an
+// opening delimiter and the *second* dollar amount's `$` as the matching close,
+// swallowing everything between — headings, citation markers, even raw HTML spans
+// — into one KaTeX node, which renders it in math mode (collapsing all whitespace
+// into the squashed, italicized run seen in the bug report).
+//
+// Fix: escape every `$` immediately followed by a digit (the currency signature)
+// to `\$` *before* remark-math ever sees it — CommonMark's backslash-escape turns
+// it into a literal `$` text node, so it can no longer pair up as a delimiter.
+// Doesn't touch `$` used to open real LaTeX (never followed directly by a digit,
+// and in this app real math only ever arrives via the bracket/paren conversions
+// below, which inject their own unescaped `$`/`$$` afterward).
+function escapeCurrencyDollars(text: string): string {
+    return text.replace(/(?<!\\)\$(?=\d)/g, '\\$')
+}
+
 function transformMath(text: string): string {
     return text
         // 1. Convert block math [ math ] or \[ math \] to $$ math $$
@@ -125,7 +144,7 @@ export function preprocessMarkdown(content: any, citationNumbers?: Set<number>):
         .map((segment) =>
             segment.startsWith('```')
                 ? segment
-                : transformMath(transformCitations(fixEmphasisFlanking(segment), citationNumbers))
+                : transformMath(transformCitations(fixEmphasisFlanking(escapeCurrencyDollars(segment)), citationNumbers))
         )
         .join('')
 }
