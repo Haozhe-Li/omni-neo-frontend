@@ -9,7 +9,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, Download, BarChart3, FileText, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Copy, Check, Download, BarChart3, FileText, MapPin, ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
@@ -347,25 +347,22 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
 // Renders a `<span data-verify="id">…</span>` — spliced into the raw markdown
 // by `spliceVerifyMarkers` around a sentence that silently came back with a
 // `/check_source` hit (see `lib/verify-claims.ts`) — as a dashed-underline
-// span with a small checkmark at its end. Its own children render normally
-// (bold, a nested citation badge, etc.); clicking anywhere in it — text or
-// checkmark — hands the id back to the caller, which already has the
-// matches from the background check and opens the sources panel with them
-// directly, no second request.
+// span. Its own children render normally (bold, a nested citation badge,
+// etc.); hovering shows a small explainer pill (same `HoverCard` used by
+// `CitationBadge`, just a static two-line message — no fetch, nothing to
+// page through), and clicking hands the id back to the caller, which
+// re-runs `/check_source` and opens the sources panel.
 //
 // The mark mounts the instant its message's background check confirms a
 // hit — the sentence's text is already sitting there fully visible (it's
 // been on screen since the answer streamed in), so a plain fade/pop on the
-// whole span would flash the *words* too. Two things animate instead, both
-// leaving the text alone:
-//   - the underline is a `background-image` dash pattern (not
-//     `text-decoration`) so its *size* can be transitioned from 0 to 100%
-//     width — reads as the line being drawn left to right — rather than
-//     just appearing at full length. `text-decoration` has no equivalent
-//     "reveal" hook; a background does, and (per `box-decoration-break`,
-//     default `slice`) still paints correctly per line if the sentence wraps.
-//   - the checkmark fades/scales in on a short delay so it visibly lands
-//     right as the line finishes drawing, not before.
+// whole span would flash the *words* too. Only the underline animates:
+// it's a `background-image` dash pattern (not `text-decoration`) so its
+// *size* can be transitioned from 0 to 100% width — reads as the line
+// being drawn left to right — rather than just appearing at full length.
+// `text-decoration` has no equivalent "reveal" hook; a background does,
+// and (per `box-decoration-break`, default `slice`) still paints correctly
+// per line if the sentence wraps.
 function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (id: string) => void; children: ReactNode }) {
   const [revealed, setRevealed] = useState(false)
   useEffect(() => {
@@ -375,30 +372,48 @@ function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (i
 
   if (!onClick) return <>{children}</>
   return (
-    <span
-      role="button"
-      tabIndex={0}
-      onClick={() => onClick(id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
-      className="cursor-pointer transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
-      style={{
-        backgroundImage:
-          'repeating-linear-gradient(to right, var(--verify-line) 0, var(--verify-line) 3px, transparent 3px, transparent 6px)',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'left 1.2em',
-        backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
-        WebkitBoxDecorationBreak: 'slice',
-        boxDecorationBreak: 'slice',
-      }}
-    >
-      {children}
-      <span
-        title="This claim has been verified with a credible source"
-        className={`ml-0.5 inline-flex align-[1px] transition-[opacity,transform] duration-300 delay-500 ease-out ${revealed ? 'opacity-45 scale-100' : 'opacity-0 scale-75'}`}
-      >
-        <Check size={11} strokeWidth={2.5} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]" />
-      </span>
-    </span>
+    <HoverCard openDelay={150} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={() => onClick(id)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
+          className="cursor-pointer transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(to right, var(--verify-line) 0, var(--verify-line) 3px, transparent 3px, transparent 6px)',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'left 1.2em',
+            backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
+            // `slice` (the default) treats a wrapped inline element's
+            // background as ONE continuous image sized/positioned against
+            // its *unwrapped* total width, then slices out whatever portion
+            // falls on each actual line — for 3+ lines that math doesn't
+            // divide evenly, and a middle line can end up sliced a zero-
+            // width sliver of it, silently dropping its underline. `clone`
+            // instead gives every line its own independent, full copy of
+            // the background sized against that line's own width, so each
+            // one reliably gets its own 0%→100% underline.
+            WebkitBoxDecorationBreak: 'clone',
+            boxDecorationBreak: 'clone',
+          }}
+        >
+          {children}
+        </span>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-64 p-3">
+        <div className="flex items-start gap-2">
+          <ShieldCheck size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-[var(--muted-foreground)]" />
+          <div className="space-y-1">
+            <p className="text-[12.5px] leading-snug text-[var(--foreground)]">
+              This claim has been verified by a credible source.
+            </p>
+            <p className="text-[11px] leading-snug text-[var(--muted-foreground)]">Click to view source details.</p>
+          </div>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   )
 }
 
