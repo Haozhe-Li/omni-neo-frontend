@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MarkdownMessage } from '@/components/markdown-message'
 import type { Source } from '@/lib/types'
+import type { VerifiedSpan } from '@/lib/verify-claims'
 
 interface StreamingTextProps {
   /** The full (report-stripped) answer accumulated so far. */
@@ -15,6 +16,9 @@ interface StreamingTextProps {
   animate: boolean
   /** Sources for this message, used to render `[n]` markers as citation badges. */
   sources?: Source[]
+  /** See `MarkdownMessage` — passed straight through. */
+  verifiedClaims?: VerifiedSpan[]
+  onVerifiedClaimClick?: (id: string) => void
 }
 
 // Reveal pacing. The cursor advances at a steady base rate, and faster when it's
@@ -34,8 +38,8 @@ const CATCHUP = 4 // proportional drain: a bigger backlog reveals faster
  * hiding the follow-up/check-source popup with no error. Keeping one stable
  * element type lets React patch the existing nodes in place instead.
  */
-export function StreamingText({ content, animate, sources }: StreamingTextProps) {
-  return <Typewriter content={content} animate={animate} sources={sources} />
+export function StreamingText({ content, animate, sources, verifiedClaims, onVerifiedClaimClick }: StreamingTextProps) {
+  return <Typewriter content={content} animate={animate} sources={sources} verifiedClaims={verifiedClaims} onVerifiedClaimClick={onVerifiedClaimClick} />
 }
 
 // Never leave a fenced code block half-open mid-reveal: if the visible slice has
@@ -51,7 +55,7 @@ function trimDanglingFence(s: string): string {
   return s + '\n```'
 }
 
-function Typewriter({ content, animate, sources }: { content: string; animate: boolean; sources?: Source[] }) {
+function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaimClick }: { content: string; animate: boolean; sources?: Source[]; verifiedClaims?: VerifiedSpan[]; onVerifiedClaimClick?: (id: string) => void }) {
   // Latest content is read off a ref so the rAF loop can stay mounted once.
   const contentRef = useRef(content)
   contentRef.current = content
@@ -90,5 +94,12 @@ function Typewriter({ content, animate, sources }: { content: string; animate: b
   }, [animate])
 
   const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
-  return <MarkdownMessage content={animate ? trimDanglingFence(slice) : contentRef.current} sources={sources} />
+  // `verifiedClaims` offsets are computed against the full, final content —
+  // only safe to apply once the whole thing is revealed (`!animate`), never
+  // against the still-growing `slice`.
+  return animate ? (
+    <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} />
+  ) : (
+    <MarkdownMessage content={contentRef.current} sources={sources} verifiedClaims={verifiedClaims} onVerifiedClaimClick={onVerifiedClaimClick} />
+  )
 }

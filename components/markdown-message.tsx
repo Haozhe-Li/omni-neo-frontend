@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
+import { spliceVerifyMarkers, type VerifiedSpan } from '@/lib/verify-claims'
 import { brandDomain, truncateFilename } from '@/lib/domain'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
 import type { Source } from '@/lib/types'
@@ -343,6 +344,29 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
   )
 }
 
+// Renders a `<span data-verify="id">…</span>` — spliced into the raw markdown
+// by `spliceVerifyMarkers` around a sentence that silently came back with a
+// `/check_source` hit (see `lib/verify-claims.ts`) — as a dashed-underline
+// span. Its own children render normally (bold, a nested citation badge,
+// etc.); clicking just hands the id back to the caller, which already has
+// the matches from the background check and opens the sources panel with
+// them directly, no second request.
+function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (id: string) => void; children: ReactNode }) {
+  if (!onClick) return <>{children}</>
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={() => onClick(id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
+      className="cursor-pointer underline decoration-dashed decoration-1 decoration-[var(--muted-foreground)]/50 underline-offset-4 hover:decoration-[var(--foreground)]/70 transition-colors"
+      title="Verified — click to see the source"
+    >
+      {children}
+    </span>
+  )
+}
+
 function extractNodeText(node: ReactNode): string {
   if (node == null) return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -492,7 +516,7 @@ export function resolveCitationSources(
   return sources
 }
 
-function buildMarkdownComponents(citationMap: Map<number, Source>): Components {
+function buildMarkdownComponents(citationMap: Map<number, Source>, onVerifiedClaimClick?: (id: string) => void): Components {
   return {
     ...baseMarkdownComponents,
     a: ({ href, children }) => {
@@ -503,6 +527,13 @@ function buildMarkdownComponents(citationMap: Map<number, Source>): Components {
           {children}
         </a>
       )
+    },
+    span: ({ node, children, ...props }: any) => {
+      const verifyId = props['data-verify']
+      if (typeof verifyId === 'string') {
+        return <VerifiedClaimMark id={verifyId} onClick={onVerifiedClaimClick}>{children}</VerifiedClaimMark>
+      }
+      return <span {...props}>{children}</span>
     },
   }
 }
@@ -517,17 +548,33 @@ interface MarkdownMessageProps {
    * freshly-fetched sources — a `[n]` here may point at an earlier turn's source.
    */
   sources?: Source[]
+  /**
+   * Sentence spans that silently came back with a `/check_source` hit (see
+   * `lib/verify-claims.ts` + the caller's background extraction) — rendered
+   * as a dashed-underline `VerifiedClaimMark` instead of plain text. Offsets
+   * are into this exact `content` string, so the caller must recompute them
+   * if `content` changes shape (e.g. a fresh streaming turn).
+   */
+  verifiedClaims?: VerifiedSpan[]
+  /** Called with a verified claim's id when its dashed-underline mark is
+   * clicked. The caller already has that id's matches from the background
+   * check — this is just a "show them" signal, not a request to refetch. */
+  onVerifiedClaimClick?: (id: string) => void
 }
 
 /** GitHub-flavoured Markdown renderer matching the original answer styling. */
-export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources }: MarkdownMessageProps) {
+export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick }: MarkdownMessageProps) {
   const citationMap = useMemo(() => {
     const map = new Map<number, Source>()
     for (const s of sources ?? []) if (typeof s.n === 'number') map.set(s.n, s)
     return map
   }, [sources])
   const citationNumbers = useMemo(() => new Set(citationMap.keys()), [citationMap])
-  const components = useMemo(() => buildMarkdownComponents(citationMap), [citationMap])
+  const components = useMemo(() => buildMarkdownComponents(citationMap, onVerifiedClaimClick), [citationMap, onVerifiedClaimClick])
+  const contentWithVerifyMarkers = useMemo(
+    () => (verifiedClaims && verifiedClaims.length > 0 ? spliceVerifyMarkers(content, verifiedClaims) : content),
+    [content, verifiedClaims]
+  )
 
   return (
     <div className={`text-[16px] text-foreground break-words ${className}`}>
@@ -537,7 +584,7 @@ export const MarkdownMessage = memo(function MarkdownMessage({ content, classNam
         components={components}
         urlTransform={citationUrlTransform}
       >
-        {preprocessMarkdown(content, citationNumbers)}
+        {preprocessMarkdown(contentWithVerifyMarkers, citationNumbers)}
       </ReactMarkdown>
     </div>
   )
