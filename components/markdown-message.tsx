@@ -386,8 +386,17 @@ function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (i
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'left 1.2em',
             backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
-            WebkitBoxDecorationBreak: 'slice',
-            boxDecorationBreak: 'slice',
+            // `slice` (the default) treats a wrapped inline element's
+            // background as ONE continuous image sized/positioned against
+            // its *unwrapped* total width, then slices out whatever portion
+            // falls on each actual line — for 3+ lines that math doesn't
+            // divide evenly, and a middle line can end up sliced a zero-
+            // width sliver of it, silently dropping its underline. `clone`
+            // instead gives every line its own independent, full copy of
+            // the background sized against that line's own width, so each
+            // one reliably gets its own 0%→100% underline.
+            WebkitBoxDecorationBreak: 'clone',
+            boxDecorationBreak: 'clone',
           }}
         >
           {children}
