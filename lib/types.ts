@@ -140,6 +140,17 @@ export interface ChatMessage {
   regeneratedWith?: AgentMode
   /** Set when the user manually stopped generation mid-stream. */
   stoppedByUser?: boolean
+  /**
+   * Sentence spans that silently came back with a `/check_source` hit during
+   * this message's background claim-check (see `lib/verify-claims.ts`),
+   * rendered as dashed-underline marks. Persisted (synced like every other
+   * field here) so the underlines survive a refresh instead of only living
+   * in in-memory state. Only the span + cleaned claim text are stored — the
+   * actual matches are re-fetched from `/check_source` on click rather than
+   * persisting the full match payload too, since the backend caches that
+   * lookup and refetching is cheap.
+   */
+  verifiedClaims?: { id: string; start: number; end: number; claim: string }[]
 }
 
 export type PublishDuration = '7d' | '30d' | 'permanent'
