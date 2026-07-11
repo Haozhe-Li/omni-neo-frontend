@@ -1,6 +1,7 @@
 'use client'
 
 import { ShieldCheck } from 'lucide-react'
+import type { Credibility } from '@/lib/credibility'
 import { getCredibilityMeta } from '@/lib/credibility'
 
 /**
@@ -9,7 +10,7 @@ import { getCredibilityMeta } from '@/lib/credibility'
  * low-saturation, and un-colored (inherits the surrounding muted-foreground
  * tone) — a quiet trust signal, not an alert badge.
  */
-export function CredibilityIcon({ credibility, className = '' }: { credibility?: string | null; className?: string }) {
+export function CredibilityIcon({ credibility, className = '' }: { credibility?: Credibility | null; className?: string }) {
   const meta = getCredibilityMeta(credibility)
   if (!meta?.trusted) return null
   return (
@@ -28,7 +29,7 @@ export function CredibilityIcon({ credibility, className = '' }: { credibility?:
  * References list. Renders nothing for "unknown"/missing credibility so
  * older content (saved before this field existed) looks unchanged.
  */
-export function CredibilityTag({ credibility, className = '' }: { credibility?: string | null; className?: string }) {
+export function CredibilityTag({ credibility, className = '' }: { credibility?: Credibility | null; className?: string }) {
   const meta = getCredibilityMeta(credibility)
   if (!meta) return null
   return (
@@ -41,17 +42,18 @@ export function CredibilityTag({ credibility, className = '' }: { credibility?: 
   )
 }
 
-/** One-line explanation of *this specific* source's credibility tier, shown
- * at the bottom of the citation hover card. Only ever explains the tier
- * actually being shown (e.g. "Trusted: …") rather than every tier at once —
- * renders nothing for "unknown"/missing credibility. */
-export function CredibilityExplanation({ credibility }: { credibility?: string | null }) {
+/** One-line explanation of *this specific* source's credibility, shown at
+ * the bottom of the citation hover card. Renders the backend's own
+ * source-specific `reason` (not a generic per-label definition) — only ever
+ * explains the one source actually being shown, not every tier at once.
+ * Renders nothing for "unknown"/missing credibility. */
+export function CredibilityExplanation({ credibility }: { credibility?: Credibility | null }) {
   const meta = getCredibilityMeta(credibility)
-  if (!meta) return null
+  if (!meta || !credibility) return null
   return (
     <div className="border-t border-[var(--border-subtle)] px-3 py-2">
       <p className="text-[10.5px] leading-relaxed text-[var(--muted-foreground)]/80">
-        <span className="font-medium text-[var(--muted-foreground)]">{meta.label}:</span> {meta.description}
+        <span className="font-medium text-[var(--muted-foreground)]">{meta.label}:</span> {credibility.reason}
       </p>
     </div>
   )

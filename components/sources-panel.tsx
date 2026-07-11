@@ -8,7 +8,7 @@ import { partitionSources, type LabeledSource } from '@/lib/markdown'
 import { highlightExcerpt } from '@/lib/highlight'
 import { truncateFilename } from '@/lib/domain'
 import { CredibilityTag } from '@/components/credibility-badge'
-import { isTrustedTier } from '@/lib/credibility'
+import { isTrustedTier, type Credibility } from '@/lib/credibility'
 
 // Stable sort (ties keep their original relative order) that floats
 // official/trusted/first-party sources to the top of whatever list is being
@@ -38,7 +38,7 @@ const notifyUploadedDocument = () =>
 // user-uploaded document (source.url === '') gets a generic file icon and its
 // filename instead, and isn't clickable. Takes a structural {url, title}
 // rather than `Source` so it also accepts a `CheckSourceMatch`.
-function SourceCardHeader({ source }: { source: { url: string; title: string; credibility?: string } }) {
+function SourceCardHeader({ source }: { source: { url: string; title: string; credibility?: Credibility } }) {
   const isDocument = !source.url
   return (
     <div className="mb-1.5 flex items-center gap-2">
