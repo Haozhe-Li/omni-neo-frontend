@@ -12,6 +12,7 @@ import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { SettingsDialog } from '@/components/settings-dialog'
 import {
     AlertDialog,
     AlertDialogContent,
@@ -72,6 +73,7 @@ export function AppSidebar({
     const [isSearchVisible, setIsSearchVisible] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [threadToDelete, setThreadToDelete] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -787,26 +789,22 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
                 <button
                     onClick={() => {
-                        if (pathname !== '/settings') {
-                            setLoadingAction('settings')
-                            router.push('/settings')
-                        }
+                        setIsSettingsOpen(true)
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
-                flex items-center gap-3 w-full p-2 rounded-lg 
+                flex items-center gap-3 w-full p-2 rounded-lg
                 text-[var(--muted-foreground)]
                 hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
                 transition-all duration-200
                 ${!isExpanded ? 'justify-center' : ''}
-                ${pathname === '/settings' ? 'bg-[var(--secondary)] text-[var(--foreground)]' : ''}
+                ${isSettingsOpen ? 'bg-[var(--secondary)] text-[var(--foreground)]' : ''}
             `}
                 >
                     <Settings size={18} />
                     {isExpanded && (
                         <div className="flex items-center justify-between flex-1 min-w-0 pr-1">
                             <span className="text-sm">Settings</span>
-                            {loadingAction === 'settings' && <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />}
                         </div>
                     )}
                 </button>
@@ -871,6 +869,9 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                     )
                 }
             </div >
+
+            {/* Settings Dialog */}
+            <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
 
             {/* Search Dialog Modal */}
             < Dialog open={isSearchVisible} onOpenChange={(open) => {

@@ -7,7 +7,8 @@ const STORAGE_KEY = 'omni_enable_memories'
 
 export const isMemoryEnabled = (): boolean => {
   if (typeof window === 'undefined') return false
-  return localStorage.getItem(STORAGE_KEY) === 'true'
+  // Memory is on by default; only an explicit opt-out disables it.
+  return localStorage.getItem(STORAGE_KEY) !== 'false'
 }
 
 export const setMemoryEnabled = (value: boolean): void => {
