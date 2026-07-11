@@ -19,6 +19,7 @@ import { brandDomain, truncateFilename } from '@/lib/domain'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
 import type { Source } from '@/lib/types'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
+import { CredibilityExplanation, CredibilityIcon, CredibilityTag } from '@/components/credibility-badge'
 
 const LightChatMiniMap = dynamic(
   () => import('@/components/light-chat-mini-map').then((m) => m.LightChatMiniMap),
@@ -252,11 +253,13 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
       <HoverCardTrigger asChild>
         {primaryIsDocument ? (
           <button type="button" onClick={notifyUploadedDocument} className={triggerClassName}>
+            <CredibilityIcon credibility={sources[0].credibility} className="mr-1" />
             <span className="min-w-0 truncate">{primaryLabel}</span>
             {extra > 0 && <span className="ml-1 shrink-0 font-semibold">+{extra}</span>}
           </button>
         ) : (
           <a href={sources[0].url} target="_blank" rel="noopener noreferrer" className={triggerClassName}>
+            <CredibilityIcon credibility={sources[0].credibility} className="mr-1" />
             <span className="min-w-0 truncate">{primaryLabel}</span>
             {extra > 0 && <span className="ml-1 shrink-0 font-semibold">+{extra}</span>}
           </a>
@@ -316,6 +319,7 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
               <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">
                 {truncateFilename(current.title, 30, true)}
               </span>
+              <CredibilityTag credibility={current.credibility} />
               {current.date && (
                 <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
               )}
@@ -338,6 +342,7 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
                 <img src={`https://www.google.com/s2/favicons?domain=${currentDomain}&sz=64`} alt="" className="h-full w-full object-cover" />
               </span>
               <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">{currentDomain}</span>
+              <CredibilityTag credibility={current.credibility} />
               {current.date && (
                 <span className="shrink-0 text-[11px] text-[var(--muted-foreground)]/70">{current.date}</span>
               )}
@@ -349,6 +354,7 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
             <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{current.url}</div>
           </a>
         )}
+        <CredibilityExplanation credibility={current.credibility} />
       </HoverCardContent>
     </HoverCard>
   )

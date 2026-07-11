@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ExternalLink, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Source } from '@/lib/types'
+import { CredibilityTag } from '@/components/credibility-badge'
 
 interface SourceItemProps {
     source: Source
@@ -56,6 +57,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                 >
                     {source.title}
                 </span>
+                <CredibilityTag credibility={source.credibility} />
                 <div className="flex items-center gap-2">
                     {source.content && (
                         <button

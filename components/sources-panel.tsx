@@ -4,9 +4,24 @@ import { useEffect, useState } from 'react'
 import { BookOpen, ChevronDown, FileText, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
-import { partitionSources } from '@/lib/markdown'
+import { partitionSources, type LabeledSource } from '@/lib/markdown'
 import { highlightExcerpt } from '@/lib/highlight'
 import { truncateFilename } from '@/lib/domain'
+import { CredibilityTag } from '@/components/credibility-badge'
+import { isTrustedTier } from '@/lib/credibility'
+
+// Stable sort (ties keep their original relative order) that floats
+// official/trusted/first-party sources to the top of whatever list is being
+// shown, without otherwise reshuffling it.
+function sortByTrust(sources: Source[]): Source[] {
+  return [...sources].sort((a, b) => Number(isTrustedTier(b.credibility)) - Number(isTrustedTier(a.credibility)))
+}
+
+function sortLabeledByTrust(labeled: LabeledSource[]): LabeledSource[] {
+  return [...labeled].sort(
+    (a, b) => Number(isTrustedTier(b.source.credibility)) - Number(isTrustedTier(a.source.credibility))
+  )
+}
 
 function domainOf(url: string) {
   try {
@@ -23,7 +38,7 @@ const notifyUploadedDocument = () =>
 // user-uploaded document (source.url === '') gets a generic file icon and its
 // filename instead, and isn't clickable. Takes a structural {url, title}
 // rather than `Source` so it also accepts a `CheckSourceMatch`.
-function SourceCardHeader({ source }: { source: { url: string; title: string } }) {
+function SourceCardHeader({ source }: { source: { url: string; title: string; credibility?: string } }) {
   const isDocument = !source.url
   return (
     <div className="mb-1.5 flex items-center gap-2">
@@ -42,6 +57,7 @@ function SourceCardHeader({ source }: { source: { url: string; title: string } }
       <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">
         {isDocument ? truncateFilename(source.title, 30, true) : domainOf(source.url)}
       </span>
+      <CredibilityTag credibility={source.credibility} />
     </div>
   )
 }
@@ -179,7 +195,7 @@ function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumber
   if (!split) {
     return (
       <>
-        {sources.map((s, i) => (
+        {sortByTrust(sources).map((s, i) => (
           <SourceCard key={i} source={s} />
         ))}
       </>
@@ -193,7 +209,7 @@ function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumber
           <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
             {used.length} source{used.length === 1 ? '' : 's'} used
           </p>
-          {used.map(({ source, label }) => (
+          {sortLabeledByTrust(used).map(({ source, label }) => (
             <SourceCard key={label} source={source} />
           ))}
         </>
@@ -210,7 +226,7 @@ function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumber
           </button>
           <div className={`grid transition-all duration-300 ease-in-out ${showUnused ? 'grid-rows-[1fr] opacity-100 mt-3' : 'grid-rows-[0fr] opacity-0'}`}>
             <div className="space-y-3 overflow-hidden">
-              {unused.map(({ source, label }) => (
+              {sortLabeledByTrust(unused).map(({ source, label }) => (
                 <SourceCard key={label} source={source} />
               ))}
             </div>

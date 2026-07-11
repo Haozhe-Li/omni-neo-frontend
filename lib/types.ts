@@ -62,6 +62,13 @@ export interface Source {
    */
   n?: number
   date?: string
+  /**
+   * Credibility tier assigned by the backend (`core/utils/source_credibility.py`):
+   * "official" | "trusted" | "first_party" | "social_media" | "junk" | "unknown".
+   * Absent on older content saved before this field existed — treat that the
+   * same as "unknown" (render nothing, not a placeholder).
+   */
+  credibility?: string
 }
 
 /**
@@ -80,6 +87,7 @@ export interface CheckSourceMatch {
   excerpt: string
   score: number
   turn: number | null
+  credibility?: string
 }
 
 /** Drives the sources panel's "check source" view (see `sources-panel.tsx`). */
