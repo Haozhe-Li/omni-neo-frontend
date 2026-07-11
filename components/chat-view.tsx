@@ -735,6 +735,17 @@ export function ChatView({
   // without it appearing in the current message's own `sources` array. So
   // citation resolution needs a thread-wide `n -> source` map built from
   // every message's `sources`, not just the message being rendered.
+  //
+  // Identity matters as much as contents here: this array flows into every
+  // `MarkdownMessage` in the thread as its `sources` prop. `messages` gets a
+  // new identity on every streamed token, so a plain useMemo([messages])
+  // would hand out a fresh array per token, breaking `memo(MarkdownMessage)`
+  // for every already-finished message and re-parsing all their markdown on
+  // each token. The individual `Source` objects are stable references
+  // (streaming only ever appends), so an element-wise comparison against the
+  // previous result lets us keep the old identity until a source is actually
+  // added.
+  const prevMergedSourcesRef = useRef<Source[]>([])
   const mergedSources = useMemo(() => {
     const byNumber = new Map<number, Source>()
     const unnumbered: Source[] = []
@@ -747,7 +758,11 @@ export function ChatView({
         }
       }
     }
-    return [...unnumbered, ...[...byNumber.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s)]
+    const next = [...unnumbered, ...[...byNumber.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s)]
+    const prev = prevMergedSourcesRef.current
+    if (prev.length === next.length && next.every((s, i) => s === prev[i])) return prev
+    prevMergedSourcesRef.current = next
+    return next
   }, [messages])
 
   // Reports stream inline as <report> blocks; questions appear as <question>

@@ -104,6 +104,15 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
   return animate ? (
     <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} hideCitations />
   ) : (
-    <MarkdownMessage content={contentRef.current} sources={sources} verifiedClaims={verifiedClaims} onVerifiedClaimClick={onVerifiedClaimClick} />
+    <MarkdownMessage
+      content={contentRef.current}
+      sources={sources}
+      verifiedClaims={verifiedClaims}
+      onVerifiedClaimClick={onVerifiedClaimClick}
+      // Pre-wrap claim candidates only where the caller can actually verify
+      // them (it passes a click handler exactly for the segment it sweeps
+      // with /check_source) — inert spans elsewhere would be dead weight.
+      wrapClaimCandidates={!!onVerifiedClaimClick}
+    />
   )
 }

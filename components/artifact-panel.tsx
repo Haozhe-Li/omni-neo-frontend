@@ -529,6 +529,10 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                     sources={active.report.sources}
                     verifiedClaims={active.report.verifiedClaims}
                     onVerifiedClaimClick={handleVerifiedClaimClick}
+                    // Only once the report body stops streaming — candidate
+                    // offsets against a still-growing content string would be
+                    // stale by the time the background check confirms them.
+                    wrapClaimCandidates={active.report.complete !== false && !!handleVerifiedClaimClick}
                   />
                 ) : null}
 

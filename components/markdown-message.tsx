@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import { Mermaid } from '@/components/mermaid'
 import { EChartsChart } from '@/components/echarts-chart'
 import { preprocessMarkdown } from '@/lib/markdown'
-import { spliceVerifyMarkers, type VerifiedSpan } from '@/lib/verify-claims'
+import { extractClaimCandidates, spliceVerifyMarkers, type VerifiedSpan } from '@/lib/verify-claims'
 import { brandDomain, truncateFilename } from '@/lib/domain'
 import type { LightChatMapPoint } from '@/components/light-chat-mini-map'
 import type { Source } from '@/lib/types'
@@ -355,40 +355,57 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
 }
 
 // Renders a `<span data-verify="id">…</span>` — spliced into the raw markdown
-// by `spliceVerifyMarkers` around a sentence that silently came back with a
-// `/check_source` hit (see `lib/verify-claims.ts`) — as a dashed-underline
-// span. Its own children render normally (bold, a nested citation badge,
-// etc.); clicking hands the id back to the caller, which re-runs
-// `/check_source` and opens the sources panel.
+// by `spliceVerifyMarkers` (see `MarkdownMessage`: every claim *candidate*
+// gets wrapped up front, so a later `/check_source` confirmation only flips
+// this mark's `verified` prop instead of restructuring the markdown tree —
+// restructuring would remount the sentence's citation badges and replay
+// their fade-in as a visible flicker). Unverified candidates render as a
+// bare, style-less span; verified ones get the dashed underline and click
+// hands the id back to the caller, which re-runs `/check_source` and opens
+// the sources panel.
 //
-// The mark mounts the instant its message's background check confirms a
-// hit — the sentence's text is already sitting there fully visible (it's
-// been on screen since the answer streamed in), so a plain fade/pop on the
-// whole span would flash the *words* too. Only the underline animates:
-// it's a `background-image` dash pattern (not `text-decoration`) so its
-// *size* can be transitioned from 0 to 100% width — reads as the line
-// being drawn left to right — rather than just appearing at full length.
-// `text-decoration` has no equivalent "reveal" hook; a background does.
+// The underline appears the instant the background check confirms a hit —
+// the sentence's text is already sitting there fully visible (it's been on
+// screen since the answer streamed in), so a plain fade/pop on the whole
+// span would flash the *words* too. Only the underline animates: it's a
+// `background-image` dash pattern (not `text-decoration`) so its *size* can
+// be transitioned from 0 to 100% width — reads as the line being drawn left
+// to right — rather than just appearing at full length. `text-decoration`
+// has no equivalent "reveal" hook; a background does.
 // `box-decoration-break: clone` (not the `slice` default) so a sentence
 // that wraps across 3+ lines gets each line its own independently-correct
 // 0%→100% underline — `slice` computes one shared background sized against
 // the *unwrapped* total width then cuts it across the actual lines, and for
 // 3+ lines that division doesn't come out even, silently dropping whichever
 // middle line got sliced to a near-zero-width sliver.
-function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (id: string) => void; children: ReactNode }) {
+//
+// `paddingBottom` (no visual effect on inline layout) matters: an inline
+// box's background paint area is its font's content box, ~1.16–1.25em tall.
+// The dash strip sits at 1.2em–1.29em, i.e. straddling that bottom edge, so
+// without the extra padding all but a sub-pixel sliver of it gets clipped —
+// and whether that sliver survives device-pixel rounding varies *per line
+// fragment*, which showed up as the underline randomly missing on some
+// wrapped lines of a multi-line claim.
+function VerifiedClaimMark({ id, verified, onClick, children }: { id: string; verified: boolean; onClick?: (id: string) => void; children: ReactNode }) {
   const [revealed, setRevealed] = useState(false)
   useEffect(() => {
+    if (!verified) {
+      setRevealed(false)
+      return
+    }
     const raf = requestAnimationFrame(() => setRevealed(true))
     return () => cancelAnimationFrame(raf)
-  }, [])
+  }, [verified])
 
-  if (!onClick) return <>{children}</>
+  const interactive = verified && !!onClick
+  if (!interactive) return <span data-verify={id}>{children}</span>
   return (
     <span
+      data-verify={id}
       role="button"
       tabIndex={0}
-      onClick={() => onClick(id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(id) } }}
+      onClick={() => onClick!(id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick!(id) } }}
       className="cursor-pointer transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
       style={{
         backgroundImage:
@@ -396,6 +413,7 @@ function VerifiedClaimMark({ id, onClick, children }: { id: string; onClick?: (i
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'left 1.2em',
         backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
+        paddingBottom: '0.25em',
         WebkitBoxDecorationBreak: 'clone',
         boxDecorationBreak: 'clone',
       }}
@@ -554,26 +572,55 @@ export function resolveCitationSources(
   return sources
 }
 
-function buildMarkdownComponents(citationMap: Map<number, Source>, onVerifiedClaimClick?: (id: string) => void): Components {
-  return {
-    ...baseMarkdownComponents,
-    a: ({ href, children }) => {
-      const sources = resolveCitationSources(href, children, citationMap)
-      if (sources.length > 0) return <CitationBadge sources={sources} />
-      return (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
-          {children}
-        </a>
-      )
-    },
-    span: ({ node, children, ...props }: any) => {
-      const verifyId = props['data-verify']
-      if (typeof verifyId === 'string') {
-        return <VerifiedClaimMark id={verifyId} onClick={onVerifiedClaimClick}>{children}</VerifiedClaimMark>
-      }
-      return <span {...props}>{children}</span>
-    },
+// Per-message dynamic state (citation map, verified-claim ids, click
+// handler) reaches the `a`/`span` renderers through this context instead of
+// being closed over in component functions rebuilt per render. The
+// `components` map handed to ReactMarkdown must keep the exact same function
+// identities forever: a fresh `a`/`span` function is a new element *type* to
+// React, which tears down and rebuilds every citation badge and claim mark
+// in the message — replaying their mount fade-ins as a visible flicker
+// (during streaming this used to happen on every token, because the
+// thread-wide `sources` array got a new identity per token and cascaded
+// into a rebuilt component map).
+interface MarkdownRenderContextValue {
+  citationMap: Map<number, Source>
+  verifiedIds: ReadonlySet<string>
+  onVerifiedClaimClick?: (id: string) => void
+}
+
+const MarkdownRenderContext = createContext<MarkdownRenderContextValue>({
+  citationMap: new Map(),
+  verifiedIds: new Set(),
+})
+
+function MarkdownLink({ href, children }: { href?: string; children?: ReactNode }) {
+  const { citationMap } = useContext(MarkdownRenderContext)
+  const sources = resolveCitationSources(href, children, citationMap)
+  if (sources.length > 0) return <CitationBadge sources={sources} />
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
+      {children}
+    </a>
+  )
+}
+
+function MarkdownSpan({ node, children, ...props }: any) {
+  const { verifiedIds, onVerifiedClaimClick } = useContext(MarkdownRenderContext)
+  const verifyId = props['data-verify']
+  if (typeof verifyId === 'string') {
+    return (
+      <VerifiedClaimMark id={verifyId} verified={verifiedIds.has(verifyId)} onClick={onVerifiedClaimClick}>
+        {children}
+      </VerifiedClaimMark>
+    )
   }
+  return <span {...props}>{children}</span>
+}
+
+const markdownComponents: Components = {
+  ...baseMarkdownComponents,
+  a: MarkdownLink,
+  span: MarkdownSpan,
 }
 
 interface MarkdownMessageProps {
@@ -608,32 +655,65 @@ interface MarkdownMessageProps {
    * `moveCitationsAfterPunctuation` in lib/markdown.ts for why that matters).
    */
   hideCitations?: boolean
+  /**
+   * Wrap every claim *candidate* (`extractClaimCandidates`) in an inert
+   * `<span data-verify>` up front, not just the confirmed ones. The caller's
+   * background `/check_source` sweep runs the same extraction over the same
+   * content, so when a hit lands in `verifiedClaims` the span is already in
+   * the tree and only its underline state flips — no re-splice, no markdown
+   * tree restructure, no remount of the citation badges sitting inside the
+   * sentence (which would replay their fade-in as a flicker). Pass for
+   * fully-streamed content that the caller sweeps for claims; leave off for
+   * still-streaming content (offsets wouldn't be stable) and for surfaces
+   * that never verify claims.
+   */
+  wrapClaimCandidates?: boolean
 }
 
 /** GitHub-flavoured Markdown renderer matching the original answer styling. */
-export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick, hideCitations }: MarkdownMessageProps) {
+export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick, hideCitations, wrapClaimCandidates }: MarkdownMessageProps) {
   const citationMap = useMemo(() => {
     const map = new Map<number, Source>()
     for (const s of sources ?? []) if (typeof s.n === 'number') map.set(s.n, s)
     return map
   }, [sources])
   const citationNumbers = useMemo(() => new Set(citationMap.keys()), [citationMap])
-  const components = useMemo(() => buildMarkdownComponents(citationMap, onVerifiedClaimClick), [citationMap, onVerifiedClaimClick])
+  const verifiedIds = useMemo(() => new Set((verifiedClaims ?? []).map((v) => v.id)), [verifiedClaims])
+  // Confirmed spans plus (when `wrapClaimCandidates`) the not-yet-confirmed
+  // candidates, so confirmations later only flip a span's state. `cand-`
+  // prefixed ids can never collide with confirmed ids nor accidentally match
+  // `verifiedIds`; a candidate overlapping an already-confirmed span (same
+  // sentence — the extraction is deterministic, but persisted spans may
+  // predate extractor tweaks) yields to the confirmed one.
+  const verifySpans = useMemo(() => {
+    const verified = verifiedClaims ?? []
+    if (!wrapClaimCandidates || hideCitations) return verified
+    const candidates = extractClaimCandidates(content)
+      .map((c) => ({ id: `cand-${c.id}`, start: c.start, end: c.end }))
+      .filter((c) => !verified.some((v) => c.start < v.end && v.start < c.end))
+    return [...verified, ...candidates]
+  }, [content, verifiedClaims, wrapClaimCandidates, hideCitations])
   const contentWithVerifyMarkers = useMemo(
-    () => (verifiedClaims && verifiedClaims.length > 0 ? spliceVerifyMarkers(content, verifiedClaims) : content),
-    [content, verifiedClaims]
+    () => (verifySpans.length > 0 ? spliceVerifyMarkers(content, verifySpans) : content),
+    [content, verifySpans]
+  )
+  const renderContext = useMemo(
+    () => ({ citationMap, verifiedIds, onVerifiedClaimClick }),
+    [citationMap, verifiedIds, onVerifiedClaimClick]
   )
 
   return (
-    <div className={`text-[16px] text-foreground break-words ${className}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeRaw, rehypeKatex, rehypeHighlight]}
-        components={components}
-        urlTransform={citationUrlTransform}
-      >
-        {preprocessMarkdown(contentWithVerifyMarkers, citationNumbers, { hideCitations })}
-      </ReactMarkdown>
-    </div>
+    <MarkdownRenderContext.Provider value={renderContext}>
+      <div className={`text-[16px] text-foreground break-words ${className}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeRaw, rehypeKatex, rehypeHighlight]}
+          components={markdownComponents}
+          urlTransform={citationUrlTransform}
+        >
+          {preprocessMarkdown(contentWithVerifyMarkers, citationNumbers, { hideCitations })}
+        </ReactMarkdown>
+      </div>
+    </MarkdownRenderContext.Provider>
   )
 })
