@@ -18,7 +18,7 @@ import { StreamingText } from '@/components/streaming-text'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
-import { getMemories, appendQueryToMemoryQueue } from '@/lib/memories'
+import { isMemoryEnabled } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
@@ -1085,10 +1085,7 @@ export function ChatView({
     if (typeof window !== 'undefined') {
       const lang = localStorage.getItem('omni_response_language')
       if (lang && lang !== 'auto') p.response_language = lang
-      if (localStorage.getItem('omni_enable_memories') === 'true') {
-        const m = getMemories()
-        if (m) p.memories = m
-      }
+      if (isMemoryEnabled()) p.memory_enabled = true
     }
     p.user_local_datetime = getLocalISOString()
     try {
@@ -1301,7 +1298,6 @@ export function ChatView({
         if (fileIds && fileIds.length) payload.attached_file_ids = fileIds
         if (activeSkill) payload.skill = activeSkill
         if (followUpContent) payload.follow_up_content = followUpContent
-        appendQueryToMemoryQueue(queryText)
 
         const res = await fetchWithAuth(`${BACKEND_URL}/chat`, {
           method: 'POST',
