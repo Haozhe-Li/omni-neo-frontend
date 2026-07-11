@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, memo, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Children, createContext, isValidElement, memo, useContext, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -354,75 +354,6 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
   )
 }
 
-// Renders a `<span data-verify="id">…</span>` — spliced into the raw markdown
-// by `spliceVerifyMarkers` (see `MarkdownMessage`: every claim *candidate*
-// gets wrapped up front, so a later `/check_source` confirmation only flips
-// this mark's `verified` prop instead of restructuring the markdown tree —
-// restructuring would remount the sentence's citation badges and replay
-// their fade-in as a visible flicker). Unverified candidates render as a
-// bare, style-less span; verified ones get the dashed underline and click
-// hands the id back to the caller, which re-runs `/check_source` and opens
-// the sources panel.
-//
-// The underline appears the instant the background check confirms a hit —
-// the sentence's text is already sitting there fully visible (it's been on
-// screen since the answer streamed in), so a plain fade/pop on the whole
-// span would flash the *words* too. Only the underline animates: it's a
-// `background-image` dash pattern (not `text-decoration`) so its *size* can
-// be transitioned from 0 to 100% width — reads as the line being drawn left
-// to right — rather than just appearing at full length. `text-decoration`
-// has no equivalent "reveal" hook; a background does.
-// `box-decoration-break: clone` (not the `slice` default) so a sentence
-// that wraps across 3+ lines gets each line its own independently-correct
-// 0%→100% underline — `slice` computes one shared background sized against
-// the *unwrapped* total width then cuts it across the actual lines, and for
-// 3+ lines that division doesn't come out even, silently dropping whichever
-// middle line got sliced to a near-zero-width sliver.
-//
-// `paddingBottom` (no visual effect on inline layout) matters: an inline
-// box's background paint area is its font's content box, ~1.16–1.25em tall.
-// The dash strip sits at 1.2em–1.29em, i.e. straddling that bottom edge, so
-// without the extra padding all but a sub-pixel sliver of it gets clipped —
-// and whether that sliver survives device-pixel rounding varies *per line
-// fragment*, which showed up as the underline randomly missing on some
-// wrapped lines of a multi-line claim.
-function VerifiedClaimMark({ id, verified, onClick, children }: { id: string; verified: boolean; onClick?: (id: string) => void; children: ReactNode }) {
-  const [revealed, setRevealed] = useState(false)
-  useEffect(() => {
-    if (!verified) {
-      setRevealed(false)
-      return
-    }
-    const raf = requestAnimationFrame(() => setRevealed(true))
-    return () => cancelAnimationFrame(raf)
-  }, [verified])
-
-  const interactive = verified && !!onClick
-  if (!interactive) return <span data-verify={id}>{children}</span>
-  return (
-    <span
-      data-verify={id}
-      role="button"
-      tabIndex={0}
-      onClick={() => onClick!(id)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick!(id) } }}
-      className="cursor-pointer transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)]"
-      style={{
-        backgroundImage:
-          'repeating-linear-gradient(to right, var(--verify-line) 0, var(--verify-line) 3px, transparent 3px, transparent 6px)',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'left 1.2em',
-        backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
-        paddingBottom: '0.25em',
-        WebkitBoxDecorationBreak: 'clone',
-        boxDecorationBreak: 'clone',
-      }}
-    >
-      {children}
-    </span>
-  )
-}
-
 function extractNodeText(node: ReactNode): string {
   if (node == null) return ''
   if (typeof node === 'string' || typeof node === 'number') return String(node)
@@ -602,6 +533,128 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
       {children}
     </a>
   )
+}
+
+// A citation badge is a self-contained pill widget (its own background,
+// padding, hover card, click target) — the dashed underline must never run
+// under or through it, and clicking it must never also fire the verify-claim
+// handler. `MarkdownLink` renders both citations *and* plain links through
+// the same component, so which one a given child is can't be told from its
+// type alone; re-run the same `resolveCitationSources` check the renderer
+// itself used, off the shared `citationMap` from context.
+function isCitationChip(node: ReactNode, citationMap: Map<number, Source>): boolean {
+  if (!isValidElement(node) || node.type !== MarkdownLink) return false
+  const props = node.props as { href?: string; children?: ReactNode }
+  return resolveCitationSources(props.href, props.children, citationMap).length > 0
+}
+
+// Renders a `<span data-verify="id">…</span>` — spliced into the raw markdown
+// by `spliceVerifyMarkers` (see `MarkdownMessage`: every claim *candidate*
+// gets wrapped up front, so a later `/check_source` confirmation only flips
+// this mark's `verified` prop instead of restructuring the markdown tree —
+// restructuring would remount the sentence's citation badges and replay
+// their fade-in as a visible flicker). Unverified candidates render as a
+// bare, style-less span; verified ones get the dashed underline and click
+// hands the id back to the caller, which re-runs `/check_source` and opens
+// the sources panel.
+//
+// The underline appears the instant the background check confirms a hit —
+// the sentence's text is already sitting there fully visible (it's been on
+// screen since the answer streamed in), so a plain fade/pop on the whole
+// span would flash the *words* too. Only the underline animates: it's a
+// `background-image` dash pattern (not `text-decoration`) so its *size* can
+// be transitioned from 0 to 100% width — reads as the line being drawn left
+// to right — rather than just appearing at full length. `text-decoration`
+// has no equivalent "reveal" hook; a background does.
+// `box-decoration-break: clone` (not the `slice` default) so a sentence
+// that wraps across 3+ lines gets each line its own independently-correct
+// 0%→100% underline — `slice` computes one shared background sized against
+// the *unwrapped* total width then cuts it across the actual lines, and for
+// 3+ lines that division doesn't come out even, silently dropping whichever
+// middle line got sliced to a near-zero-width sliver.
+//
+// `paddingBottom` (no visual effect on inline layout) matters: an inline
+// box's background paint area is its font's content box, ~1.16–1.25em tall.
+// The dash strip sits at 1.2em–1.29em, i.e. straddling that bottom edge, so
+// without the extra padding all but a sub-pixel sliver of it gets clipped —
+// and whether that sliver survives device-pixel rounding varies *per line
+// fragment*, which showed up as the underline randomly missing on some
+// wrapped lines of a multi-line claim.
+//
+// Children are split into runs at every citation chip: each run of plain
+// text/formatting between chips gets its own dashed-underline wrapper, and
+// each chip is re-emitted untouched, outside any of those wrappers. Two
+// things fall out of that for free: (1) the dashed background is simply
+// never part of a chip's box, so there's nothing to paint under it, and (2)
+// the click handler lives only on the run spans now, not on one container
+// wrapping the whole sentence including the chip — so clicking a chip can no
+// longer bubble into `onClick` and fire the verify-claim handler alongside
+// the chip's own link/hover-card behavior.
+function VerifiedClaimMark({ id, verified, onClick, children }: { id: string; verified: boolean; onClick?: (id: string) => void; children: ReactNode }) {
+  const { citationMap } = useContext(MarkdownRenderContext)
+  const [revealed, setRevealed] = useState(false)
+  useEffect(() => {
+    if (!verified) {
+      setRevealed(false)
+      return
+    }
+    const raf = requestAnimationFrame(() => setRevealed(true))
+    return () => cancelAnimationFrame(raf)
+  }, [verified])
+
+  if (!verified) return <span data-verify={id}>{children}</span>
+
+  const interactive = !!onClick
+  const runStyle: CSSProperties = {
+    backgroundImage:
+      'repeating-linear-gradient(to right, var(--verify-line) 0, var(--verify-line) 3px, transparent 3px, transparent 6px)',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'left 1.2em',
+    backgroundSize: revealed ? '100% 1.5px' : '0% 1.5px',
+    paddingBottom: '0.25em',
+    WebkitBoxDecorationBreak: 'clone',
+    boxDecorationBreak: 'clone',
+  }
+  const runClassName = `transition-[background-size] duration-700 ease-out [--verify-line:color-mix(in_srgb,var(--muted-foreground)_50%,transparent)] hover:[--verify-line:color-mix(in_srgb,var(--foreground)_70%,transparent)] ${interactive ? 'cursor-pointer' : ''}`
+
+  const nodes: ReactNode[] = []
+  let run: ReactNode[] = []
+  let runKey = 0
+  const flushRun = () => {
+    if (run.length === 0) return
+    const key = `run-${runKey++}`
+    nodes.push(
+      interactive ? (
+        <span
+          key={key}
+          role="button"
+          tabIndex={0}
+          onClick={() => onClick!(id)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick!(id) } }}
+          className={runClassName}
+          style={runStyle}
+        >
+          {run}
+        </span>
+      ) : (
+        <span key={key} className={runClassName} style={runStyle}>
+          {run}
+        </span>
+      )
+    )
+    run = []
+  }
+  for (const child of Children.toArray(children)) {
+    if (isCitationChip(child, citationMap)) {
+      flushRun()
+      nodes.push(child)
+    } else {
+      run.push(child)
+    }
+  }
+  flushRun()
+
+  return <span data-verify={id}>{nodes}</span>
 }
 
 function MarkdownSpan({ node, children, ...props }: any) {
