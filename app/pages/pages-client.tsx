@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { BookOpen, Search, ArrowUpDown } from 'lucide-react'
+import { BookOpen, Search, ArrowUpDown, Menu } from 'lucide-react'
 import { PagesGrid, type PageSummary } from '@/components/pages-grid'
+import { usePagesShellControls } from '@/components/pages-shell'
 
 export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
+    const { isMobile, toggleSidebar } = usePagesShellControls()
     const [searchQuery, setSearchQuery] = useState('')
     const [sortBy, setSortBy] = useState<'newest' | 'oldest'>('newest')
 
@@ -32,6 +34,17 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
 
     return (
         <div className="h-full overflow-y-auto custom-scrollbar">
+        {isMobile && (
+            <div className="sticky top-0 z-20 flex items-center h-14 px-4 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md">
+                <button
+                    onClick={toggleSidebar}
+                    className="p-2 -ml-2 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                    title="Menu"
+                >
+                    <Menu size={20} />
+                </button>
+            </div>
+        )}
         <div className="max-w-6xl mx-auto px-6">
         <section className="pt-10 sm:pt-14 pb-6">
             <h1 className="text-[26px] sm:text-[28px] font-semibold tracking-tight text-[var(--foreground)]">

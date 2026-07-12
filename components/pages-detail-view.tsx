@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -11,11 +11,23 @@ import {
   Eye,
   FileText,
   Link as LinkIcon,
+  Menu,
   Share,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MarkdownBlogView } from '@/components/markdown-blog-view'
+import { SourcesPanel } from '@/components/sources-panel'
+import { usePagesShellControls } from '@/components/pages-shell'
+import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
+
+function domainOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
 
 interface PagesDetailViewProps {
   id: string
@@ -25,6 +37,7 @@ interface PagesDetailViewProps {
   publishedAt?: string
   tags?: string[]
   sources?: Source[]
+  coverImage?: string
 }
 
 /**
@@ -32,14 +45,19 @@ interface PagesDetailViewProps {
  * markdown, matching the report artifact panel's share UI 1:1 so opening a
  * page from a direct link feels like the same product as the in-chat report.
  */
-export function PagesDetailView({ id, title, markdown, author, publishedAt, tags, sources }: PagesDetailViewProps) {
+export function PagesDetailView({ id, title, markdown, author, publishedAt, tags, sources, coverImage }: PagesDetailViewProps) {
   const router = useRouter()
+  const { isMobile, toggleSidebar } = usePagesShellControls()
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [shareOpen, setShareOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const validSources = useMemo(() => (sources || []).filter((s) => s?.url), [sources])
+  const citedNumbers = useMemo(() => extractCitedNumbers(markdown), [markdown])
 
   useEffect(() => {
     setShareOpen(false)
@@ -314,9 +332,19 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[var(--background)] relative">
+    <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
+    <div className="flex flex-col h-full min-w-0 flex-1 relative">
       {/* Toolbar */}
       <div className="flex items-center h-14 px-4 border-b border-[var(--border-subtle)] bg-[var(--background)] shrink-0 z-20 relative gap-3">
+        {isMobile && (
+          <button
+            onClick={toggleSidebar}
+            className="p-2 -ml-2 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors shrink-0"
+            title="Menu"
+          >
+            <Menu size={20} />
+          </button>
+        )}
         <button
           onClick={() => router.push('/pages')}
           className="flex items-center gap-1.5 px-2 py-1.5 -ml-1.5 rounded-md text-[13px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors shrink-0"
@@ -328,6 +356,26 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
         <div className="flex-1" />
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Sources — opens the same drawer used in chat */}
+          {validSources.length > 0 && (
+            <button
+              onClick={() => setSourcesOpen(true)}
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all"
+            >
+              <span className="flex -space-x-1.5">
+                {validSources.slice(0, 4).map((s, i) => (
+                  <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--background)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                  </span>
+                ))}
+              </span>
+              <span className="hidden sm:inline">
+                {validSources.length} source{validSources.length > 1 ? 's' : ''}
+              </span>
+            </button>
+          )}
+
           {/* View / Code Toggle */}
           <div className="hidden sm:flex items-center p-0.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/50">
             <button
@@ -410,12 +458,14 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
               <MarkdownBlogView
                 embedded
                 showMeta={false}
+                showReferences={false}
                 title={title}
                 markdown={markdown}
                 author={author}
                 publishedAt={publishedAt}
                 tags={tags}
                 sources={sources}
+                coverImage={coverImage}
               />
             </div>
           ) : (
@@ -427,6 +477,14 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
           )}
         </div>
       </div>
+    </div>
+
+    <SourcesPanel
+      sources={validSources}
+      citedNumbers={citedNumbers}
+      open={sourcesOpen}
+      onClose={() => setSourcesOpen(false)}
+    />
     </div>
   )
 }

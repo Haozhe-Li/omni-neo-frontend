@@ -33,6 +33,8 @@ interface MarkdownBlogViewProps {
   embedded?: boolean
   /** Hides the section-label eyebrow and the author/date/reading-time row above the title. Defaults to shown. */
   showMeta?: boolean
+  /** Hides the inline "References" list at the bottom of the article — set to false when the host surface offers a sources drawer instead (see PagesDetailView). Defaults to shown. */
+  showReferences?: boolean
 }
 
 function extractNodeText(node: ReactNode): string {
@@ -214,6 +216,7 @@ export function MarkdownBlogView({
   sources = [],
   embedded = false,
   showMeta = true,
+  showReferences = true,
 }: MarkdownBlogViewProps) {
   const citationMap = useMemo(() => {
     const map = new Map<number, Source>()
@@ -280,7 +283,8 @@ export function MarkdownBlogView({
 
             {coverImage && (
               <div className="mt-6 overflow-hidden rounded-xl border border-border/70 bg-secondary/30">
-                <img src={coverImage} alt={title} className="h-auto w-full object-cover" loading="lazy" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={coverImage} alt={title} className="h-auto max-h-[440px] w-full object-cover" loading="lazy" />
               </div>
             )}
           </header>
@@ -290,7 +294,7 @@ export function MarkdownBlogView({
               {preprocessMarkdown(markdown, citationNumbers)}
             </ReactMarkdown>
 
-            {sources.length > 0 && (
+            {showReferences && sources.length > 0 && (
               <div className="mt-12 border-t border-border/70 pt-8">
                 <h3 className="mb-6 text-xl font-semibold tracking-tight text-foreground">References</h3>
 

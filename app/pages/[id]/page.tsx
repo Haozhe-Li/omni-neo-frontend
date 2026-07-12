@@ -67,6 +67,7 @@ export default async function PagesPage({ params }: PagesPageProps) {
                 publishedAt={typeof data?.created_at === 'string' ? data.created_at : undefined}
                 tags={Array.isArray(data?.tags) ? data.tags : []}
                 sources={Array.isArray(data?.sources) ? data.sources : []}
+                coverImage={typeof data?.coverImage === 'string' ? data.coverImage : undefined}
             />
         </PagesShell>
     )
