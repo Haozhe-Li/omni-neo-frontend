@@ -17,6 +17,8 @@ import {
     Lock,
     X,
     AlertCircle,
+    CheckCircle2,
+    MailCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
@@ -509,6 +511,10 @@ function TaskFormDialog({
     const [weekday, setWeekday] = useState(initial.config.weekday ?? 1)
     const [dayOfMonth, setDayOfMonth] = useState(initial.config.dayOfMonth ?? 1)
     const [isSaving, setIsSaving] = useState(false)
+    // Set only right after a successful *create* — swaps the form for a
+    // confirmation screen instead of closing immediately, since a real email
+    // just went out and the user should be told to go check for it.
+    const [justCreated, setJustCreated] = useState<{ name: string; scheduleLabel: string } | null>(null)
 
     const canSave = name.trim().length > 0 && prompt.trim().length > 0 && !isSaving
 
@@ -518,12 +524,13 @@ function TaskFormDialog({
         try {
             const config: ScheduleConfig = { frequency, time, weekday, dayOfMonth }
             const cron_schedule = buildCron(config)
+            const scheduleLabel = formatScheduleLabel(config)
             const body = { name: name.trim(), prompt: prompt.trim(), cron_schedule }
 
             const res = mode === 'create'
                 ? await fetchWithAuth(`${BACKEND_URL}/schedule_task`, {
                     method: 'POST',
-                    body: JSON.stringify({ ...body, email }),
+                    body: JSON.stringify({ ...body, email, schedule_label: scheduleLabel }),
                 })
                 : await fetchWithAuth(`${BACKEND_URL}/schedule_task/${initial.task_id}`, {
                     method: 'PUT',
@@ -534,13 +541,29 @@ function TaskFormDialog({
                 const err = await res.json().catch(() => null)
                 throw new Error(err?.detail || 'Failed to save')
             }
-            toast.success(mode === 'create' ? 'Scheduled research created' : 'Scheduled research updated')
-            onSaved()
+
+            if (mode === 'create') {
+                setJustCreated({ name: name.trim(), scheduleLabel })
+            } else {
+                toast.success('Scheduled research updated')
+                onSaved()
+            }
         } catch (err: any) {
             toast.error(err?.message || 'Failed to save scheduled research')
         } finally {
             setIsSaving(false)
         }
+    }
+
+    if (justCreated) {
+        return (
+            <TaskCreatedConfirmation
+                name={justCreated.name}
+                scheduleLabel={justCreated.scheduleLabel}
+                email={email}
+                onDone={onSaved}
+            />
+        )
     }
 
     return (
@@ -645,6 +668,63 @@ function TaskFormDialog({
                     <SettingButton onClick={onClose}>Cancel</SettingButton>
                     <SettingButton variant="primary" onClick={handleSave} disabled={!canSave}>
                         {isSaving ? <Loader2 size={13} className="animate-spin" /> : 'Save'}
+                    </SettingButton>
+                </div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Post-create confirmation — shown once, right after a task is saved,
+   in place of the form. A real confirmation email just went out
+   server-side, so this tells the user to go check for it.
+   ════════════════════════════════════════════════════════════════ */
+
+function TaskCreatedConfirmation({
+    name,
+    scheduleLabel,
+    email,
+    onDone,
+}: {
+    name: string
+    scheduleLabel: string
+    email: string
+    onDone: () => void
+}) {
+    return (
+        <Dialog open onOpenChange={(open) => !open && onDone()}>
+            <DialogContent
+                showCloseButton={false}
+                overlayClassName="bg-black/5 dark:bg-black/40"
+                className="p-0 border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0
+                    w-[94vw] max-w-[440px] rounded-2xl z-[110]"
+            >
+                <DialogTitle className="sr-only">Scheduled research created</DialogTitle>
+
+                <div className="px-6 pt-8 pb-6 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center mx-auto">
+                        <CheckCircle2 size={22} className="text-[var(--accent)]" />
+                    </div>
+                    <div className="space-y-1.5">
+                        <p className="text-base font-medium text-[var(--foreground)]">Scheduled research created</p>
+                        <p className="text-[13px] text-[var(--muted-foreground)] leading-relaxed">
+                            <span className="text-[var(--foreground)] font-medium">&ldquo;{name}&rdquo;</span> will run {scheduleLabel.charAt(0).toLowerCase() + scheduleLabel.slice(1)}.
+                        </p>
+                    </div>
+
+                    <div className="flex items-start gap-2.5 text-left p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/30">
+                        <MailCheck size={16} className="text-[var(--accent)] shrink-0 mt-0.5" />
+                        <p className="text-[13px] text-[var(--foreground)] leading-relaxed">
+                            We&apos;ve sent a confirmation email to <span className="font-medium">{email}</span>. Please check your inbox
+                            — and your junk/spam folder, just in case — to make sure it arrived.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center justify-center px-5 pb-6">
+                    <SettingButton variant="primary" onClick={onDone} className="w-full h-9">
+                        Done
                     </SettingButton>
                 </div>
             </DialogContent>

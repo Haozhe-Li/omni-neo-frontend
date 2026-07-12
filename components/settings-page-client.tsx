@@ -3,19 +3,25 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppSidebar } from '@/components/app-sidebar'
-import { SettingsDialog } from '@/components/settings-dialog'
+import { SettingsDialog, SLUG_TO_TAB, TAB_SLUGS, type TabId } from '@/components/settings-dialog'
 import { useIsMobile } from '@/hooks/use-mobile'
 
 /**
- * /settings is kept for old links and bookmarks: it renders the app shell
- * with the settings dialog open, and closing the dialog goes home.
+ * Renders the app shell with the settings dialog open on the tab matching
+ * `tabSlug` (undefined/unknown -> 'general'). Kept as a real route (not just
+ * local dialog state) for bookmarks and links sent outside the app — e.g. the
+ * scheduled-research confirmation email links straight to
+ * /settings/scheduled-research. Switching tabs while here keeps the URL in
+ * sync via router.replace. Closing the dialog goes home.
  */
-export default function SettingsPage() {
+export function SettingsPageClient({ tabSlug }: { tabSlug?: string }) {
     const router = useRouter()
     const isMobileCheck = useIsMobile()
     const isMobile = isMobileCheck === undefined ? true : isMobileCheck
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(true)
+
+    const activeTab: TabId = (tabSlug && SLUG_TO_TAB[tabSlug]) || 'general'
 
     useEffect(() => {
         setSidebarOpen(!isMobile)
@@ -30,6 +36,10 @@ export default function SettingsPage() {
         if (!open) router.push('/')
     }, [router])
 
+    const handleTabChange = useCallback((tab: TabId) => {
+        router.replace(`/settings/${TAB_SLUGS[tab]}`, { scroll: false })
+    }, [router])
+
     return (
         <div className="flex h-screen w-full bg-background overflow-hidden relative">
             <AppSidebar
@@ -41,7 +51,12 @@ export default function SettingsPage() {
                 onSelectThread={handleSelectThread}
             />
             <main className="flex-1 min-w-0 h-full bg-[var(--background)]" />
-            <SettingsDialog open={settingsOpen} onOpenChange={handleOpenChange} />
+            <SettingsDialog
+                open={settingsOpen}
+                onOpenChange={handleOpenChange}
+                initialTab={activeTab}
+                onTabChange={handleTabChange}
+            />
         </div>
     )
 }

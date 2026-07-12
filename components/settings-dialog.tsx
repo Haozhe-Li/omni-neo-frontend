@@ -70,6 +70,26 @@ const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:80
 
 export type TabId = 'general' | 'model' | 'personalization' | 'data' | 'pages' | 'history' | 'scheduled' | 'usage' | 'about'
 
+// Bidirectional map between the internal TabId and the URL slug used under
+// /settings/<slug> (e.g. /settings/scheduled-research) — kept here, next to
+// TabId, so the two never drift apart. Consumed by app/settings/[[...tab]]
+// (parses the URL into a TabId) and by onTabChange below (writes it back).
+export const TAB_SLUGS: Record<TabId, string> = {
+    general: 'general',
+    model: 'model',
+    personalization: 'personalization',
+    data: 'data-controls',
+    pages: 'my-pages',
+    history: 'chat-history',
+    scheduled: 'scheduled-research',
+    usage: 'usage',
+    about: 'about',
+}
+
+export const SLUG_TO_TAB: Record<string, TabId> = Object.fromEntries(
+    Object.entries(TAB_SLUGS).map(([tab, slug]) => [slug, tab])
+) as Record<string, TabId>
+
 const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
     { id: 'general', label: 'General', icon: Settings2 },
     { id: 'model', label: 'Model', icon: Cpu },
@@ -86,10 +106,17 @@ export function SettingsDialog({
     open,
     onOpenChange,
     initialTab = 'general',
+    onTabChange,
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
     initialTab?: TabId
+    // Optional: called whenever the user switches tabs while the dialog is
+    // open. Only the dedicated /settings page wires this up (to keep the URL
+    // in sync via router.replace) — dialogs opened as an overlay elsewhere
+    // (e.g. AppSidebar's footer button, on top of a chat thread) leave it
+    // unset and stay local-state-only, unchanged from before.
+    onTabChange?: (tab: TabId) => void
 }) {
     const [activeTab, setActiveTab] = useState<TabId>(initialTab)
 
@@ -99,6 +126,11 @@ export function SettingsDialog({
     useEffect(() => {
         if (open) setActiveTab(initialTab)
     }, [open, initialTab])
+
+    const selectTab = useCallback((tab: TabId) => {
+        setActiveTab(tab)
+        onTabChange?.(tab)
+    }, [onTabChange])
 
     const close = useCallback(() => onOpenChange(false), [onOpenChange])
 
@@ -146,7 +178,7 @@ export function SettingsDialog({
                                 return (
                                     <button
                                         key={item.id}
-                                        onClick={() => setActiveTab(item.id)}
+                                        onClick={() => selectTab(item.id)}
                                         className={cn(
                                             'flex items-center gap-2.5 shrink-0 md:w-full px-3 py-2 rounded-lg text-sm text-left whitespace-nowrap transition-colors duration-200',
                                             activeTab === item.id

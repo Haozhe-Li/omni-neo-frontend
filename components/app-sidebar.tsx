@@ -12,7 +12,7 @@ import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { SettingsDialog, type TabId } from '@/components/settings-dialog'
+import { SettingsDialog, TAB_SLUGS, type TabId } from '@/components/settings-dialog'
 import { UsageLimitDialog } from '@/components/usage-limit-dialog'
 import {
     AlertDialog,
@@ -80,6 +80,49 @@ export function AppSidebar({
     const [isDeleting, setIsDeleting] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const pagesActive = !!pathname && (pathname === '/pages' || pathname.startsWith('/pages/'))
+
+    // Settings opens as an overlay on top of whatever page you're on (a chat
+    // thread, /pages, etc.) — it must NOT navigate away and unmount that page.
+    // We still want the address bar to reflect it (bookmarkable, and matches
+    // /settings/<tab> being a real route — see app/settings/[[...tab]]), so we
+    // push/replace history state directly instead of going through the
+    // Next.js router, which would tear down the current route tree.
+    const openSettings = useCallback((tab: TabId) => {
+        setSettingsInitialTab(tab)
+        setIsSettingsOpen(true)
+        if (typeof window !== 'undefined') {
+            window.history.pushState({ omniSettings: true }, '', `/settings/${TAB_SLUGS[tab]}`)
+        }
+    }, [])
+
+    const handleSettingsOpenChange = useCallback((open: boolean) => {
+        setIsSettingsOpen(open)
+        // Closing pops the history entry openSettings pushed, restoring the
+        // URL you were on before Settings opened (rather than growing the
+        // stack with a second, opposite pushState).
+        if (!open && typeof window !== 'undefined' && window.location.pathname.startsWith('/settings')) {
+            window.history.back()
+        }
+    }, [])
+
+    const handleSettingsTabChange = useCallback((tab: TabId) => {
+        if (typeof window !== 'undefined') {
+            window.history.replaceState({ omniSettings: true }, '', `/settings/${TAB_SLUGS[tab]}`)
+        }
+    }, [])
+
+    // The browser's own back/forward buttons bypass handleSettingsOpenChange —
+    // keep the dialog in sync whenever navigation lands outside /settings
+    // while it's open (e.g. the user pressed back instead of clicking X).
+    useEffect(() => {
+        const onPopState = () => {
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/settings')) {
+                setIsSettingsOpen(false)
+            }
+        }
+        window.addEventListener('popstate', onPopState)
+        return () => window.removeEventListener('popstate', onPopState)
+    }, [])
 
     useEffect(() => { setMounted(true) }, [])
 
@@ -623,8 +666,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 {/* Scheduled — jumps straight into Settings' Scheduled Research tab */}
                 <button
                     onClick={() => {
-                        setSettingsInitialTab('scheduled')
-                        setIsSettingsOpen(true)
+                        openSettings('scheduled')
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
@@ -747,8 +789,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
                 <button
                     onClick={() => {
-                        setSettingsInitialTab('general')
-                        setIsSettingsOpen(true)
+                        openSettings('general')
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
@@ -830,7 +871,12 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             </div >
 
             {/* Settings Dialog */}
-            <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} initialTab={settingsInitialTab} />
+            <SettingsDialog
+                open={isSettingsOpen}
+                onOpenChange={handleSettingsOpenChange}
+                initialTab={settingsInitialTab}
+                onTabChange={handleSettingsTabChange}
+            />
 
             {/* Usage-limit-reached Dialog — self-driven via window event, see usage-limit-dialog.tsx */}
             <UsageLimitDialog />
