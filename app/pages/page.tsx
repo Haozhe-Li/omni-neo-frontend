@@ -45,7 +45,14 @@ export default async function OmniPagesList() {
 
     // ─── No more dynamic "featured" split. ───
     // All fetched pages go to the grid below.
-    const rest = pages
+    const rest = pages.length > 0 ? pages : [
+        { id: 'mock-1', title: 'Global Semiconductor Supply Chain Risk Assessment 2026', authorName: 'Omni AI', publishedAt: '2026-07-08', coverImage: 'https://cdn.omniknows.xyz/public/cover-fe16d891e33e4b418d835c29e12357b6.jpg', sources: [{ title: 'SEMI', url: 'https://www.semi.org' }, { title: 'Reuters', url: 'https://www.reuters.com' }, { title: 'Bloomberg', url: 'https://www.bloomberg.com' }, { title: 'TSMC', url: 'https://www.tsmc.com' }, { title: 'WSJ', url: 'https://www.wsj.com' }] },
+        { id: 'mock-2', title: 'Comparative Analysis of Renewable Energy Storage Technologies', authorName: 'Omni AI', publishedAt: '2026-07-05' },
+        { id: 'mock-3', title: 'The State of Remote Work in 2026', authorName: 'Omni AI', publishedAt: '2026-07-01', coverImage: 'https://cdn.omniknows.xyz/public/cover-9dde1669144c4297a5b327d9711dafd0.jpg', sources: [{ title: 'Gallup', url: 'https://www.gallup.com' }, { title: 'BLS', url: 'https://www.bls.gov' }] },
+        { id: 'mock-4', title: 'Quantum Computing Commercialization Timeline', authorName: 'Omni AI', publishedAt: '2026-06-28' },
+        { id: 'mock-5', title: 'Urban Transit Ridership Recovery Post-Pandemic', authorName: 'Omni AI', publishedAt: '2026-06-20', sources: [{ title: 'APTA', url: 'https://www.apta.com' }] },
+        { id: 'mock-6', title: 'Foundation Model Pricing Trends Across Providers', authorName: 'Max Li', publishedAt: '2026-06-15' },
+    ]
 
     return (
         <PagesShell>

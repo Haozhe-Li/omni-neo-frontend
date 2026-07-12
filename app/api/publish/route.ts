@@ -130,6 +130,44 @@ export async function POST(request: Request) {
         // 1. Migrate images that are about to expire
         const data = await migrateImages(rawData, expiresDate)
 
+        // The client payload never includes coverImage (it's server-generated,
+        // see below), so on a republish `data` would otherwise silently lose
+        // whatever cover the first publish generated — carry it forward here.
+        if (exists) {
+            const existingRaw = await redis.get(publishKey)
+            const existingData = existingRaw ? (typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw) : null
+            if (existingData?.coverImage) {
+                data.coverImage = existingData.coverImage
+            }
+        }
+
+        // 1.5 Generate a cover photo — only the first time this report is
+        // published, never regenerated on republish (forceUpdate), even if
+        // it's still empty because generation failed the first time around.
+        // Best-effort: any failure here must never block publish itself —
+        // the frontend already falls back to an abstract placeholder cover
+        // when coverImage is unset.
+        if (!exists && !data.coverImage) {
+            try {
+                const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://127.0.0.1:8000'
+                const targetUrl = backendBaseUrl.endsWith('/') ? `${backendBaseUrl}generate_cover` : `${backendBaseUrl}/generate_cover`
+                const coverResponse = await fetch(targetUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: data.title || 'Untitled' }),
+                    signal: AbortSignal.timeout(15000),
+                })
+                if (coverResponse.ok) {
+                    const cover = await coverResponse.json()
+                    if (cover.image_url) {
+                        data.coverImage = cover.image_url
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to generate cover image:', error)
+            }
+        }
+
         // 4. Enrich data with user info and timestamps
         const now = Date.now()
         data.userId = userId
