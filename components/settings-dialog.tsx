@@ -35,6 +35,7 @@ import {
     Check,
     Search,
     MessageSquare,
+    CalendarClock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getUserLocation, LocationData } from '@/lib/location'
@@ -59,6 +60,7 @@ import {
     AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
+import { ScheduledResearchSection } from '@/components/scheduled-research-section'
 
 type ModelType = 'fast' | 'pro'
 
@@ -66,7 +68,7 @@ const APP_VERSION = '0.2.0'
 const APP_NAME = 'Omni Knows'
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
-type TabId = 'general' | 'model' | 'personalization' | 'data' | 'pages' | 'history' | 'usage' | 'about'
+export type TabId = 'general' | 'model' | 'personalization' | 'data' | 'pages' | 'history' | 'scheduled' | 'usage' | 'about'
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
     { id: 'general', label: 'General', icon: Settings2 },
@@ -75,6 +77,7 @@ const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ElementType }> = 
     { id: 'data', label: 'Data controls', icon: Database },
     { id: 'pages', label: 'My pages', icon: Library },
     { id: 'history', label: 'Chat history', icon: History },
+    { id: 'scheduled', label: 'Scheduled Research', icon: CalendarClock },
     { id: 'usage', label: 'Usage', icon: BarChart3 },
     { id: 'about', label: 'About', icon: Info },
 ]
@@ -82,16 +85,20 @@ const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ElementType }> = 
 export function SettingsDialog({
     open,
     onOpenChange,
+    initialTab = 'general',
 }: {
     open: boolean
     onOpenChange: (open: boolean) => void
+    initialTab?: TabId
 }) {
-    const [activeTab, setActiveTab] = useState<TabId>('general')
+    const [activeTab, setActiveTab] = useState<TabId>(initialTab)
 
-    // Reset to the first tab whenever the dialog reopens
+    // Jump to the requested tab whenever the dialog (re)opens — defaults to
+    // 'general' unless the caller asked for a specific one (e.g. the sidebar's
+    // "Scheduled" shortcut opens straight into the Scheduled Research tab).
     useEffect(() => {
-        if (open) setActiveTab('general')
-    }, [open])
+        if (open) setActiveTab(initialTab)
+    }, [open, initialTab])
 
     const close = useCallback(() => onOpenChange(false), [onOpenChange])
 
@@ -164,6 +171,7 @@ export function SettingsDialog({
                             {activeTab === 'data' && <DataControlsSection />}
                             {activeTab === 'pages' && <PagesSection />}
                             {activeTab === 'history' && <ChatHistorySection onClose={close} />}
+                            {activeTab === 'scheduled' && <ScheduledResearchSection onClose={close} />}
                             {activeTab === 'usage' && <UsageSection />}
                             {activeTab === 'about' && <AboutSection />}
                         </div>
@@ -178,7 +186,7 @@ export function SettingsDialog({
    Shared primitives — one look for every control in this dialog
    ════════════════════════════════════════════════════════════════ */
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div className="animate-in fade-in duration-300">
             <h2 className="text-lg font-semibold text-[var(--foreground)] pb-4 border-b border-[var(--border-subtle)]">
@@ -190,7 +198,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** A single settings row: label + description on the left, control on the right. */
-function Row({
+export function Row({
     title,
     description,
     children,
@@ -215,7 +223,7 @@ function Row({
 }
 
 /** Unified switch — teal when on, quiet gray when off. */
-function SettingSwitch(props: React.ComponentProps<typeof SwitchPrimitive.Root>) {
+export function SettingSwitch(props: React.ComponentProps<typeof SwitchPrimitive.Root>) {
     return (
         <SwitchPrimitive.Root
             {...props}
@@ -234,7 +242,7 @@ function SettingSwitch(props: React.ComponentProps<typeof SwitchPrimitive.Root>)
 }
 
 /** Unified select — quiet, borderless trigger in the ChatGPT spirit. */
-function SettingSelect({
+export function SettingSelect({
     value,
     onValueChange,
     options,
@@ -272,7 +280,7 @@ function SettingSelect({
 }
 
 /** Unified button — subtle outline by default, red for destructive, teal fill for primary. */
-function SettingButton({
+export function SettingButton({
     variant = 'default',
     className,
     children,
@@ -295,7 +303,7 @@ function SettingButton({
 }
 
 /** Unified confirm dialog for destructive actions. */
-function ConfirmDialog({
+export function ConfirmDialog({
     open,
     onOpenChange,
     title,
@@ -1337,8 +1345,6 @@ function UsageSection() {
 
     if (!usage) return null
 
-    const resetDayLabel = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
-        .format(new Date(usage.resets_day_at))
     const resetMonthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' })
         .format(new Date(usage.resets_month_at))
 
@@ -1374,7 +1380,7 @@ function UsageSection() {
                 label="Today"
                 used={usage.day_used}
                 limit={usage.day_limit}
-                resetLabel={`Resets ${resetDayLabel}`}
+                resetLabel={formatResetsIn(usage.resets_day_at)}
             />
             <UsageMeter
                 label="This month"
@@ -1384,6 +1390,19 @@ function UsageSection() {
             />
         </Section>
     )
+}
+
+/** "Resets in 5 hours 32 min" — recomputed on every render, refreshed by
+ * UsageSection's 30s tick, so it counts down live instead of showing a
+ * fixed clock time the user has to do math against. */
+function formatResetsIn(resetsAt: string): string {
+    const ms = new Date(resetsAt).getTime() - Date.now()
+    if (ms <= 0) return 'Resets shortly'
+    const totalMinutes = Math.ceil(ms / 60_000)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    if (hours <= 0) return `Resets in ${minutes} min`
+    return `Resets in ${hours} hours ${minutes} min`
 }
 
 function UsageMeter({

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen, CalendarClock } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -12,7 +12,7 @@ import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { SettingsDialog } from '@/components/settings-dialog'
+import { SettingsDialog, type TabId } from '@/components/settings-dialog'
 import { UsageLimitDialog } from '@/components/usage-limit-dialog'
 import {
     AlertDialog,
@@ -75,6 +75,7 @@ export function AppSidebar({
     const [isSyncing, setIsSyncing] = useState(false)
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+    const [settingsInitialTab, setSettingsInitialTab] = useState<TabId>('general')
     const [threadToDelete, setThreadToDelete] = useState<string | null>(null)
     const [isDeleting, setIsDeleting] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -619,6 +620,32 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                     )}
                 </button>
 
+                {/* Scheduled — jumps straight into Settings' Scheduled Research tab */}
+                <button
+                    onClick={() => {
+                        setSettingsInitialTab('scheduled')
+                        setIsSettingsOpen(true)
+                        if (isMobile && onToggle) onToggle()
+                    }}
+                    className={`
+                        flex items-center gap-3 w-full p-2 rounded-lg
+                        hover:bg-[var(--secondary)]
+                        transition-all duration-200
+                        ${!isExpanded ? 'justify-center' : ''}
+                        text-[var(--foreground)]
+                    `}
+                    title="Scheduled"
+                >
+                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                        <CalendarClock size={18} />
+                    </div>
+                    {isExpanded && (
+                        <div className="flex items-center justify-between flex-1 min-w-0">
+                            <span className="text-sm font-medium">Scheduled</span>
+                        </div>
+                    )}
+                </button>
+
                 {/* History Toggle Button */}
                 <button
                     onClick={() => {
@@ -720,6 +747,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
                 <button
                     onClick={() => {
+                        setSettingsInitialTab('general')
                         setIsSettingsOpen(true)
                         if (isMobile && onToggle) onToggle()
                     }}
@@ -802,7 +830,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             </div >
 
             {/* Settings Dialog */}
-            <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+            <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} initialTab={settingsInitialTab} />
 
             {/* Usage-limit-reached Dialog — self-driven via window event, see usage-limit-dialog.tsx */}
             <UsageLimitDialog />

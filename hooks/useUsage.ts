@@ -12,7 +12,7 @@ export interface UsageData {
   month_used: number
   month_limit: number
   month_remaining: number
-  mode_cost: { fast: number; pro: number }
+  mode_cost: { fast: number; pro: number; scheduled: number }
   resets_day_at: string
   resets_month_at: string
 }
