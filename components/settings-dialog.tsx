@@ -39,7 +39,7 @@ import {
 import { toast } from 'sonner'
 import { getUserLocation, LocationData } from '@/lib/location'
 import { useMemory } from '@/hooks/useMemory'
-import { useGuestQuota } from '@/hooks/useGuestQuota'
+import { useUsage } from '@/hooks/useUsage'
 import { useApi } from '@/hooks/useApi'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -446,9 +446,15 @@ function GeneralSection() {
 function ModelSection() {
     const { isSignedIn } = useAuth()
     const clerk = useClerk()
-    const { quota, quotaExceeded } = useGuestQuota()
+    const { exceeded } = useUsage()
     const [chatModel, setChatModel] = useState<ModelType>('fast')
-    const remainingQuota = !isSignedIn && quota && quota.remaining > 0 ? quota.remaining : null
+
+    // Locking is guest-only: signed-in users get a generous budget and can
+    // check standing in the Usage tab instead of being nagged on every
+    // message. Once exhausted, both modes lock the same way — there's no
+    // "N left" breakdown shown, just usage available or not.
+    const isGuest = !isSignedIn
+    const locked = isGuest && exceeded
 
     useEffect(() => {
         const saved = localStorage.getItem('omni_model_preference')
@@ -456,7 +462,7 @@ function ModelSection() {
     }, [])
 
     const handleModelChange = (newModel: ModelType) => {
-        if (!isSignedIn && quotaExceeded && newModel === 'pro') {
+        if (locked) {
             clerk.openSignIn()
             return
         }
@@ -474,21 +480,23 @@ function ModelSection() {
                 <div className="flex flex-col gap-2.5">
                     <ModelOption
                         title="Fast"
-                        description="Quick, concise answers for everyday questions. Unlimited and free."
+                        description={locked
+                            ? 'Usage limit reached — sign in for 10× more usage.'
+                            : 'Quick, concise answers for everyday questions.'}
                         icon={<Zap size={16} />}
                         active={chatModel === 'fast'}
                         onClick={() => handleModelChange('fast')}
+                        locked={locked}
                     />
                     <ModelOption
                         title="Pro"
-                        description={quotaExceeded
-                            ? 'Daily quota reached — sign in for unlimited access.'
+                        description={locked
+                            ? 'Usage limit reached — sign in for 10× more usage.'
                             : 'Deep agent with interactive charts, long-form reports, and multi-step reasoning.'}
                         icon={<Telescope size={16} />}
                         active={chatModel === 'pro'}
                         onClick={() => handleModelChange('pro')}
-                        locked={quotaExceeded}
-                        badgeText={!quotaExceeded && remainingQuota !== null ? `${remainingQuota} left today` : undefined}
+                        locked={locked}
                     />
                 </div>
             </Row>
@@ -503,7 +511,6 @@ function ModelOption({
     active,
     onClick,
     locked = false,
-    badgeText,
 }: {
     title: string
     description: string
@@ -511,7 +518,6 @@ function ModelOption({
     active: boolean
     onClick: () => void
     locked?: boolean
-    badgeText?: string
 }) {
     return (
         <button
@@ -538,11 +544,6 @@ function ModelOption({
                 </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-                {badgeText && (
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-[var(--border-subtle)] text-[var(--muted-foreground)] whitespace-nowrap">
-                        {badgeText}
-                    </span>
-                )}
                 <div className={cn(
                     'w-[18px] h-[18px] rounded-full border flex items-center justify-center transition-all duration-300',
                     active
@@ -830,6 +831,8 @@ function DataControlsSection() {
    ════════════════════════════════════════════════════════════════ */
 
 function PagesSection() {
+    const { isSignedIn } = useAuth()
+    const clerk = useClerk()
     const [pages, setPages] = useState<any[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUnpublishingId, setIsUnpublishingId] = useState<string | null>(null)
@@ -853,8 +856,14 @@ function PagesSection() {
     }, [])
 
     useEffect(() => {
+        // Publishing a page requires a Clerk account (/api/my-pages 401s for
+        // guests) — skip the doomed request and just show the sign-in prompt.
+        if (!isSignedIn) {
+            setIsLoading(false)
+            return
+        }
         fetchPages()
-    }, [fetchPages])
+    }, [isSignedIn, fetchPages])
 
     const handleUnpublish = async () => {
         const id = pageToUnpublish
@@ -897,6 +906,27 @@ function PagesSection() {
             setIsDeletingAll(false)
             setIsDeleteAllConfirmOpen(false)
         }
+    }
+
+    if (!isSignedIn) {
+        return (
+            <Section title="My pages">
+                <div className="py-8 text-center space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-[var(--secondary)] flex items-center justify-center mx-auto">
+                        <Lock size={18} className="text-[var(--muted-foreground)]" />
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-sm font-medium text-[var(--foreground)]">Sign in to manage pages</p>
+                        <p className="text-[13px] text-[var(--muted-foreground)]">
+                            Publishing and managing shared pages requires an account.
+                        </p>
+                    </div>
+                    <SettingButton variant="primary" onClick={() => clerk.openSignIn()} className="h-9 px-5">
+                        Sign in
+                    </SettingButton>
+                </div>
+            </Section>
+        )
     }
 
     return (
@@ -1014,7 +1044,6 @@ interface ThreadItem {
 
 function ChatHistorySection({ onClose }: { onClose: () => void }) {
     const router = useRouter()
-    const { isSignedIn } = useAuth()
     const { fetchWithAuth } = useApi()
 
     const [threads, setThreads] = useState<ThreadItem[]>([])
@@ -1028,54 +1057,30 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
     const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
 
-    const loadLocalThreads = useCallback((): ThreadItem[] => {
-        const items: ThreadItem[] = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (!key) continue
-            try {
-                const raw = localStorage.getItem(key)
-                if (!raw) continue
-                const data = JSON.parse(raw)
-                if (data.thread_id && (data.query || data.title) && data.timestamp) {
-                    items.push({
-                        thread_id: data.thread_id,
-                        title: data.title || data.query,
-                        timestamp: data.timestamp,
-                    })
-                }
-            } catch { }
-        }
-        items.sort((a, b) => b.timestamp - a.timestamp)
-        return items
-    }, [])
-
+    // Guests are backend-persisted too (fetchWithAuth sends X-Guest-Id, which
+    // the backend resolves into a real user_id) — no local-only fallback needed.
     const loadThreads = useCallback(async () => {
         setIsLoading(true)
         try {
-            if (isSignedIn) {
-                const res = await fetchWithAuth(`${BACKEND_URL}/api/threads`)
-                if (res.ok) {
-                    const data = await res.json()
-                    const items: ThreadItem[] = (data.threads || [])
-                        .filter((t: any) => t.title && t.title.trim() !== '')
-                        .map((t: any) => ({
-                            thread_id: t.thread_id,
-                            title: t.title,
-                            timestamp: new Date(t.updated_at).getTime(),
-                        }))
-                    items.sort((a, b) => b.timestamp - a.timestamp)
-                    setThreads(items)
-                }
-            } else {
-                setThreads(loadLocalThreads())
+            const res = await fetchWithAuth(`${BACKEND_URL}/api/threads`)
+            if (res.ok) {
+                const data = await res.json()
+                const items: ThreadItem[] = (data.threads || [])
+                    .filter((t: any) => t.title && t.title.trim() !== '')
+                    .map((t: any) => ({
+                        thread_id: t.thread_id,
+                        title: t.title,
+                        timestamp: new Date(t.updated_at).getTime(),
+                    }))
+                items.sort((a, b) => b.timestamp - a.timestamp)
+                setThreads(items)
             }
         } catch {
             toast.error('Failed to load chat history')
         } finally {
             setIsLoading(false)
         }
-    }, [isSignedIn, fetchWithAuth, loadLocalThreads])
+    }, [fetchWithAuth])
 
     useEffect(() => {
         loadThreads()
@@ -1087,16 +1092,11 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
         return () => clearTimeout(handler)
     }, [searchQuery])
 
-    // Run search: backend full-text for signed-in users, local filter for guests
+    // Backend full-text search for everyone
     useEffect(() => {
         if (!debouncedQuery) {
             setSearchResults(null)
             setIsSearching(false)
-            return
-        }
-        if (!isSignedIn) {
-            const q = debouncedQuery.toLowerCase()
-            setSearchResults(threads.filter(t => t.title.toLowerCase().includes(q)))
             return
         }
         const requestId = ++searchRequestIdRef.current
@@ -1121,7 +1121,7 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
             .finally(() => {
                 if (requestId === searchRequestIdRef.current) setIsSearching(false)
             })
-    }, [debouncedQuery, isSignedIn, threads, fetchWithAuth])
+    }, [debouncedQuery, fetchWithAuth])
 
     const removeThreadLocalCache = useCallback((threadId: string) => {
         const keys = Object.keys(localStorage)
@@ -1150,10 +1150,8 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
         setIsDeleting(true)
         try {
             removeThreadLocalCache(id)
-            if (isSignedIn) {
-                const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${id}`, { method: 'DELETE' })
-                if (!res.ok) throw new Error('delete failed')
-            }
+            const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${id}`, { method: 'DELETE' })
+            if (!res.ok) throw new Error('delete failed')
             setThreads(prev => prev.filter(t => t.thread_id !== id))
             setSearchResults(prev => prev ? prev.filter(t => t.thread_id !== id) : prev)
         } catch {
@@ -1168,7 +1166,7 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
     const handleDeleteAll = async () => {
         setIsDeleting(true)
         try {
-            if (isSignedIn && threads.length > 0) {
+            if (threads.length > 0) {
                 const threadIds = threads.map(t => t.thread_id)
                 const BATCH_SIZE = 100
                 for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
@@ -1315,20 +1313,106 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
    ════════════════════════════════════════════════════════════════ */
 
 function UsageSection() {
+    const { isSignedIn } = useAuth()
+    const clerk = useClerk()
+    const { usage, isLoading, lastRefreshedAt, refresh } = useUsage()
+    // Forces a re-render every so often so "Last updated Xm ago" stays accurate
+    // without needing a network call.
+    const [, forceTick] = useState(0)
+
+    useEffect(() => {
+        const interval = setInterval(() => forceTick(t => t + 1), 30_000)
+        return () => clearInterval(interval)
+    }, [])
+
+    if (isLoading && !usage) {
+        return (
+            <Section title="Usage">
+                <div className="flex items-center justify-center py-16">
+                    <Loader2 size={16} className="animate-spin text-[var(--muted-foreground)]" />
+                </div>
+            </Section>
+        )
+    }
+
+    if (!usage) return null
+
+    const resetDayLabel = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' })
+        .format(new Date(usage.resets_day_at))
+    const resetMonthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric' })
+        .format(new Date(usage.resets_month_at))
+
     return (
         <Section title="Usage">
-            <div className="py-16 flex flex-col items-center justify-center text-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-[var(--secondary)] flex items-center justify-center">
-                    <BarChart3 size={20} className="text-[var(--muted-foreground)]" />
+            <div className="py-4 flex items-center justify-between gap-4">
+                <p className="text-[13px] text-[var(--muted-foreground)]">
+                    {lastRefreshedAt
+                        ? `Last updated ${formatDistanceToNow(lastRefreshedAt, { addSuffix: true })}`
+                        : 'Not yet loaded'}
+                </p>
+                <SettingButton onClick={refresh} disabled={isLoading}>
+                    <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+                    Refresh
+                </SettingButton>
+            </div>
+
+            {!isSignedIn && (
+                <div className="py-4">
+                    <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/40">
+                        <div className="space-y-0.5">
+                            <p className="text-sm font-medium text-[var(--foreground)]">Get 10× more usage</p>
+                            <p className="text-[13px] text-[var(--muted-foreground)]">Sign in for free — no card required.</p>
+                        </div>
+                        <SettingButton variant="primary" onClick={() => clerk.openSignIn()} className="h-9 px-4 shrink-0">
+                            Sign in
+                        </SettingButton>
+                    </div>
                 </div>
-                <div className="space-y-1">
-                    <p className="text-sm font-medium text-[var(--foreground)]">Coming soon</p>
-                    <p className="text-[13px] text-[var(--muted-foreground)] max-w-xs">
-                        Usage insights and quota details will live here in a future update.
-                    </p>
+            )}
+
+            <UsageMeter
+                label="Today"
+                used={usage.day_used}
+                limit={usage.day_limit}
+                resetLabel={`Resets ${resetDayLabel}`}
+            />
+            <UsageMeter
+                label="This month"
+                used={usage.month_used}
+                limit={usage.month_limit}
+                resetLabel={`Renews on ${resetMonthLabel}`}
+            />
+        </Section>
+    )
+}
+
+function UsageMeter({
+    label,
+    used,
+    limit,
+    resetLabel,
+}: {
+    label: string
+    used: number
+    limit: number
+    resetLabel: string
+}) {
+    const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
+    return (
+        <Row title={label} stacked>
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-[var(--foreground)] font-medium">{pct}% used</span>
+                    <span className="text-[var(--muted-foreground)]">{resetLabel}</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-[var(--secondary)] overflow-hidden">
+                    <div
+                        className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                    />
                 </div>
             </div>
-        </Section>
+        </Row>
     )
 }
 

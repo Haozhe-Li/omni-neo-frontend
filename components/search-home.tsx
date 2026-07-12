@@ -70,11 +70,11 @@ interface SearchHomeProps {
   isMobile?: boolean
   model?: 'fast' | 'pro'
   onModelChange?: (model: 'fast' | 'pro') => void
-  quotaExceeded?: boolean
-  remainingQuota?: number | null
+  /** Usage exhausted (guest-only) — locks both modes uniformly, no per-mode breakdown. */
+  locked?: boolean
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, quotaExceeded = false, remainingQuota = null }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, locked = false }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -548,8 +548,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   }
 
   const selectedModelLabel = model === 'pro' ? 'Pro' : 'Fast'
-  const showCanvasRemaining = model === 'pro' && !quotaExceeded && remainingQuota !== null
-  const showSelectedLock = quotaExceeded && model === 'pro'
+  const showSelectedLock = locked
 
   const VAD_RMS_THRESHOLD = 0.02
   const VAD_MIN_VOICED_FRAMES = 3
@@ -983,7 +982,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           {isSignedIn === false && (
             <div className="md:hidden w-full max-w-[680px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2 mb-3">
               <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
-                Unlimited usage and sync chats across devices for a smoother experience.
+                10X usage and sync chats across devices for a smoother experience.
               </span>
               <SignUpButton mode="modal">
                 <button
@@ -1236,11 +1235,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
                     >
                       <span>{selectedModelLabel}</span>
-                      {showCanvasRemaining && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
-                          {remainingQuota} left
-                        </span>
-                      )}
                       {showSelectedLock && (
                         <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
                           Sign in
@@ -1258,8 +1252,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                             { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
                             { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
                           ].map((opt) => {
-                            const isLocked = quotaExceeded && opt.value === 'pro'
-                            const showRemaining = opt.value === 'pro' && !quotaExceeded && remainingQuota !== null
+                            const isLocked = locked
                             return (
                               <button
                                 key={opt.value}
@@ -1276,15 +1269,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                                       {opt.label}
                                     </span>
                                     {isLocked && <Lock className="h-3.5 w-3.5 opacity-60" />}
-                                    {showRemaining && (
-                                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/10">
-                                        {remainingQuota} left
-                                      </span>
-                                    )}
                                   </div>
                                   <div className="text-[11px] text-[var(--muted-foreground)] leading-snug line-clamp-2">
                                     {isLocked
-                                      ? 'Daily quota reached — sign in for unlimited'
+                                      ? 'Usage limit reached — sign in for 10× more usage'
                                       : opt.desc}
                                   </div>
                                 </div>
@@ -1317,8 +1305,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                                 { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
                                 { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
                               ].map((opt) => {
-                                const isLocked = quotaExceeded && opt.value === 'pro'
-                                const showRemaining = opt.value === 'pro' && !quotaExceeded && remainingQuota !== null
+                                const isLocked = locked
                                 return (
                                   <button
                                     key={opt.value}
@@ -1336,16 +1323,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                                       </span>
                                       <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
                                         {isLocked
-                                          ? 'Daily quota reached — sign in'
+                                          ? 'Usage limit reached — sign in for 10× more'
                                           : opt.desc}
                                       </span>
                                     </div>
                                     <div className="ml-3 shrink-0 flex items-center gap-2">
-                                      {showRemaining && (
-                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">
-                                          {remainingQuota} left
-                                        </span>
-                                      )}
                                       {model === opt.value ? (
                                         <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
                                           <Check className="h-3.5 w-3.5" />
@@ -1441,7 +1423,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           {isSignedIn === false && (
             <div className="hidden md:flex mt-3 w-full max-w-[680px] items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
               <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
-                Unlimited usage and sync chats across devices for a smoother experience.
+                10X usage and sync chats across devices for a smoother experience.
               </span>
               <SignUpButton mode="modal">
                 <button

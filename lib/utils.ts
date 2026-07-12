@@ -25,6 +25,36 @@ export function getLocalISOString() {
 export function getAiRequestErrorMessage(status: number) {
   if (status === 401) return '未检测到身份凭证，请先登录后重试。'
   if (status === 403) return '无权访问该会话内容。'
-  if (status === 429) return '今日免费使用次数已用完，登录后可无限使用。'
+  if (status === 429) return '今日使用额度已用完，请稍后再试。'
   return '请求失败，请稍后重试。'
+}
+
+/**
+ * If `res` is a 429 carrying our structured usage_limit_exceeded body,
+ * dispatch the `omni:usage-limit` window event (see usage-limit-dialog.tsx)
+ * and return true so the caller can skip its generic error toast. Returns
+ * false for any other status or body shape, leaving `res`'s body unread.
+ */
+export async function handleUsageLimitResponse(res: Response): Promise<boolean> {
+  if (res.status !== 429) return false
+  try {
+    const body = await res.json()
+    const detail = body?.detail
+    if (!detail || detail.error !== 'usage_limit_exceeded') return false
+    window.dispatchEvent(new CustomEvent('omni:usage-limit', {
+      detail: {
+        scope: detail.scope,
+        isGuest: detail.is_guest,
+        dayUsed: detail.day_used,
+        dayLimit: detail.day_limit,
+        monthUsed: detail.month_used,
+        monthLimit: detail.month_limit,
+        resetsDayAt: detail.resets_day_at,
+        resetsMonthAt: detail.resets_month_at,
+      },
+    }))
+    return true
+  } catch {
+    return false
+  }
 }

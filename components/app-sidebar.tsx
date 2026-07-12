@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SettingsDialog } from '@/components/settings-dialog'
+import { UsageLimitDialog } from '@/components/usage-limit-dialog'
 import {
     AlertDialog,
     AlertDialogContent,
@@ -107,47 +108,13 @@ export function AppSidebar({
         setLoadingAction(null)
     }, [pathname, currentThreadId])
 
-    // ── 1. Fast localStorage scan (runs every 2 s, no network) ────────
-    const loadLocalHistory = useCallback(() => {
-        if (typeof window === 'undefined') return
-        const items: StoredChat[] = []
-        const now = Date.now()
-        const THREE_DAYS = 3 * 24 * 60 * 60 * 1000
-        const TWO_DAYS = 2 * 24 * 60 * 60 * 1000
-
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (!key) continue
-            try {
-                const raw = localStorage.getItem(key)
-                if (!raw) continue
-                const data = JSON.parse(raw)
-                if (data.thread_id && (data.query || data.title) && data.timestamp) {
-                    const age = now - data.timestamp
-                    if (age > THREE_DAYS) { localStorage.removeItem(key); continue }
-                    items.push({
-                        thread_id: data.thread_id,
-                        query: data.title || data.query,
-                        timestamp: data.timestamp,
-                        model: data.model,
-                        isExpiring: age > TWO_DAYS
-                    })
-                }
-            } catch { }
-        }
-        items.sort((a, b) => b.timestamp - a.timestamp)
-        setHistory(prev => {
-            if (
-                prev.length === items.length &&
-                prev.every((p, i) => p.thread_id === items[i].thread_id && p.timestamp === items[i].timestamp)
-            ) return prev
-            return items
-        })
-    }, [])
-
     // ── 2. Backend sync (runs once on mount + on auth change) ────────
+    // Guests are backend-synced too: fetchWithAuth sends X-Guest-Id, which
+    // get_current_user resolves into a real user_id just like a signed-in
+    // Clerk user — every thread synced via chat-view.tsx's syncToBackend
+    // already lands here regardless of auth state, so reading it back must
+    // not be gated on isSignedIn either.
     const syncFromBackend = useCallback(async () => {
-        if (!isSignedIn) return
         setIsSyncing(true)
         try {
             const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -182,7 +149,7 @@ export function AppSidebar({
             })
         } catch { }
         finally { setIsSyncing(false) }
-    }, [isSignedIn, fetchWithAuth])
+    }, [fetchWithAuth])
 
     // Debounce the search box before hitting the backend (200ms).
     useEffect(() => {
@@ -248,7 +215,7 @@ export function AppSidebar({
             setGeneratingThreadIds(prev => { const s = new Set(prev); s.delete(threadId); return s })
             // Pull the freshly-completed thread (title now persisted) so the real
             // entry takes over from the optimistic one.
-            if (isSignedIn) syncFromBackend()
+            syncFromBackend()
         }
         // The LLM-generated title arrived — swap the live entry over from the raw query.
         const onTitle = (e: Event) => {
@@ -277,7 +244,7 @@ export function AppSidebar({
             window.removeEventListener('omni:gen:stop', onStop)
             window.removeEventListener('omni:title', onTitle)
         }
-    }, [isSignedIn, syncFromBackend])
+    }, [syncFromBackend])
 
     // Drop optimistic entries once the real history contains them.
     useEffect(() => {
@@ -293,38 +260,24 @@ export function AppSidebar({
         })
     }, [history])
 
-    // Poll localStorage every 2 s (cheap, no network)
-    useEffect(() => {
-        if (isSignedIn) return
-        loadLocalHistory()
-        const handleStorage = () => loadLocalHistory()
-        window.addEventListener('storage', handleStorage)
-        const interval = setInterval(loadLocalHistory, 2000)
-        return () => {
-            window.removeEventListener('storage', handleStorage)
-            clearInterval(interval)
-        }
-    }, [isSignedIn, loadLocalHistory])
-
-    // Sync from backend once on mount and whenever auth state changes.
-    // For signed-in users, pre-populate from cache so there's no blank flash
-    // while the network request is in flight.
+    // Sync from backend once on mount and whenever auth state changes (a
+    // guest signing in mid-session gets a new identity, so it must re-sync
+    // under that identity). Pre-populate from cache first so there's no
+    // blank flash while the network request is in flight — this applies to
+    // guests too now, since their threads are backend-persisted exactly the
+    // same way (see syncFromBackend above).
     useEffect(() => {
         if (!mounted) return
-        if (isSignedIn) {
-            try {
-                const cached = localStorage.getItem('omni:threadlist')
-                if (cached) setHistory(JSON.parse(cached))
-            } catch {}
-            syncFromBackend()
-        } else {
-            loadLocalHistory()
-        }
-    }, [mounted, isSignedIn, syncFromBackend, loadLocalHistory])
+        try {
+            const cached = localStorage.getItem('omni:threadlist')
+            if (cached) setHistory(JSON.parse(cached))
+        } catch {}
+        syncFromBackend()
+    }, [mounted, isSignedIn, syncFromBackend])
 
-    // Keep cloud list fresh for multi-device usage (controlled interval)
+    // Keep the list fresh for multi-device/multi-tab usage (controlled interval)
     useEffect(() => {
-        if (!mounted || !isSignedIn) return
+        if (!mounted) return
         const interval = setInterval(syncFromBackend, 15000)
         const onFocus = () => syncFromBackend()
         window.addEventListener('focus', onFocus)
@@ -373,30 +326,20 @@ export function AppSidebar({
         setIsDeleting(true)
 
         if (typeof window !== 'undefined') {
+            // Guest threads are backend-persisted exactly like signed-in ones
+            // (fetchWithAuth sends X-Guest-Id) — the delete must hit the
+            // server for everyone, or the row survives and resurfaces on the
+            // next sync.
             const removedLocalItems = removeThreadLocalCache(threadToDelete)
             setHistory(prev => prev.filter(item => item.thread_id !== threadToDelete))
             setSearchResults(prev => prev ? prev.filter(item => item.thread_id !== threadToDelete) : prev)
-
-            if (!isSignedIn) {
-                // Guest mode: local-only
-                if (threadToDelete === currentThreadId && onNewChat) {
-                    onNewChat()
-                }
-                setThreadToDelete(null)
-                setIsDeleting(false)
-                return
-            }
 
             try {
                 const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
                 const res = await fetchWithAuth(`${backendUrl}/api/threads/${threadToDelete}`, { method: 'DELETE' })
                 if (!res.ok) {
                     restoreRemovedLocalCache(removedLocalItems)
-                    if (isSignedIn) {
-                        syncFromBackend()
-                    } else {
-                        loadLocalHistory()
-                    }
+                    syncFromBackend()
                     toast.error('Delete failed on server')
                     setThreadToDelete(null)
                     setIsDeleting(false)
@@ -408,16 +351,10 @@ export function AppSidebar({
                     onNewChat()
                 }
 
-                if (isSignedIn) {
-                    syncFromBackend()
-                }
+                syncFromBackend()
             } catch {
                 restoreRemovedLocalCache(removedLocalItems)
-                if (isSignedIn) {
-                    syncFromBackend()
-                } else {
-                    loadLocalHistory()
-                }
+                syncFromBackend()
                 toast.error('Network error while deleting thread')
             }
         }
@@ -436,30 +373,28 @@ export function AppSidebar({
         let deletedCount = 0
         let failedCount = 0
 
-        if (isSignedIn) {
-            const threadIds = history.map(chat => chat.thread_id)
-            const BATCH_SIZE = 100 // backend truncates anything beyond this per request
-            for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
-                const batch = threadIds.slice(i, i + BATCH_SIZE)
-                try {
-                    const res = await fetchWithAuth(`${backendUrl}/api/threads/batch-delete`, {
-                        method: 'POST',
-                        body: JSON.stringify({ thread_ids: batch }),
-                    })
-                    if (res.ok) {
-                        const data = await res.json()
-                        const batchDeleted = Array.isArray(data.deleted) ? data.deleted.length : 0
-                        deletedCount += batchDeleted
-                        failedCount += batch.length - batchDeleted
-                    } else {
-                        failedCount += batch.length
-                    }
-                } catch {
+        // Guest threads are backend-persisted too — batch-delete must run for
+        // everyone, not just signed-in users (see handleDeleteConfirm).
+        const threadIds = history.map(chat => chat.thread_id)
+        const BATCH_SIZE = 100 // backend truncates anything beyond this per request
+        for (let i = 0; i < threadIds.length; i += BATCH_SIZE) {
+            const batch = threadIds.slice(i, i + BATCH_SIZE)
+            try {
+                const res = await fetchWithAuth(`${backendUrl}/api/threads/batch-delete`, {
+                    method: 'POST',
+                    body: JSON.stringify({ thread_ids: batch }),
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    const batchDeleted = Array.isArray(data.deleted) ? data.deleted.length : 0
+                    deletedCount += batchDeleted
+                    failedCount += batch.length - batchDeleted
+                } else {
                     failedCount += batch.length
                 }
+            } catch {
+                failedCount += batch.length
             }
-        } else {
-            deletedCount = history.length
         }
 
         // Force clear ALL local history regardless of cloud state
@@ -491,11 +426,7 @@ export function AppSidebar({
         if (isMobile && onToggle) onToggle()
 
         // Refresh list
-        if (isSignedIn) {
-            await syncFromBackend()
-        } else {
-            loadLocalHistory()
-        }
+        await syncFromBackend()
 
         setIsDeleting(false)
         setIsDeleteConfirmOpen(false)
@@ -872,6 +803,9 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
 
             {/* Settings Dialog */}
             <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+
+            {/* Usage-limit-reached Dialog — self-driven via window event, see usage-limit-dialog.tsx */}
+            <UsageLimitDialog />
 
             {/* Search Dialog Modal */}
             < Dialog open={isSearchVisible} onOpenChange={(open) => {

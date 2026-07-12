@@ -4,10 +4,9 @@ import { useState, useCallback, useEffect } from 'react'
 import { SearchHome } from '@/components/search-home'
 import { ChatView } from '@/components/chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
-import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
-import { useGuestQuota } from '@/hooks/useGuestQuota'
-import { useAuth, useClerk } from '@clerk/nextjs'
+import { useUsage } from '@/hooks/useUsage'
+import { useAuth } from '@clerk/nextjs'
 import { useAppShell } from '@/hooks/useAppShell'
 import { useRouter } from 'next/navigation'
 import type { AgentMode } from '@/lib/types'
@@ -33,10 +32,39 @@ export default function Home() {
 
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
-  const clerk = useClerk()
   const router = useRouter()
-  const { quota, quotaExceeded, refresh: refreshQuota } = useGuestQuota()
+  const { usage, exceeded, refresh: refreshUsage } = useUsage()
   const { isMobile, sidebarOpen, setSidebarOpen, toggleSidebar } = useAppShell()
+
+  // The lock on the home screen's model picker is guest-only — signed-in
+  // users get a generous budget and can check standing in Settings > Usage
+  // instead of being nagged on every message. There's no per-mode or
+  // per-count breakdown shown, just usage available or not.
+  const isGuest = !isSignedIn
+  const showLocked = isGuest && exceeded
+
+  // Preflight check before starting a turn: if usage is exhausted, surface
+  // the usage-limit dialog instead of burning a round trip on a /chat call
+  // we already know will 429. Applies to everyone, not just guests — the
+  // dialog itself adapts its copy based on isGuest.
+  const blockIfOverLimit = useCallback(
+    (): boolean => {
+      if (!usage || !exceeded) return false
+      const dayOver = usage.day_remaining <= 0
+      const monthOver = usage.month_remaining <= 0
+      window.dispatchEvent(new CustomEvent('omni:usage-limit', {
+        detail: {
+          scope: dayOver && monthOver ? 'both' : dayOver ? 'day' : 'month',
+          isGuest,
+          dayUsed: usage.day_used, dayLimit: usage.day_limit,
+          monthUsed: usage.month_used, monthLimit: usage.month_limit,
+          resetsDayAt: usage.resets_day_at, resetsMonthAt: usage.resets_month_at,
+        },
+      }))
+      return true
+    },
+    [usage, exceeded, isGuest]
+  )
 
   useEffect(() => {
     const loadModel = () => {
@@ -62,11 +90,7 @@ export default function Home() {
       attachedFileMeta?: { id: string; name: string; type: string }[],
       skill?: string | null
     ) => {
-      if (model === 'pro' && !isSignedIn && quotaExceeded) {
-        toast.info('Daily Pro quota reached. Sign in to continue.')
-        clerk.openSignIn()
-        return
-      }
+      if (blockIfOverLimit()) return
       setCurrentQuery(query)
       setCurrentThreadId(threadId)
       setPendingAttachmentMeta(attachedFileMeta && attachedFileMeta.length > 0 ? attachedFileMeta : [])
@@ -75,12 +99,12 @@ export default function Home() {
       setView('chat')
       setShareableUrl(threadId)
     },
-    [model, quotaExceeded, isSignedIn, clerk]
+    [model, blockIfOverLimit]
   )
 
   useEffect(() => {
-    if (view === 'home') refreshQuota()
-  }, [view, refreshQuota])
+    if (view === 'home') refreshUsage()
+  }, [view, refreshUsage])
 
   const handleNewSearch = useCallback(() => {
     setView('home')
@@ -159,8 +183,7 @@ export default function Home() {
             isMobile={isMobile}
             model={model}
             onModelChange={handleModelChange}
-            quotaExceeded={quotaExceeded}
-            remainingQuota={!isSignedIn && quota && quota.remaining > 0 ? quota.remaining : null}
+            locked={showLocked}
           />
         )}
       </main>

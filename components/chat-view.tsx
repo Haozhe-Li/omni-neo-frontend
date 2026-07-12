@@ -16,7 +16,7 @@ import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { StreamingText } from '@/components/streaming-text'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
-import { getAiRequestErrorMessage, getLocalISOString } from '@/lib/utils'
+import { getAiRequestErrorMessage, getLocalISOString, handleUsageLimitResponse } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
 import { isMemoryEnabled } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -1304,8 +1304,9 @@ export function ChatView({
           body: JSON.stringify(payload),
         })
         if (!res.ok) {
-          const msg = getAiRequestErrorMessage(res.status)
-          toast.error(msg)
+          const handled = await handleUsageLimitResponse(res)
+          const msg = handled ? 'Usage limit reached.' : getAiRequestErrorMessage(res.status)
+          if (!handled) toast.error(msg)
           throw new Error(msg)
         }
         await handleStream(res, baseHistory)
@@ -1622,8 +1623,9 @@ export function ChatView({
           body: JSON.stringify(payload),
         })
         if (!res.ok) {
-          const msg = getAiRequestErrorMessage(res.status)
-          toast.error(msg)
+          const handled = await handleUsageLimitResponse(res)
+          const msg = handled ? 'Usage limit reached.' : getAiRequestErrorMessage(res.status)
+          if (!handled) toast.error(msg)
           throw new Error(msg)
         }
         // handleStream builds the final message from scratch; we need to carry
