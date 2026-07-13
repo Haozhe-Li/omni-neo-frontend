@@ -73,7 +73,7 @@ interface FormState {
     config: ScheduleConfig
 }
 
-export function ScheduledResearchSection({ onClose }: { onClose: () => void }) {
+export function ScheduledResearchSection() {
     const { isSignedIn } = useAuth()
     const { user } = useUser()
     const clerk = useClerk()
@@ -237,7 +237,6 @@ export function ScheduledResearchSection({ onClose }: { onClose: () => void }) {
                 onBack={() => setDetailTaskId(null)}
                 onEdit={() => openEdit(detailTask)}
                 onDelete={() => setTaskToDelete(detailTask.task_id)}
-                onClose={onClose}
             />
         ) : (
         <Section title="Scheduled Research">
@@ -369,20 +368,25 @@ function TaskDetail({
     onBack,
     onEdit,
     onDelete,
-    onClose,
 }: {
     task: ScheduledTask
     onBack: () => void
     onEdit: () => void
     onDelete: () => void
-    onClose: () => void
 }) {
     const router = useRouter()
     const runs = task.runs || []
 
     const handleOpenRun = (run: ScheduledTaskRun) => {
         if (run.status !== 'success') return
-        onClose()
+        // Don't close the Settings dialog before this push — its close
+        // handler itself does a router.push('/') (see SettingsDialog's
+        // onOpenChange), and firing that immediately before this push could
+        // get this second navigation silently dropped by Next.js's router
+        // (a pending push cancels/ignores one issued right behind it). The
+        // real route change to /schedule/{id} already tears
+        // down the Settings UI on its own, so closing it separately is both
+        // redundant and the thing that was breaking this.
         router.push(`/schedule/${run.run_id}`)
     }
 

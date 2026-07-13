@@ -203,8 +203,8 @@ export function SettingsDialog({
                             {activeTab === 'personalization' && <PersonalizationSection />}
                             {activeTab === 'data' && <DataControlsSection />}
                             {activeTab === 'pages' && <PagesSection />}
-                            {activeTab === 'history' && <ChatHistorySection onClose={close} />}
-                            {activeTab === 'scheduled' && <ScheduledResearchSection onClose={close} />}
+                            {activeTab === 'history' && <ChatHistorySection />}
+                            {activeTab === 'scheduled' && <ScheduledResearchSection />}
                             {activeTab === 'usage' && <UsageSection />}
                             {activeTab === 'about' && <AboutSection />}
                         </div>
@@ -1118,7 +1118,7 @@ interface ThreadItem {
     timestamp: number
 }
 
-function ChatHistorySection({ onClose }: { onClose: () => void }) {
+function ChatHistorySection() {
     const router = useRouter()
     const { fetchWithAuth } = useApi()
 
@@ -1216,7 +1216,11 @@ function ChatHistorySection({ onClose }: { onClose: () => void }) {
     }, [])
 
     const handleOpenThread = (threadId: string) => {
-        onClose()
+        // Deliberately not closing the Settings dialog before this push —
+        // see the identical fix (and its reasoning) on handleOpenRun in
+        // scheduled-research-section.tsx: the real route change already
+        // tears down the Settings UI, and closing it separately here used to
+        // race the navigation and sometimes drop it.
         router.push(`/thread/${threadId}`)
     }
 
