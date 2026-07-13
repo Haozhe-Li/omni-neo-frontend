@@ -34,7 +34,6 @@ const MAX_TASKS = 3
 interface ScheduledTaskRun {
     run_id: string
     thread_id: string | null
-    publish_id: string | null
     summary: string | null
     status: 'pending' | 'running' | 'success' | 'failed'
     error: string | null
@@ -230,8 +229,9 @@ export function ScheduledResearchSection({ onClose }: { onClose: () => void }) {
 
     const detailTask = detailTaskId ? tasks.find(t => t.task_id === detailTaskId) : null
 
-    if (detailTask) {
-        return (
+    return (
+        <>
+        {detailTask ? (
             <TaskDetail
                 task={detailTask}
                 onBack={() => setDetailTaskId(null)}
@@ -239,10 +239,7 @@ export function ScheduledResearchSection({ onClose }: { onClose: () => void }) {
                 onDelete={() => setTaskToDelete(detailTask.task_id)}
                 onClose={onClose}
             />
-        )
-    }
-
-    return (
+        ) : (
         <Section title="Scheduled Research">
             {/* ── Section 1: create ── */}
             <div className="py-4 space-y-4">
@@ -330,28 +327,14 @@ export function ScheduledResearchSection({ onClose }: { onClose: () => void }) {
                                         {task.status === 'paused' && <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--secondary)]">Paused</span>}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); openEdit(task) }}
-                                        className="p-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--card)] rounded-lg transition-colors"
-                                        title="Edit"
-                                    >
-                                        <Pencil size={13} />
-                                    </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); setTaskToDelete(task.task_id) }}
-                                        className="p-1.5 text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                        title="Delete"
-                                    >
-                                        <Trash2 size={13} />
-                                    </button>
-                                </div>
                                 <ChevronRight size={14} className="text-[var(--muted-foreground)]/50 shrink-0" />
                             </div>
                         ))}
                     </div>
                 )}
             </div>
+        </Section>
+        )}
 
             {formOpen && formInitial && (
                 <TaskFormDialog
@@ -373,7 +356,7 @@ export function ScheduledResearchSection({ onClose }: { onClose: () => void }) {
                 onConfirm={handleDelete}
                 isPending={isDeleting}
             />
-        </Section>
+        </>
     )
 }
 
@@ -398,9 +381,9 @@ function TaskDetail({
     const runs = task.runs || []
 
     const handleOpenRun = (run: ScheduledTaskRun) => {
-        if (run.status !== 'success' || !run.publish_id) return
+        if (run.status !== 'success') return
         onClose()
-        router.push(`/pages/${run.publish_id}`)
+        router.push(`/schedule/${run.run_id}`)
     }
 
     return (

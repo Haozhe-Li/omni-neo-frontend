@@ -22,8 +22,15 @@ export function AuthListener() {
   const previousSignedInRef = useRef<boolean | null>(null)
 
   const MIGRATION_IN_PROGRESS_KEY = 'guest_merge_in_progress'
+  const MIGRATION_STARTED_AT_KEY = 'guest_merge_started_at'
   const MIGRATION_RETURN_TO_KEY = 'guest_merge_return_to'
   const MIGRATION_DONE_KEY = 'guest_merge_done'
+  // A merge is a single fast API call — if the "in progress" flag is older
+  // than this, the tab that set it was closed/crashed before clearing it.
+  // Without a staleness check, a stuck flag would redirect every future page
+  // load (any route, any tab, e.g. opening a report link from email) to
+  // /migrating forever, since nothing else ever clears it.
+  const MIGRATION_STALE_MS = 20000
 
   const clearLocalChatRecords = () => {
     if (typeof window === 'undefined') return
@@ -73,6 +80,7 @@ export function AuthListener() {
       hasMerged.current = false
       if (typeof window !== 'undefined') {
         localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+        localStorage.removeItem(MIGRATION_STARTED_AT_KEY)
         localStorage.removeItem(MIGRATION_RETURN_TO_KEY)
         localStorage.removeItem(MIGRATION_DONE_KEY)
       }
@@ -85,7 +93,19 @@ export function AuthListener() {
   useEffect(() => {
     if (!isSignedIn || typeof window === 'undefined') return
     const inProgress = localStorage.getItem(MIGRATION_IN_PROGRESS_KEY) === '1'
-    if (inProgress && pathname !== '/migrating') {
+    if (!inProgress) return
+
+    const startedAt = Number(localStorage.getItem(MIGRATION_STARTED_AT_KEY) || 0)
+    const isStale = !startedAt || Date.now() - startedAt > MIGRATION_STALE_MS
+    if (isStale) {
+      // Whatever tab set this flag never cleared it (closed mid-request,
+      // crashed, etc). Drop it instead of redirecting forever.
+      localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+      localStorage.removeItem(MIGRATION_STARTED_AT_KEY)
+      return
+    }
+
+    if (pathname !== '/migrating') {
       router.replace('/migrating')
     }
   }, [isSignedIn, pathname, router])
@@ -96,10 +116,17 @@ export function AuthListener() {
     const guestId = typeof window !== 'undefined' ? localStorage.getItem('guest_id') : null
     if (!guestId) return
 
+    // Set once per mount and never reset on failure below — this effect
+    // re-runs on every pathname change (see deps), so if a transient error
+    // (backend cold start, network blip) reset this to false, every single
+    // route navigation for the rest of the tab's life would retrigger a full
+    // migration attempt. One attempt per fresh page load is enough; a real
+    // reload gets a fresh `hasMerged` ref anyway.
     hasMerged.current = true
     const currentPath = typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/'
     if (typeof window !== 'undefined') {
       localStorage.setItem(MIGRATION_IN_PROGRESS_KEY, '1')
+      localStorage.setItem(MIGRATION_STARTED_AT_KEY, String(Date.now()))
       localStorage.removeItem(MIGRATION_DONE_KEY)
       if (currentPath !== '/migrating') {
         localStorage.setItem(MIGRATION_RETURN_TO_KEY, currentPath)
@@ -119,22 +146,20 @@ export function AuthListener() {
       .then((res) => {
         if (res.ok) {
           localStorage.removeItem('guest_id')
-          localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
-          localStorage.setItem(MIGRATION_DONE_KEY, '1')
           console.log('[AuthListener] Guest assets merged into user account.')
-        } else {
-          localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
-          localStorage.setItem(MIGRATION_DONE_KEY, '1')
-          hasMerged.current = false
         }
+        // Failure here is left for the next full page load to retry — see
+        // the comment above hasMerged.current = true.
       })
       .catch(() => {
-        // Reset flag so it can retry on next render cycle
+        // Network/offline error — same as above, don't retry within this tab.
+      })
+      .finally(() => {
         if (typeof window !== 'undefined') {
           localStorage.removeItem(MIGRATION_IN_PROGRESS_KEY)
+          localStorage.removeItem(MIGRATION_STARTED_AT_KEY)
           localStorage.setItem(MIGRATION_DONE_KEY, '1')
         }
-        hasMerged.current = false
       })
   }, [isSignedIn, userId, pathname, router]) // eslint-disable-line react-hooks/exhaustive-deps
 

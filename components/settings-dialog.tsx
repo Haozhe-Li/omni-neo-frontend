@@ -36,6 +36,7 @@ import {
     Search,
     MessageSquare,
     CalendarClock,
+    Globe,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getUserLocation, LocationData } from '@/lib/location'
@@ -879,6 +880,7 @@ function PagesSection() {
     const [pageToUnpublish, setPageToUnpublish] = useState<string | null>(null)
     const [isDeleteAllConfirmOpen, setIsDeleteAllConfirmOpen] = useState(false)
     const [isDeletingAll, setIsDeletingAll] = useState(false)
+    const [togglingId, setTogglingId] = useState<string | null>(null)
 
     const fetchPages = useCallback(async () => {
         setIsLoading(true)
@@ -932,6 +934,27 @@ function PagesSection() {
         toast.success('Link copied')
     }
 
+    const handleToggleListing = async (id: string, nextListed: boolean) => {
+        setTogglingId(id)
+        const prevPages = pages
+        setPages(prev => prev.map(p => p.id === id ? { ...p, publishToPages: nextListed ? undefined : false } : p))
+        try {
+            const res = await fetch('/api/pages/toggle-listing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, listed: nextListed }),
+            })
+            if (!res.ok) throw new Error('Failed to update listing')
+            toast.success(nextListed ? 'Listed on Pages home' : 'Removed from Pages home')
+        } catch (error) {
+            console.error('Failed to toggle listing:', error)
+            setPages(prevPages)
+            toast.error('Failed to update this page')
+        } finally {
+            setTogglingId(null)
+        }
+    }
+
     const handleUnpublishAll = async () => {
         setIsDeletingAll(true)
         try {
@@ -973,7 +996,7 @@ function PagesSection() {
         <Section title="My pages">
             <Row
                 title="Published pages"
-                description="Pages you have shared publicly. Unpublishing breaks the public link."
+                description="Anyone with the link can always open a published page. Toggle whether it's also listed on the public Pages home."
                 stacked
             >
                 {isLoading ? (
@@ -993,6 +1016,7 @@ function PagesSection() {
                                 ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(dateObj)
                                 : 'Unknown date'
                             const url = `${window.location.origin}/pages/${page.id}`
+                            const isListed = page.publishToPages !== false
 
                             return (
                                 <div
@@ -1003,11 +1027,23 @@ function PagesSection() {
                                         <p className="text-sm font-medium text-[var(--foreground)] truncate">
                                             {page.title || 'Untitled Research'}
                                         </p>
-                                        <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                                        <p className="text-xs text-[var(--muted-foreground)] mt-0.5 flex items-center gap-1">
                                             Published {formattedDate}
+                                            <span className="opacity-50">·</span>
+                                            {isListed ? (
+                                                <span className="flex items-center gap-1"><Globe size={11} />Listed</span>
+                                            ) : (
+                                                <span className="flex items-center gap-1"><Lock size={11} />Unlisted</span>
+                                            )}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
+                                        <SettingSwitch
+                                            checked={isListed}
+                                            disabled={togglingId === page.id}
+                                            onCheckedChange={(checked) => handleToggleListing(page.id, checked)}
+                                            title={isListed ? 'Listed on Pages home' : 'Unlisted — link only'}
+                                        />
                                         <button
                                             onClick={() => window.open(url, '_blank')}
                                             className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-lg transition-colors"

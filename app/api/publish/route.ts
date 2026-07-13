@@ -90,10 +90,14 @@ export async function POST(request: Request) {
         const user = await client.users.getUser(userId)
 
         const rawData = await request.json()
-        const { duration, forceUpdate, checkOnly, publishToPages } = rawData
+        const { duration, forceUpdate, checkOnly, publishToPages, idSeed } = rawData
 
-        // 2 (Moved). Generate a deterministic hash for the ID based on user and title
-        const idSource = `${userId}:${rawData.title || 'Untitled'}`
+        // 2 (Moved). Generate a deterministic hash for the ID based on user and
+        // either an explicit idSeed (e.g. `schedule:{run_id}` — guarantees no
+        // collision between independent sources that happen to share a title)
+        // or, by default, the title itself (so re-publishing the same chat
+        // artifact under an unchanged title updates the same page in place).
+        const idSource = `${userId}:${idSeed || rawData.title || 'Untitled'}`
         const encoder = new TextEncoder()
         const contentData = encoder.encode(idSource)
         const hashBuffer = await crypto.subtle.digest('SHA-256', contentData)

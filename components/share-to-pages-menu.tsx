@@ -11,6 +11,15 @@ interface ShareToPagesMenuProps {
   content: string
   /** Sources referenced by `[n]` in `content` — carried along so the published page can render citation badges instead of bare bracket numbers. */
   sources?: Source[]
+  /**
+   * Overrides what /api/publish hashes into the page id — by default it's
+   * `userId:title`, so re-sharing two different reports that happen to get
+   * the same title (e.g. two scheduled runs on the same recurring topic)
+   * would silently overwrite each other's published page. Pass something
+   * unique to the source content (e.g. `schedule:{run_id}`) when the caller
+   * isn't the single-artifact-per-title chat share flow this defaulted for.
+   */
+  idSeed?: string
 }
 
 const DURATIONS: { value: PublishDuration; label: string }[] = [
@@ -24,7 +33,7 @@ const DURATIONS: { value: PublishDuration; label: string }[] = [
  * dropdowns in artifact-panel.tsx / chat-view.tsx. Matches their existing
  * flat, low-saturation menu styling rather than pulling in Radix.
  */
-export function ShareToPagesMenu({ title, content, sources }: ShareToPagesMenuProps) {
+export function ShareToPagesMenu({ title, content, sources, idSeed }: ShareToPagesMenuProps) {
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
   const [expanded, setExpanded] = useState(false)
@@ -59,7 +68,7 @@ export function ShareToPagesMenu({ title, content, sources }: ShareToPagesMenuPr
         const res = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, checkOnly: true }),
+          body: JSON.stringify({ title, idSeed, checkOnly: true }),
         })
         if (res.ok) {
           const { id, exists } = await res.json()
@@ -79,7 +88,7 @@ export function ShareToPagesMenu({ title, content, sources }: ShareToPagesMenuPr
       const res = await fetch('/api/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, answer: content, duration, publishToPages, forceUpdate: true, sources }),
+        body: JSON.stringify({ title, idSeed, answer: content, duration, publishToPages, forceUpdate: true, sources }),
       })
       if (!res.ok) throw new Error('publish failed')
       const { id } = await res.json()
