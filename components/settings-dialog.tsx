@@ -1422,6 +1422,19 @@ function UsageSection() {
 
     return (
         <Section title="Usage">
+            <UsageMeter
+                label="Today"
+                used={usage.day_used}
+                limit={usage.day_limit}
+                resetLabel={formatResetsIn(usage.resets_day_at)}
+            />
+            <UsageMeter
+                label="This month"
+                used={usage.month_used}
+                limit={usage.month_limit}
+                resetLabel={`Renews on ${resetMonthLabel}`}
+            />
+
             <div className="py-4 flex items-center justify-between gap-4">
                 <p className="text-[13px] text-[var(--muted-foreground)]">
                     {lastRefreshedAt
@@ -1435,7 +1448,7 @@ function UsageSection() {
             </div>
 
             {!isSignedIn && (
-                <div className="py-4">
+                <div className="pb-4">
                     <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--secondary)]/40">
                         <div className="space-y-0.5">
                             <p className="text-sm font-medium text-[var(--foreground)]">Get 10× more usage</p>
@@ -1447,19 +1460,6 @@ function UsageSection() {
                     </div>
                 </div>
             )}
-
-            <UsageMeter
-                label="Today"
-                used={usage.day_used}
-                limit={usage.day_limit}
-                resetLabel={formatResetsIn(usage.resets_day_at)}
-            />
-            <UsageMeter
-                label="This month"
-                used={usage.month_used}
-                limit={usage.month_limit}
-                resetLabel={`Renews on ${resetMonthLabel}`}
-            />
         </Section>
     )
 }
