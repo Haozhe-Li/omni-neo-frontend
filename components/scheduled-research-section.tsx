@@ -270,21 +270,23 @@ export function ScheduledResearchSection() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {PRESETS.map(preset => (
-                        <button
-                            key={preset.name}
-                            onClick={() => openCreate(preset)}
-                            disabled={atLimit}
-                            className="text-left p-3.5 rounded-xl border border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/30 hover:bg-[var(--secondary)]/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            <p className="text-sm font-medium text-[var(--foreground)]">{preset.name}</p>
-                            <p className="text-[12px] text-[var(--muted-foreground)] mt-1 leading-relaxed line-clamp-2">
-                                {preset.prompt}
-                            </p>
-                        </button>
-                    ))}
-                </div>
+                {activeTasks.length === 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {PRESETS.map(preset => (
+                            <button
+                                key={preset.name}
+                                onClick={() => openCreate(preset)}
+                                disabled={atLimit}
+                                className="text-left p-3.5 rounded-xl border border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/30 hover:bg-[var(--secondary)]/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <p className="text-sm font-medium text-[var(--foreground)]">{preset.name}</p>
+                                <p className="text-[12px] text-[var(--muted-foreground)] mt-1 leading-relaxed line-clamp-2">
+                                    {preset.prompt}
+                                </p>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* ── Section 2: list ── */}

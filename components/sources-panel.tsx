@@ -92,7 +92,7 @@ function SourceCard({ source }: { source: Source }) {
 
 function CheckSourceCard({ match }: { match: CheckSourceMatch }) {
   const isDocument = !match.url
-  const segments = highlightExcerpt(match.chunk, match.excerpt)
+  const segments = highlightExcerpt(match.chunk, match.excerpt, match.title, match.url)
   const body = (
     <>
       <SourceCardHeader source={match} />

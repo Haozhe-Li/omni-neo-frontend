@@ -103,7 +103,33 @@ function lineIndexAt(lines: LineRange[], pos: number): number {
   return lines.length - 1
 }
 
-export function highlightExcerpt(chunk: string, excerptRaw: string): HighlightSegment[] {
+// The backend prepends a `{title}\n{url}` header to each chunk (context for
+// its own retrieval), which isn't part of the passage itself — the card
+// already shows title/domain above this excerpt, so leaking it again here
+// (verbatim, still percent-encoded) reads as a rendering bug. Strip any
+// leading lines that are blank or equal `title`/`url` before matching or
+// falling back, so neither can surface in what the reader sees.
+function stripChunkHeader(chunk: string, title?: string, url?: string): string {
+  const targets = [title, url]
+    .filter((s): s is string => !!s && s.trim() !== '')
+    .map((s) => s.trim().toLowerCase())
+  if (targets.length === 0) return chunk
+
+  const lines = chunk.split('\n')
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i].trim()
+    if (line === '' || targets.includes(line.toLowerCase())) {
+      i++
+      continue
+    }
+    break
+  }
+  return i === 0 ? chunk : lines.slice(i).join('\n').replace(/^\s+/, '')
+}
+
+export function highlightExcerpt(chunkRaw: string, excerptRaw: string, title?: string, url?: string): HighlightSegment[] {
+  const chunk = stripChunkHeader(chunkRaw, title, url)
   const match = findMatchRange(chunk, excerptRaw)
   if (!match) {
     const truncated = chunk.length > FALLBACK_CHARS
