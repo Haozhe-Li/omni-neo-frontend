@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Search,
   Globe,
@@ -15,8 +15,9 @@ import {
   Terminal,
   Check,
   Blocks,
+  Zap,
 } from 'lucide-react'
-import type { ToolStep } from '@/lib/types'
+import { isReasoningStep, type TimelineStep, type ToolStep } from '@/lib/types'
 
 function domainOf(url: string) {
   try {
@@ -54,17 +55,30 @@ interface Todo {
   status?: string
 }
 
-// Reconstruct the plan chronologically: associate each tool call with the todo
-// that was in_progress when it ran. Tools before any plan land in `preTools`.
-function buildPlan(steps: ToolStep[]) {
+// Reconstruct the plan chronologically: associate each tool call (and each
+// reasoning run) with the todo that was in_progress when it happened. Steps
+// before any plan land in `preTools`.
+function buildPlan(steps: TimelineStep[]) {
   let todos: Todo[] = []
   let activeContent: string | null = null
-  const toolsByTodo = new Map<string, ToolStep[]>()
+  const toolsByTodo = new Map<string, TimelineStep[]>()
   const skillsByTodo = new Map<string, string[]>()
-  const preTools: ToolStep[] = []
+  const preTools: TimelineStep[] = []
   const preSkills: string[] = []
 
   for (const s of steps) {
+    // Reasoning runs ride the same timeline as tool calls: nest under the
+    // active todo in arrival order, or lead the list when no plan exists yet.
+    if (isReasoningStep(s)) {
+      if (activeContent) {
+        const list = toolsByTodo.get(activeContent) ?? []
+        list.push(s)
+        toolsByTodo.set(activeContent, list)
+      } else {
+        preTools.push(s)
+      }
+      continue
+    }
     const sk = skillOf(s)
     if (sk) {
       // A loaded skill nests under the todo active when it was read (e.g. the
@@ -204,6 +218,139 @@ function ToolRow({ step, isActive }: { step: ToolStep; isActive?: boolean }) {
   )
 }
 
+// A reasoning run inside a step's timeline: "⚡ Insights" leads INLINE into
+// the reasoning text, the whole thing clamped to 2 lines total. A ChevronDown
+// (the same expand affordance used everywhere else) sits at the end of the
+// clamped block and toggles the full text.
+const REASONING_CLAMP_CHARS = 160
+
+// Reveal pacing for live reasoning — same buffered-typewriter idea as
+// StreamingText: a steady base rate, faster when a backend batch lands a big
+// backlog at once, so buffered chunks drain smoothly instead of popping. When
+// the run ends (`animate` flips false) the remainder keeps draining at tail
+// pacing instead of snapping out — fast models close a run with most of its
+// text still unrevealed.
+const REASONING_CPS = 140
+const REASONING_CATCHUP = 3
+const REASONING_TAIL_CPS = 280
+const REASONING_TAIL_CATCHUP = 8
+
+function useSmoothReveal(text: string, animate: boolean): string {
+  const targetRef = useRef(text)
+  targetRef.current = text
+  const animateRef = useRef(animate)
+  animateRef.current = animate
+  const shownRef = useRef(animate ? 0 : text.length)
+  const [shown, setShown] = useState(shownRef.current)
+
+  useEffect(() => {
+    if (!animate && shownRef.current >= targetRef.current.length) {
+      // Historical mount, or the tail drain already finished — stay idle.
+      setShown(shownRef.current)
+      return
+    }
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000)
+      last = now
+      const target = targetRef.current.length
+      let cur = shownRef.current
+      if (cur < target) {
+        const speed = animateRef.current
+          ? Math.max(REASONING_CPS, (target - cur) * REASONING_CATCHUP)
+          : Math.max(REASONING_TAIL_CPS, (target - cur) * REASONING_TAIL_CATCHUP)
+        cur = Math.min(target, cur + speed * dt)
+        shownRef.current = cur
+        setShown(Math.floor(cur))
+      } else if (!animateRef.current) {
+        // Caught up and the run is over — stop the loop.
+        setShown(target)
+        return
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [animate])
+
+  return text.slice(0, Math.min(shown, text.length))
+}
+
+function ReasoningText({ content, isActive }: { content: string; isActive?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const active = !!isActive
+  const trimmed = content.trim()
+  const revealed = useSmoothReveal(trimmed, active)
+  const collapsible = trimmed.length > REASONING_CLAMP_CHARS
+  const open = active || expanded || !collapsible
+
+  // Animated open/close: the clamp itself can't transition, so height does the
+  // moving. Opening: unclamp immediately (ellipsis gives way to real text) and
+  // grow max-height from the 2-line height to the full scrollHeight. Closing:
+  // shrink max-height back down first, and only re-apply the clamp (for its
+  // ellipsis) once the transition lands. `maxH === null` means "no cap" —
+  // steady state, so the live typewriter can grow the box freely per-frame.
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const [clamped, setClamped] = useState(!open)
+  const [maxH, setMaxH] = useState<string | null>(null)
+  const prevOpen = useRef(open)
+
+  useEffect(() => {
+    if (prevOpen.current === open) return
+    prevOpen.current = open
+    const el = boxRef.current
+    if (!el) {
+      setClamped(!open)
+      return
+    }
+    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 21
+    const collapsedH = Math.ceil(lineH * 2)
+    if (open) {
+      setClamped(false)
+      setMaxH(`${collapsedH}px`)
+      requestAnimationFrame(() => requestAnimationFrame(() => setMaxH(`${el.scrollHeight}px`)))
+    } else {
+      setMaxH(`${el.scrollHeight}px`)
+      requestAnimationFrame(() => requestAnimationFrame(() => setMaxH(`${collapsedH}px`)))
+    }
+  }, [open])
+
+  if (!trimmed) return null
+
+  return (
+    <div
+      onClick={collapsible ? () => setExpanded((v) => !v) : undefined}
+      className={`omni-step-in relative ${collapsible ? 'cursor-pointer' : ''}`}
+    >
+      <div
+        ref={boxRef}
+        onTransitionEnd={(e) => {
+          if (e.propertyName !== 'max-height') return
+          if (!open) setClamped(true)
+          setMaxH(null)
+        }}
+        style={maxH !== null ? { maxHeight: maxH } : undefined}
+        className={`overflow-hidden transition-[max-height] duration-300 ease-in-out text-[13px] leading-relaxed text-[var(--muted-foreground)] ${
+          clamped ? 'line-clamp-2' : ''
+        } ${collapsible ? 'pr-5' : ''}`}
+      >
+        <Zap size={13} strokeWidth={1.75} className="inline align-[-2px] mr-1.5 shrink-0" />
+        <span className={`font-medium ${active ? 'omni-shimmer-text' : ''}`}>Insights</span>{' '}
+        <span className={clamped ? '' : 'whitespace-pre-wrap'}>{revealed}</span>
+      </div>
+      {collapsible && (
+        <ChevronDown
+          size={14}
+          className={`absolute right-0 bottom-[4px] text-[var(--muted-foreground)] transition-transform duration-300 ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      )}
+    </div>
+  )
+}
+
 function SkillRow({ name }: { name: string }) {
   return (
     <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
@@ -220,18 +367,29 @@ interface Group {
   key: string
   content: string
   status: 'completed' | 'in_progress' | 'pending'
-  tools: ToolStep[]
+  tools: TimelineStep[]
   skills: string[]
 }
 
-// Fallback for when the agent ran tools without writing any todos: keep the same
-// two-level hierarchy by grouping contiguous tool calls into a synthetic step —
-// retrieval tools collapse into "Searching through the internet", the rest into a
-// generic working step. The last group is in-progress while still thinking.
-function synthesizeGroups(tools: ToolStep[], thinking: boolean): Group[] {
+// Fallback for when the agent ran without writing any todos: keep the same
+// two-level hierarchy by grouping contiguous steps into a synthetic step —
+// retrieval tools collapse into "Searching through the internet", other tools
+// into a generic working step, and a turn that OPENS with reasoning gets a
+// "Reasoning" step. Later reasoning runs glue onto whatever group is underway
+// (they narrate it) rather than splitting the list. The last group is
+// in-progress while still thinking.
+function synthesizeGroups(tools: TimelineStep[], thinking: boolean): Group[] {
   const groups: Group[] = []
-  let cat: 'retrieval' | 'other' | null = null
+  let cat: 'retrieval' | 'other' | 'reasoning' | null = null
   for (const s of tools) {
+    if (isReasoningStep(s)) {
+      if (!groups.length) {
+        groups.push({ key: 'g0', content: 'Reasoning', status: 'completed', tools: [], skills: [] })
+        cat = 'reasoning'
+      }
+      groups[groups.length - 1].tools.push(s)
+      continue
+    }
     const c = isRetrieval(s) ? 'retrieval' : 'other'
     if (!groups.length || c !== cat) {
       groups.push({
@@ -293,9 +451,13 @@ function GroupRow({ group, thinking, isLast }: { group: Group; thinking: boolean
           {group.skills.map((sk, k) => (
             <SkillRow key={`s${k}`} name={sk} />
           ))}
-          {group.tools.map((s, k) => (
-            <ToolRow key={`t${k}`} step={s} isActive={active && k === group.tools.length - 1} />
-          ))}
+          {group.tools.map((s, k) =>
+            isReasoningStep(s) ? (
+              <ReasoningText key={`t${k}`} content={s.content} isActive={active && k === group.tools.length - 1} />
+            ) : (
+              <ToolRow key={`t${k}`} step={s} isActive={active && k === group.tools.length - 1} />
+            )
+          )}
         </div>
       )}
     </div>
@@ -303,7 +465,7 @@ function GroupRow({ group, thinking, isLast }: { group: Group; thinking: boolean
 }
 
 interface ToolActivityProps {
-  steps?: ToolStep[]
+  steps?: TimelineStep[]
   isStreaming?: boolean
   answered?: boolean
   drafting?: 'report' | 'chart' | null
@@ -360,6 +522,11 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   const looseSkills: string[] = []
   const looseTools: ToolStep[] = []
 
+  // Placeholder shimmer the instant thinking starts, before the first
+  // reasoning token / tool call produces a real group — so the UI never sits
+  // empty while the model spins up.
+  const showPlaceholder = thinking && !drafting && groups.length === 0
+
   const hasContent = groups.length > 0 || looseTools.length > 0 || looseSkills.length > 0 || !!drafting
   const stepCount = groups.length || looseTools.length + looseSkills.length
   const showBody = thinking || open
@@ -394,10 +561,21 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
             </div>
           )}
 
+          {/* Nothing has streamed yet — show a bare "Thinking" shimmer so the
+              step area isn't empty while the model spins up. Replaced by the
+              first real group (reasoning or tool) the moment one arrives. */}
+          {showPlaceholder && (
+            <div className="omni-step-in relative pl-[20px]">
+              <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+                <div className="h-full w-full rounded-full bg-[var(--foreground)] animate-pulse" />
+              </div>
+              <span className="omni-shimmer-text font-medium text-[13px]">Thinking</span>
+            </div>
+          )}
+
           {/* the plan — real todos or synthesized groups */}
           {groups.map((g, i) => {
-            const hasMore = !!drafting || (thinking && !drafting);
-            const isLast = i === groups.length - 1 && !hasMore;
+            const isLast = i === groups.length - 1 && !drafting
             return <GroupRow key={g.key} group={g} thinking={thinking} isLast={isLast} />
           })}
 
@@ -410,17 +588,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
                 <span className="omni-shimmer-text-accent font-medium">
                   {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
                 </span>
-              </div>
-            </div>
-          )}
-
-          {thinking && !drafting && (
-            <div className="omni-step-in relative pl-[20px]">
-              <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-                <div className="h-full w-full rounded-full bg-[var(--accent)] animate-pulse" />
-              </div>
-              <div className="flex items-start gap-2 text-[13px]">
-                <span className="omni-shimmer-text-accent font-medium">Thinking</span>
               </div>
             </div>
           )}

@@ -105,6 +105,23 @@ export interface ToolStep {
   timestamp: number
 }
 
+/**
+ * One contiguous run of streamed `reasoning` SSE tokens. Lives in the same
+ * timeline as tool calls (a turn can think, call a tool, think again …), so
+ * steps arrays interleave the two in arrival order and the UI renders them
+ * chronologically under the owning todo/step.
+ */
+export interface ReasoningStep {
+  type: 'reasoning'
+  content: string
+  timestamp: number
+}
+
+export type TimelineStep = ToolStep | ReasoningStep
+
+export const isReasoningStep = (s: TimelineStep): s is ReasoningStep =>
+  (s as ReasoningStep).type === 'reasoning'
+
 export interface ChartArtifact {
   id: string
   title: string
@@ -138,7 +155,7 @@ export interface WidgetData {
 // The model can talk, then invoke tools, then talk again. `blocks` preserves
 // that arrival order so the UI can render text/tool sections interleaved
 // instead of always showing all tool activity before all text.
-export type MessageBlock = { type: 'text'; content: string } | { type: 'tools'; steps: ToolStep[] }
+export type MessageBlock = { type: 'text'; content: string } | { type: 'tools'; steps: TimelineStep[] }
 
 /** One "verify claim" dashed-underline mark: a span (offsets into whichever
  * string it was extracted from) plus the cleaned claim text sent to
@@ -156,13 +173,20 @@ export interface ChatMessage {
   attachedFiles?: { id: string; name: string; type: string }[]
   follow_up_content?: string
   sources?: Source[]
-  steps?: ToolStep[]
+  steps?: TimelineStep[]
   blocks?: MessageBlock[]
   widgets?: WidgetData[]
   artifacts?: ChartArtifact[]
   reports?: ReportArtifact[]
   // 'report' | 'chart' while the agent is drafting an artifact (not yet finished)
   drafting?: 'report' | 'chart' | null
+  /**
+   * LEGACY — reasoning now streams as `ReasoningStep` entries interleaved in
+   * `steps`/`blocks` (chronological, one entry per contiguous thinking run).
+   * This field is no longer written; it only survives on turns persisted by
+   * older builds and is ignored by the renderer.
+   */
+  reasoning?: string
   mode?: AgentMode
   /** Set when this assistant message was produced by a rewind/regenerate. */
   regeneratedWith?: AgentMode

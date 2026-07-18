@@ -23,7 +23,7 @@ import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
-import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReportArtifact, Source, ToolStep, VerifiedClaim, WidgetData } from '@/lib/types'
+import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
 
 interface ChatViewProps {
@@ -1107,8 +1107,13 @@ export function ChatView({
 
       const clearSlowHint = () => {}
 
-      const steps: ToolStep[] = []
+      const steps: TimelineStep[] = []
       let text = ''
+      // The reasoning run currently receiving tokens. A tool call (or answer
+      // text) closes it, so the next reasoning token starts a NEW timeline
+      // entry — that's what keeps think → tool → think chronological instead
+      // of merging into one blob.
+      let openReasoning: ReasoningStep | null = null
       const widgets: WidgetData[] = []
       const artifacts: ChartArtifact[] = []
       let sources: Source[] = []
@@ -1124,7 +1129,7 @@ export function ChatView({
         if (last && last.type === 'text') last.content += chunk
         else blocks.push({ type: 'text', content: chunk })
       }
-      const appendToolStep = (step: ToolStep) => {
+      const appendToolStep = (step: TimelineStep) => {
         const last = blocks[blocks.length - 1]
         if (last && last.type === 'tools') last.steps.push(step)
         else blocks.push({ type: 'tools', steps: [step] })
@@ -1170,10 +1175,23 @@ export function ChatView({
           switch (ev.type) {
             case 'text':
               if (ev.content) clearSlowHint()
+              openReasoning = null
               text += ev.content || ''
               if (ev.content) appendText(ev.content)
               patchAssistant()
               break
+            case 'reasoning': {
+              if (!ev.content) break
+              if (openReasoning) {
+                openReasoning.content += ev.content
+              } else {
+                openReasoning = { type: 'reasoning', content: ev.content, timestamp: Date.now() }
+                steps.push(openReasoning)
+                appendToolStep(openReasoning)
+              }
+              patchAssistant()
+              break
+            }
             case 'widget':
               console.log('[widget] received:', ev.widget, ev.data)
               widgets.push({ widget: ev.widget, data: ev.data })
@@ -1181,6 +1199,7 @@ export function ChatView({
               patchAssistant()
               break
             case 'tool_call': {
+              openReasoning = null
               const step = { tool: ev.tool, args: ev.args, timestamp: Date.now() }
               steps.push(step)
               appendToolStep(step)

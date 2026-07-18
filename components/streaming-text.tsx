@@ -27,6 +27,11 @@ interface StreamingTextProps {
 // seconds) so the typewriter never trails the real stream by much.
 const BASE_CPS = 80 // characters/sec revealed at minimum
 const CATCHUP = 4 // proportional drain: a bigger backlog reveals faster
+// Once the stream is over, whatever's still unrevealed drains at this brisker
+// pacing instead of snapping — fast models (Groq) routinely deliver the whole
+// answer plus `done` inside one burst, so the tail is often most of the text.
+const TAIL_CPS = 160
+const TAIL_CATCHUP = 8
 
 /**
  * Always renders through the same `Typewriter` element regardless of `animate`,
@@ -59,14 +64,23 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
   // Latest content is read off a ref so the rAF loop can stay mounted once.
   const contentRef = useRef(content)
   contentRef.current = content
+  const animateRef = useRef(animate)
+  animateRef.current = animate
   const shownRef = useRef(animate ? 0 : content.length)
   const [shown, setShown] = useState(shownRef.current)
 
+  // The reveal is "settled" once the stream is over AND everything is shown.
+  // `animate` flipping false mid-reveal (the turn ended while the typewriter
+  // was still behind — routine on fast models that deliver the whole answer
+  // plus `done` in one burst) must NOT snap the remainder out; the loop below
+  // keeps running at tail pacing until it catches up, and only then does the
+  // render switch to the final full-featured markdown.
+  const settled = !animate && shown >= content.length
+
   useEffect(() => {
-    if (!animate) {
-      // Not animating (historical message, or streaming just finished): reveal
-      // everything immediately instead of running the rAF reveal loop.
-      shownRef.current = contentRef.current.length
+    if (!animate && shownRef.current >= contentRef.current.length) {
+      // Nothing left to reveal (historical message, or the drain finished
+      // before this effect re-ran): make sure state agrees and stay idle.
       setShown(shownRef.current)
       return
     }
@@ -78,7 +92,9 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
       const target = contentRef.current.length
       let cur = shownRef.current
       if (cur < target) {
-        const speed = Math.max(BASE_CPS, (target - cur) * CATCHUP)
+        const speed = animateRef.current
+          ? Math.max(BASE_CPS, (target - cur) * CATCHUP)
+          : Math.max(TAIL_CPS, (target - cur) * TAIL_CATCHUP)
         cur = Math.min(target, cur + speed * dt)
         shownRef.current = cur
         setShown(Math.floor(cur))
@@ -86,6 +102,10 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
         // Content shrank (e.g. a <report> block was just stripped out) — snap back.
         shownRef.current = target
         setShown(target)
+      } else if (!animateRef.current) {
+        // Caught up and the stream is over — stop the loop; `settled` takes over.
+        setShown(target)
+        return
       }
       raf = requestAnimationFrame(tick)
     }
@@ -95,13 +115,13 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
 
   const slice = contentRef.current.slice(0, Math.min(shown, contentRef.current.length))
   // `verifiedClaims` offsets are computed against the full, final content —
-  // only safe to apply once the whole thing is revealed (`!animate`), never
+  // only safe to apply once the whole thing is revealed (`settled`), never
   // against the still-growing `slice`. Citations are hidden entirely while
-  // `animate` is true (see `hideCitations` on `MarkdownMessage`) — the
+  // the reveal is running (see `hideCitations` on `MarkdownMessage`) — the
   // normalized, final wording of a `[1][2]` run right before punctuation
   // isn't settled until the turn is done, so there's nothing correct to
-  // show mid-stream anyway; they all appear together once it flips false.
-  return animate ? (
+  // show mid-reveal anyway; they all appear together once it settles.
+  return !settled ? (
     <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} hideCitations />
   ) : (
     <MarkdownMessage
