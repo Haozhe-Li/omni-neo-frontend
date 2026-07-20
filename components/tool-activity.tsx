@@ -119,16 +119,21 @@ function ToolRowContent({ step, isActive }: { step: ToolStep; isActive?: boolean
   )
 }
 
-// Markdown-rendered reasoning, clamped to 2 lines with a manual expand toggle.
+// Markdown-rendered reasoning, clamped to 8 lines with a manual expand toggle.
 // Stays clamped even while actively streaming — only a manual click unclamps
-// it, so a long thinking run never auto-pops open on its own.
+// it, so a long thinking run never auto-pops open on its own. The typewriter
+// reveal itself is unaffected by the clamp: `revealed` keeps growing in the
+// background regardless of clamp/expand state, so expanding mid-stream shows
+// text still visibly typing in rather than snapping to the full string.
 //
 // Reveal pacing is a buffered typewriter (same idea as StreamingText): a
 // steady base rate, faster when a backend batch lands a big backlog at once,
 // so buffered chunks drain smoothly instead of popping. When the run ends
 // (`animate` flips false) the remainder keeps draining at tail pacing instead
 // of snapping out — fast models close a run with most of its text unrevealed.
-const REASONING_CLAMP_CHARS = 150
+const REASONING_CLAMP_LINES = 8
+const REASONING_CLAMP_FALLBACK_LINE_H = 21 // px — used before the box has been measured once
+const REASONING_CLAMP_CHARS = 600
 const REASONING_CPS = 140
 const REASONING_CATCHUP = 3
 const REASONING_TAIL_CPS = 280
@@ -182,13 +187,13 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
   const trimmed = content.trim()
   const revealed = useSmoothReveal(trimmed, active)
   const collapsible = trimmed.length > REASONING_CLAMP_CHARS
-  // Deliberately NOT `active ||` here — a reasoning run stays clamped to 2
-  // lines even while still streaming. Only the user's own click (`expanded`)
-  // unclamps it.
+  // Deliberately NOT `active ||` here — a reasoning run stays clamped to
+  // REASONING_CLAMP_LINES lines even while still streaming. Only the user's
+  // own click (`expanded`) unclamps it.
   const open = expanded || !collapsible
 
   // Animated open/close: the clamp itself can't transition, so height does the
-  // moving. Opening: unclamp immediately and grow max-height from the 2-line
+  // moving. Opening: unclamp immediately and grow max-height from the 8-line
   // height to the full scrollHeight. Closing: shrink max-height back down
   // first, and only re-apply the clamp once the transition lands. `maxH ===
   // null` means "no cap" — steady state, so the live typewriter can grow the
@@ -206,8 +211,8 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
       setClamped(!open)
       return
     }
-    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 21
-    const collapsedH = Math.ceil(lineH * 2)
+    const lineH = parseFloat(getComputedStyle(el).lineHeight) || REASONING_CLAMP_FALLBACK_LINE_H
+    const collapsedH = Math.ceil(lineH * REASONING_CLAMP_LINES)
     if (open) {
       setClamped(false)
       setMaxH(`${collapsedH}px`)
@@ -229,7 +234,13 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
           if (!open) setClamped(true)
           setMaxH(null)
         }}
-        style={maxH !== null ? { maxHeight: maxH } : clamped ? { maxHeight: '42px' } : undefined}
+        style={
+          maxH !== null
+            ? { maxHeight: maxH }
+            : clamped
+              ? { maxHeight: `${REASONING_CLAMP_FALLBACK_LINE_H * REASONING_CLAMP_LINES}px` }
+              : undefined
+        }
         className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
       >
         <MarkdownMessage
@@ -397,7 +408,15 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   const thinking = !!isStreaming && !answered
 
   const items = buildItems(steps)
-  const hasContent = items.length > 0 || !!drafting
+  // Sticky once true: if this turn was ever observed thinking (even with zero
+  // tool/reasoning steps — a quick chit-chat reply in fast mode, say), keep
+  // rendering through to the "Completed, thinking for Xs" / Done close-out
+  // instead of the whole component vanishing the instant `answered` flips.
+  // Without this, a fast turn with no visible steps would cut straight from
+  // "Thinking for Xs" to nothing — no Done beat, no collapse, just gone.
+  const everThinkingRef = useRef(thinking)
+  if (thinking) everThinkingRef.current = true
+  const hasContent = items.length > 0 || !!drafting || everThinkingRef.current
 
   // ── elapsed timer ──────────────────────────────────────────────────────
   // While thinking, tick live off the wall clock. The instant thinking ends
@@ -430,7 +449,14 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
       : 0
 
   // ── expand/collapse + the "done" beat that precedes auto-collapse ───────
-  const [open, setOpen] = useState(true)
+  // Seed `open` from whether we're thinking RIGHT NOW at mount, not a fixed
+  // `true` — a live turn mounts mid-thought (expanded, as before), but a
+  // message loaded already-completed from history (or a reload mid-session)
+  // mounts with `thinking` already false, so it should start collapsed. A
+  // fixed `true` here was why finished steps sometimes came back expanded
+  // after a page refresh: nothing ever re-collapses a message that was never
+  // observed transitioning from thinking to done.
+  const [open, setOpen] = useState(() => thinking)
   const [showDone, setShowDone] = useState(false)
   const prevThinkingRef = useRef(thinking)
   useEffect(() => {
@@ -475,7 +501,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   if (thinking && items.length === 0 && !drafting) {
     return (
       <div className="mb-3">
-        <span className="omni-shimmer-text text-[13px] font-medium">Thinking for {formatElapsed(elapsedSeconds)}</span>
+        <span className="omni-shimmer-text-accent text-[13px] font-medium">Thinking for {formatElapsed(elapsedSeconds)}</span>
       </div>
     )
   }
@@ -490,7 +516,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
       >
-        <span className={thinking ? 'omni-shimmer-text font-medium' : ''}>
+        <span className={thinking ? 'omni-shimmer-text-accent font-medium' : ''}>
           {thinking ? `Thinking for ${formatElapsed(elapsedSeconds)}` : `Completed, thinking for ${formatElapsed(elapsedSeconds)}`}
         </span>
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
