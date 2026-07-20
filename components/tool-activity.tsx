@@ -541,13 +541,32 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, turn
           if (e.propertyName !== 'max-height') return
           if (open) setMaxH(null)
         }}
-        style={maxH !== null ? { maxHeight: maxH } : undefined}
+        // `undefined` here (rather than a `0px` fallback for the closed
+        // steady state) was the bug: `maxH` starts `null` regardless of what
+        // `open` initializes to, and the measuring effect only runs when
+        // `open` *changes* — so a message that mounts already collapsed
+        // (history reload) rendered fully expanded anyway on first paint,
+        // and the first click had to "close" that accidental expansion
+        // before a second click could actually open/close it as expected.
+        style={maxH !== null ? { maxHeight: maxH } : open ? undefined : { maxHeight: '0px' }}
         className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
       >
         <div className="space-y-4 ml-1.5 mt-2 py-1">
           {items.map((item, i) => {
-            const isLastItem = i === items.length - 1 && !hasTail
-            return <TimelineRow key={i} item={item} isActive={thinking && isLastItem} isLast={isLastItem} />
+            // Two different questions, kept separate on purpose: "is this the
+            // item currently streaming" (drives the typewriter/pulsing dot,
+            // must depend only on array position) vs "does a line need to
+            // connect this row to the next" (must also account for the
+            // skeleton/Done/drafting tail that visually follows it). Folding
+            // both into one `!hasTail`-gated value used to mean isActive was
+            // permanently false for every row whenever a tail was showing —
+            // i.e. the entire time a turn was thinking — which made
+            // useSmoothReveal treat every reasoning step as already-historical
+            // right from its first render and never actually type it in.
+            const isLastByPosition = i === items.length - 1
+            const isActive = thinking && isLastByPosition
+            const drawsLine = isLastByPosition && !hasTail
+            return <TimelineRow key={i} item={item} isActive={isActive} isLast={drawsLine} />
           })}
 
           {showDoneTail ? <DoneTailRow /> : showSkeletonTail ? <SkeletonTailRow /> : null}
