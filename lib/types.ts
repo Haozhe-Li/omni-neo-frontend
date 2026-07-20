@@ -175,6 +175,16 @@ export interface ChatMessage {
   sources?: Source[]
   steps?: TimelineStep[]
   blocks?: MessageBlock[]
+  /**
+   * When this assistant turn began (epoch ms), captured once right as the
+   * stream starts — NOT derived from the first step's own timestamp. The
+   * step-timeline UI's elapsed-time header anchors to this so it stays
+   * correct across the mid-stream remount that happens the moment `blocks`
+   * goes from empty to non-empty (chat-view switches which JSX branch
+   * renders `ToolActivity` at that point, which otherwise resets any
+   * component-local "when did this start" state back to zero).
+   */
+  turnStartedAt?: number
   widgets?: WidgetData[]
   artifacts?: ChartArtifact[]
   reports?: ReportArtifact[]
