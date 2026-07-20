@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Terminal,
   Blocks,
+  CircleCheck,
   type LucideIcon,
 } from 'lucide-react'
 import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep } from '@/lib/types'
@@ -118,13 +119,16 @@ function ToolRowContent({ step, isActive }: { step: ToolStep; isActive?: boolean
   )
 }
 
-// Markdown-rendered reasoning, clamped to ~3 lines with a manual expand toggle.
-// Reveal pacing is a buffered typewriter (same idea as StreamingText): a steady
-// base rate, faster when a backend batch lands a big backlog at once, so
-// buffered chunks drain smoothly instead of popping. When the run ends
+// Markdown-rendered reasoning, clamped to 2 lines with a manual expand toggle.
+// Stays clamped even while actively streaming — only a manual click unclamps
+// it, so a long thinking run never auto-pops open on its own.
+//
+// Reveal pacing is a buffered typewriter (same idea as StreamingText): a
+// steady base rate, faster when a backend batch lands a big backlog at once,
+// so buffered chunks drain smoothly instead of popping. When the run ends
 // (`animate` flips false) the remainder keeps draining at tail pacing instead
 // of snapping out — fast models close a run with most of its text unrevealed.
-const REASONING_CLAMP_CHARS = 220
+const REASONING_CLAMP_CHARS = 150
 const REASONING_CPS = 140
 const REASONING_CATCHUP = 3
 const REASONING_TAIL_CPS = 280
@@ -178,14 +182,17 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
   const trimmed = content.trim()
   const revealed = useSmoothReveal(trimmed, active)
   const collapsible = trimmed.length > REASONING_CLAMP_CHARS
-  const open = active || expanded || !collapsible
+  // Deliberately NOT `active ||` here — a reasoning run stays clamped to 2
+  // lines even while still streaming. Only the user's own click (`expanded`)
+  // unclamps it.
+  const open = expanded || !collapsible
 
   // Animated open/close: the clamp itself can't transition, so height does the
-  // moving. Opening: unclamp immediately and grow max-height from the 3-line
+  // moving. Opening: unclamp immediately and grow max-height from the 2-line
   // height to the full scrollHeight. Closing: shrink max-height back down
   // first, and only re-apply the clamp once the transition lands. `maxH ===
   // null` means "no cap" — steady state, so the live typewriter can grow the
-  // box freely per-frame.
+  // box freely per-frame while still visually clamped by line-height overflow.
   const boxRef = useRef<HTMLDivElement | null>(null)
   const [clamped, setClamped] = useState(!open)
   const [maxH, setMaxH] = useState<string | null>(null)
@@ -200,7 +207,7 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
       return
     }
     const lineH = parseFloat(getComputedStyle(el).lineHeight) || 21
-    const collapsedH = Math.ceil(lineH * 3)
+    const collapsedH = Math.ceil(lineH * 2)
     if (open) {
       setClamped(false)
       setMaxH(`${collapsedH}px`)
@@ -222,8 +229,8 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
           if (!open) setClamped(true)
           setMaxH(null)
         }}
-        style={maxH !== null ? { maxHeight: maxH } : undefined}
-        className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${clamped ? 'relative' : ''}`}
+        style={maxH !== null ? { maxHeight: maxH } : clamped ? { maxHeight: '42px' } : undefined}
+        className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
       >
         <MarkdownMessage
           content={revealed}
@@ -284,6 +291,34 @@ function buildItems(steps: TimelineStep[]): Item[] {
   return items
 }
 
+// The bullet that sits on top of the connecting line: an icon for tool/skill
+// rows, a plain dot for reasoning, shared by every row on the timeline
+// (including the trailing skeleton/done rows) so they all line up.
+function Bullet({ Icon, active, done, accent }: { Icon?: LucideIcon | null; active?: boolean; done?: boolean; accent?: boolean }) {
+  return (
+    <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+      {Icon ? (
+        <Icon
+          size={done ? 14 : 12}
+          strokeWidth={1.75}
+          className={done ? 'text-[var(--muted-foreground)]' : active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}
+        />
+      ) : (
+        <div
+          className={`h-2 w-2 rounded-full ${
+            accent ? 'bg-[var(--accent)] animate-pulse' : active ? 'bg-[var(--foreground)] animate-pulse' : 'bg-[var(--border-subtle)]'
+          }`}
+        />
+      )}
+    </div>
+  )
+}
+
+function TimelineLine({ isLast }: { isLast: boolean }) {
+  if (isLast) return null
+  return <div className="absolute left-[7px] top-[18px] w-[2px] bg-[var(--border-subtle)]" style={{ height: 'calc(100% + 4px)' }} />
+}
+
 // One row on the shared vertical timeline: a connecting line on the left with
 // this item's icon sitting on top of it (a plain dot for reasoning, the
 // tool's own icon for tool calls, Blocks for skills), and its content to the
@@ -304,17 +339,36 @@ function TimelineRow({ item, isActive, isLast }: { item: Item; isActive: boolean
 
   return (
     <div className="omni-step-in relative pl-[22px]">
-      {!isLast && (
-        <div className="absolute left-[7px] top-[18px] w-[2px] bg-[var(--border-subtle)]" style={{ height: 'calc(100% + 4px)' }} />
-      )}
-      <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-        {Icon ? (
-          <Icon size={12} strokeWidth={1.75} className={isActive ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'} />
-        ) : (
-          <div className={`h-2 w-2 rounded-full ${isActive ? 'bg-[var(--foreground)] animate-pulse' : 'bg-[var(--border-subtle)]'}`} />
-        )}
-      </div>
+      <TimelineLine isLast={isLast} />
+      <Bullet Icon={Icon} active={isActive} />
       {content}
+    </div>
+  )
+}
+
+// Trailing placeholder shown at the end of the timeline while more steps are
+// still expected — a couple of shimmering skeleton bars rather than a text
+// label, so it reads as "loading" without competing with real step text.
+function SkeletonTailRow() {
+  return (
+    <div className="omni-step-in relative pl-[22px]">
+      <Bullet active />
+      <div className="flex flex-col gap-1.5 py-[3px]">
+        <div className="h-[9px] w-[65%] max-w-[200px] rounded-full bg-[var(--secondary)] animate-pulse" />
+        <div className="h-[9px] w-[35%] max-w-[110px] rounded-full bg-[var(--secondary)] animate-pulse" style={{ animationDelay: '0.15s' }} />
+      </div>
+    </div>
+  )
+}
+
+// Trailing row shown briefly the moment thinking ends, right before the whole
+// timeline auto-collapses — a quiet "done" beat instead of the skeleton just
+// vanishing outright.
+function DoneTailRow() {
+  return (
+    <div className="omni-step-in relative pl-[22px]">
+      <Bullet Icon={CircleCheck} done />
+      <span className="text-[13px] text-[var(--muted-foreground)]">Done</span>
     </div>
   )
 }
@@ -326,6 +380,9 @@ function formatElapsed(totalSeconds: number) {
   const rem = s % 60
   return `${m}m ${String(rem).padStart(2, '0')}s`
 }
+
+// How long the "Done" beat lingers before the timeline auto-collapses.
+const DONE_LINGER_MS = 700
 
 interface ToolActivityProps {
   steps?: TimelineStep[]
@@ -341,19 +398,22 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
 
   const items = buildItems(steps)
   const hasContent = items.length > 0 || !!drafting
-  const showPlaceholder = thinking && !drafting && items.length === 0
 
-  const [open, setOpen] = useState(true)
-
-  // Live elapsed timer: starts at the first step's own timestamp (or mount
-  // time if nothing has streamed in yet), ticks every second while thinking,
-  // and freezes automatically once `thinking` goes false (the interval is
-  // torn down, so `now` simply stops advancing).
+  // ── elapsed timer ──────────────────────────────────────────────────────
+  // While thinking, tick live off the wall clock. The instant thinking ends
+  // — whether that happens live in this session, or the message is loaded
+  // already-completed from history — freeze using the STORED step
+  // timestamps (first vs last), never the current wall-clock time. Using
+  // "now" as the reference for an already-finished message is what caused
+  // the timer to read a huge, ever-growing number on reload: it was really
+  // measuring "time since this message was sent", not "time spent thinking".
+  const firstTs = steps[0]?.timestamp
+  const lastTs = steps.length > 0 ? steps[steps.length - 1].timestamp : undefined
   const startRef = useRef<number | null>(null)
-  if (startRef.current == null && steps.length > 0) startRef.current = steps[0].timestamp
+  if (startRef.current == null && firstTs != null) startRef.current = firstTs
   useEffect(() => {
-    if (startRef.current == null) startRef.current = Date.now()
-  }, [])
+    if (startRef.current == null && thinking) startRef.current = Date.now()
+  }, [thinking])
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!thinking) return
@@ -361,9 +421,68 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [thinking])
-  const elapsedSeconds = startRef.current != null ? (now - startRef.current) / 1000 : 0
+  const elapsedSeconds = thinking
+    ? startRef.current != null
+      ? (now - startRef.current) / 1000
+      : 0
+    : startRef.current != null && lastTs != null
+      ? (lastTs - startRef.current) / 1000
+      : 0
+
+  // ── expand/collapse + the "done" beat that precedes auto-collapse ───────
+  const [open, setOpen] = useState(true)
+  const [showDone, setShowDone] = useState(false)
+  const prevThinkingRef = useRef(thinking)
+  useEffect(() => {
+    const was = prevThinkingRef.current
+    prevThinkingRef.current = thinking
+    if (was && !thinking && open) {
+      setShowDone(true)
+      const t = setTimeout(() => {
+        setShowDone(false)
+        setOpen(false)
+      }, DONE_LINGER_MS)
+      return () => clearTimeout(t)
+    }
+  }, [thinking, open])
+
+  // Animated collapse: the body stays mounted and its max-height is measured
+  // and transitioned, instead of conditionally unmounting — so toggling never
+  // snaps the layout or yanks the page's scroll position. `maxH === null`
+  // means "no cap", the steady state while expanded, so live-streamed content
+  // can keep growing the box freely without fighting a stale cached height.
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [maxH, setMaxH] = useState<string | null>(null)
+  const prevOpenRef = useRef(open)
+  useEffect(() => {
+    if (prevOpenRef.current === open) return
+    prevOpenRef.current = open
+    const el = bodyRef.current
+    if (!el) return
+    if (open) {
+      setMaxH('0px')
+      requestAnimationFrame(() => requestAnimationFrame(() => setMaxH(`${el.scrollHeight}px`)))
+    } else {
+      setMaxH(`${el.scrollHeight}px`)
+      requestAnimationFrame(() => requestAnimationFrame(() => setMaxH('0px')))
+    }
+  }, [open])
 
   if (!thinking && !hasContent) return null
+
+  // Nothing has streamed in yet: just the bare, non-interactive label — no
+  // chevron, no expandable body, no placeholder row underneath it.
+  if (thinking && items.length === 0 && !drafting) {
+    return (
+      <div className="mb-3">
+        <span className="omni-shimmer-text text-[13px] font-medium">Thinking for {formatElapsed(elapsedSeconds)}</span>
+      </div>
+    )
+  }
+
+  const showSkeletonTail = thinking && !drafting
+  const showDoneTail = showDone && !drafting
+  const hasTail = showSkeletonTail || showDoneTail || !!drafting
 
   return (
     <div className="mb-3 space-y-2">
@@ -377,44 +496,33 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
+      <div
+        ref={bodyRef}
+        onTransitionEnd={(e) => {
+          if (e.propertyName !== 'max-height') return
+          if (open) setMaxH(null)
+        }}
+        style={maxH !== null ? { maxHeight: maxH } : undefined}
+        className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
+      >
         <div className="space-y-4 ml-1.5 mt-2 py-1">
-          {/* Nothing has streamed yet — show a bare "Thinking" shimmer so the
-              step area isn't empty while the model spins up. Replaced by the
-              first real item (reasoning or tool) the moment one arrives. */}
-          {showPlaceholder && (
-            <div className="omni-step-in relative pl-[22px]">
-              <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-                <div className="h-2 w-2 rounded-full bg-[var(--foreground)] animate-pulse" />
-              </div>
-              <span className="omni-shimmer-text font-medium text-[13px]">Thinking</span>
-            </div>
-          )}
-
           {items.map((item, i) => {
-            const isLastItem = i === items.length - 1 && !drafting
-            return (
-              <TimelineRow
-                key={i}
-                item={item}
-                isActive={thinking && isLastItem}
-                isLast={isLastItem}
-              />
-            )
+            const isLastItem = i === items.length - 1 && !hasTail
+            return <TimelineRow key={i} item={item} isActive={thinking && isLastItem} isLast={isLastItem} />
           })}
+
+          {showDoneTail ? <DoneTailRow /> : showSkeletonTail ? <SkeletonTailRow /> : null}
 
           {drafting && (
             <div className="omni-step-in relative pl-[22px]">
-              <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-                <div className="h-2 w-2 rounded-full bg-[var(--accent)] animate-pulse" />
-              </div>
+              <Bullet accent />
               <span className="omni-shimmer-text-accent font-medium text-[13px]">
                 {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
               </span>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
