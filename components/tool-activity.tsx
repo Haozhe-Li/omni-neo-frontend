@@ -408,7 +408,15 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   const thinking = !!isStreaming && !answered
 
   const items = buildItems(steps)
-  const hasContent = items.length > 0 || !!drafting
+  // Sticky once true: if this turn was ever observed thinking (even with zero
+  // tool/reasoning steps — a quick chit-chat reply in fast mode, say), keep
+  // rendering through to the "Completed, thinking for Xs" / Done close-out
+  // instead of the whole component vanishing the instant `answered` flips.
+  // Without this, a fast turn with no visible steps would cut straight from
+  // "Thinking for Xs" to nothing — no Done beat, no collapse, just gone.
+  const everThinkingRef = useRef(thinking)
+  if (thinking) everThinkingRef.current = true
+  const hasContent = items.length > 0 || !!drafting || everThinkingRef.current
 
   // ── elapsed timer ──────────────────────────────────────────────────────
   // While thinking, tick live off the wall clock. The instant thinking ends
@@ -441,7 +449,14 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
       : 0
 
   // ── expand/collapse + the "done" beat that precedes auto-collapse ───────
-  const [open, setOpen] = useState(true)
+  // Seed `open` from whether we're thinking RIGHT NOW at mount, not a fixed
+  // `true` — a live turn mounts mid-thought (expanded, as before), but a
+  // message loaded already-completed from history (or a reload mid-session)
+  // mounts with `thinking` already false, so it should start collapsed. A
+  // fixed `true` here was why finished steps sometimes came back expanded
+  // after a page refresh: nothing ever re-collapses a message that was never
+  // observed transitioning from thinking to done.
+  const [open, setOpen] = useState(() => thinking)
   const [showDone, setShowDone] = useState(false)
   const prevThinkingRef = useRef(thinking)
   useEffect(() => {
@@ -486,7 +501,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   if (thinking && items.length === 0 && !drafting) {
     return (
       <div className="mb-3">
-        <span className="omni-shimmer-text text-[13px] font-medium">Thinking for {formatElapsed(elapsedSeconds)}</span>
+        <span className="omni-shimmer-text-accent text-[13px] font-medium">Thinking for {formatElapsed(elapsedSeconds)}</span>
       </div>
     )
   }
@@ -501,7 +516,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
       >
-        <span className={thinking ? 'omni-shimmer-text font-medium' : ''}>
+        <span className={thinking ? 'omni-shimmer-text-accent font-medium' : ''}>
           {thinking ? `Thinking for ${formatElapsed(elapsedSeconds)}` : `Completed, thinking for ${formatElapsed(elapsedSeconds)}`}
         </span>
         <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
