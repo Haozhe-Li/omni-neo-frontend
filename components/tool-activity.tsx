@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import {
   Search,
   Globe,
@@ -11,13 +11,12 @@ import {
   FileText,
   Wrench,
   ChevronDown,
-  Code2,
   Terminal,
-  Check,
   Blocks,
-  Zap,
+  type LucideIcon,
 } from 'lucide-react'
-import { isReasoningStep, type TimelineStep, type ToolStep } from '@/lib/types'
+import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep } from '@/lib/types'
+import { MarkdownMessage } from '@/components/markdown-message'
 
 function domainOf(url: string) {
   try {
@@ -31,16 +30,6 @@ const lc = (s: string) => (s || '').toLowerCase()
 const isTodo = (t: string) => lc(t).includes('todo')
 const isSearch = (t: string) => (lc(t).includes('search') || lc(t).includes('arxiv')) && !lc(t).includes('places')
 
-// Retrieval = anything that reaches out to the web / live data. Used by the
-// no-plan fallback to group these under one "Searching through the internet" step.
-function isRetrieval(step: ToolStep): boolean {
-  const t = lc(step.tool)
-  if (isSearch(step.tool)) return true
-  return ['load_web', 'web_page', 'fetch', 'read_web', 'places', 'weather', 'stock', 'currency', 'document', 'read_user'].some(
-    (k) => t.includes(k)
-  )
-}
-
 // A read_file on a /skills/<name>/SKILL.md path = the agent activating a skill.
 function skillOf(step: ToolStep): string | null {
   if (lc(step.tool) !== 'read_file') return null
@@ -48,86 +37,6 @@ function skillOf(step: ToolStep): string | null {
   if (typeof fp !== 'string' || !fp.includes('/skills/')) return null
   const m = fp.match(/\/skills\/([^/]+)\//)
   return m ? m[1] : null
-}
-
-interface Todo {
-  content?: string
-  status?: string
-}
-
-// Reconstruct the plan chronologically: associate each tool call (and each
-// reasoning run) with the todo that was in_progress when it happened. Steps
-// before any plan land in `preTools`.
-function buildPlan(steps: TimelineStep[]) {
-  let todos: Todo[] = []
-  let activeContent: string | null = null
-  const toolsByTodo = new Map<string, TimelineStep[]>()
-  const skillsByTodo = new Map<string, string[]>()
-  const preTools: TimelineStep[] = []
-  const preSkills: string[] = []
-
-  for (const s of steps) {
-    // Reasoning runs ride the same timeline as tool calls: nest under the
-    // active todo in arrival order, or lead the list when no plan exists yet.
-    if (isReasoningStep(s)) {
-      if (activeContent) {
-        const list = toolsByTodo.get(activeContent) ?? []
-        list.push(s)
-        toolsByTodo.set(activeContent, list)
-      } else {
-        preTools.push(s)
-      }
-      continue
-    }
-    const sk = skillOf(s)
-    if (sk) {
-      // A loaded skill nests under the todo active when it was read (e.g. the
-      // "read … skill documentation" step), so it shows as that step's child
-      // rather than a separate top-level entry. Skills read before any plan
-      // stay at the top.
-      if (activeContent) {
-        const list = skillsByTodo.get(activeContent) ?? []
-        if (!list.includes(sk)) list.push(sk)
-        skillsByTodo.set(activeContent, list)
-      } else if (!preSkills.includes(sk)) {
-        preSkills.push(sk)
-      }
-      continue
-    }
-    if (isTodo(s.tool)) {
-      if (Array.isArray(s.args?.todos)) {
-        const incoming: Todo[] = s.args.todos
-        // Merge: update status of existing items, append new ones — never drop.
-        const merged = [...todos]
-        for (const t of incoming) {
-          const idx = merged.findIndex((m) => m.content === t.content)
-          if (idx >= 0) merged[idx] = t
-          else merged.push(t)
-        }
-        todos = merged
-        // Advance the active step from THIS snapshot (the latest full plan state),
-        // not the accumulated `merged` list — otherwise a stale in_progress left
-        // over from an earlier snapshot keeps `find` pinned to the first todo, and
-        // every later tool wrongly nests under it. Take the last in_progress in the
-        // snapshot (the most recently started step) and only fall back if none.
-        let latestActive: string | null = null
-        for (const t of incoming) {
-          if (t.status === 'in_progress' && t.content) latestActive = t.content
-        }
-        activeContent = latestActive ?? activeContent
-      }
-      continue
-    }
-    // a real tool call
-    if (activeContent) {
-      const list = toolsByTodo.get(activeContent) ?? []
-      list.push(s)
-      toolsByTodo.set(activeContent, list)
-    } else {
-      preTools.push(s)
-    }
-  }
-  return { todos, toolsByTodo, skillsByTodo, preTools, preSkills }
 }
 
 // ── presentation ────────────────────────────────────────────────────────────
@@ -157,29 +66,21 @@ function singleStepInfo(tool: string, args: any) {
   return { Icon: Wrench, label: tool || 'Working', chip: undefined }
 }
 
-function CodeStep({ code, isRunning }: { code: string; isRunning?: boolean }) {
+function CodeStepContent({ code, isRunning }: { code: string; isRunning?: boolean }) {
   const [open, setOpen] = useState(false)
   // Show first non-empty line as preview chip in the header.
   const preview = code.split('\n').find((l) => l.trim()) ?? ''
 
   return (
-    <div className="omni-step-in rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
+    <div>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-[13px] text-[var(--foreground)] hover:bg-[var(--secondary)]/50 transition-colors"
+        className="flex w-full items-center gap-2 text-[13px] text-left hover:opacity-80 transition-opacity"
       >
-        {/* icon: pulses while running */}
-        <Terminal
-          size={14}
-          strokeWidth={1.75}
-          className={isRunning ? 'text-[var(--accent)] animate-pulse' : 'text-[var(--muted-foreground)]'}
-        />
-
-        <span className={isRunning ? 'omni-shimmer-text-accent font-medium' : 'text-[var(--muted-foreground)]'}>
+        <span className={isRunning ? 'omni-shimmer-text font-medium' : 'text-[var(--muted-foreground)]'}>
           {isRunning ? 'Running Python…' : 'Python'}
         </span>
 
-        {/* code preview chip */}
         {preview && !isRunning && (
           <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[11px] font-mono text-[var(--foreground)] max-w-[260px]">
             {preview.length > 48 ? preview.slice(0, 48) + '…' : preview}
@@ -188,12 +89,12 @@ function CodeStep({ code, isRunning }: { code: string; isRunning?: boolean }) {
 
         <ChevronDown
           size={14}
-          className={`ml-auto shrink-0 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
       {open && (
-        <div className="border-t border-[var(--border-subtle)]">
+        <div className="mt-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
           <pre className="p-3 overflow-x-auto text-[12px] leading-relaxed font-mono text-[var(--foreground)] bg-[color-mix(in_srgb,var(--foreground)_3%,var(--background))]">
             {code}
           </pre>
@@ -203,33 +104,27 @@ function CodeStep({ code, isRunning }: { code: string; isRunning?: boolean }) {
   )
 }
 
-function ToolRow({ step, isActive }: { step: ToolStep; isActive?: boolean }) {
-  // run_python (and any tool whose sole arg is `code`) → rich CodeStep.
+function ToolRowContent({ step, isActive }: { step: ToolStep; isActive?: boolean }) {
+  // run_python (and any tool whose sole arg is `code`) → rich, expandable code preview.
   if (typeof step.args?.code === 'string') {
-    return <CodeStep code={step.args.code} isRunning={isActive} />
+    return <CodeStepContent code={step.args.code} isRunning={isActive} />
   }
-  const { Icon, label, chip } = singleStepInfo(step.tool, step.args)
+  const { label, chip } = singleStepInfo(step.tool, step.args)
   return (
-    <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-      <Icon size={13} strokeWidth={1.75} className="shrink-0" />
+    <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
       <span className="shrink-0">{label}</span>
       {chip && <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[12px] text-[var(--foreground)]">{chip}</span>}
     </div>
   )
 }
 
-// A reasoning run inside a step's timeline: "⚡ Insights" leads INLINE into
-// the reasoning text, the whole thing clamped to 2 lines total. A ChevronDown
-// (the same expand affordance used everywhere else) sits at the end of the
-// clamped block and toggles the full text.
-const REASONING_CLAMP_CHARS = 160
-
-// Reveal pacing for live reasoning — same buffered-typewriter idea as
-// StreamingText: a steady base rate, faster when a backend batch lands a big
-// backlog at once, so buffered chunks drain smoothly instead of popping. When
-// the run ends (`animate` flips false) the remainder keeps draining at tail
-// pacing instead of snapping out — fast models close a run with most of its
-// text still unrevealed.
+// Markdown-rendered reasoning, clamped to ~3 lines with a manual expand toggle.
+// Reveal pacing is a buffered typewriter (same idea as StreamingText): a steady
+// base rate, faster when a backend batch lands a big backlog at once, so
+// buffered chunks drain smoothly instead of popping. When the run ends
+// (`animate` flips false) the remainder keeps draining at tail pacing instead
+// of snapping out — fast models close a run with most of its text unrevealed.
+const REASONING_CLAMP_CHARS = 220
 const REASONING_CPS = 140
 const REASONING_CATCHUP = 3
 const REASONING_TAIL_CPS = 280
@@ -286,11 +181,11 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
   const open = active || expanded || !collapsible
 
   // Animated open/close: the clamp itself can't transition, so height does the
-  // moving. Opening: unclamp immediately (ellipsis gives way to real text) and
-  // grow max-height from the 2-line height to the full scrollHeight. Closing:
-  // shrink max-height back down first, and only re-apply the clamp (for its
-  // ellipsis) once the transition lands. `maxH === null` means "no cap" —
-  // steady state, so the live typewriter can grow the box freely per-frame.
+  // moving. Opening: unclamp immediately and grow max-height from the 3-line
+  // height to the full scrollHeight. Closing: shrink max-height back down
+  // first, and only re-apply the clamp once the transition lands. `maxH ===
+  // null` means "no cap" — steady state, so the live typewriter can grow the
+  // box freely per-frame.
   const boxRef = useRef<HTMLDivElement | null>(null)
   const [clamped, setClamped] = useState(!open)
   const [maxH, setMaxH] = useState<string | null>(null)
@@ -305,7 +200,7 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
       return
     }
     const lineH = parseFloat(getComputedStyle(el).lineHeight) || 21
-    const collapsedH = Math.ceil(lineH * 2)
+    const collapsedH = Math.ceil(lineH * 3)
     if (open) {
       setClamped(false)
       setMaxH(`${collapsedH}px`)
@@ -319,10 +214,7 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
   if (!trimmed) return null
 
   return (
-    <div
-      onClick={collapsible ? () => setExpanded((v) => !v) : undefined}
-      className={`omni-step-in relative ${collapsible ? 'cursor-pointer' : ''}`}
-    >
+    <div className="relative">
       <div
         ref={boxRef}
         onTransitionEnd={(e) => {
@@ -331,137 +223,108 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
           setMaxH(null)
         }}
         style={maxH !== null ? { maxHeight: maxH } : undefined}
-        className={`overflow-hidden transition-[max-height] duration-300 ease-in-out text-[13px] leading-relaxed text-[var(--muted-foreground)] ${
-          clamped ? 'line-clamp-2' : ''
-        } ${collapsible ? 'pr-5' : ''}`}
+        className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${clamped ? 'relative' : ''}`}
       >
-        <Zap size={13} strokeWidth={1.75} className="inline align-[-2px] mr-1.5 shrink-0" />
-        <span className={`font-medium ${active ? 'omni-shimmer-text' : ''}`}>Insights</span>{' '}
-        <span className={clamped ? '' : 'whitespace-pre-wrap'}>{revealed}</span>
-      </div>
-      {collapsible && (
-        <ChevronDown
-          size={14}
-          className={`absolute right-0 bottom-[4px] text-[var(--muted-foreground)] transition-transform duration-300 ${
-            open ? 'rotate-180' : ''
-          }`}
+        <MarkdownMessage
+          content={revealed}
+          className="text-[13px] leading-relaxed text-[var(--muted-foreground)] [&_p]:my-1 first:[&_p]:mt-0 last:[&_p]:mb-0"
         />
-      )}
-    </div>
-  )
-}
-
-function SkillRow({ name }: { name: string }) {
-  return (
-    <div className="omni-step-in flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-      <Blocks size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]" />
-      <span>
-        Using <span className="text-[var(--foreground)]">{name}</span> skill
-      </span>
-    </div>
-  )
-}
-
-// A unified step group: a real todo, or a synthesized one (see synthesizeGroups).
-interface Group {
-  key: string
-  content: string
-  status: 'completed' | 'in_progress' | 'pending'
-  tools: TimelineStep[]
-  skills: string[]
-}
-
-// Fallback for when the agent ran without writing any todos: keep the same
-// two-level hierarchy by grouping contiguous steps into a synthetic step —
-// retrieval tools collapse into "Searching through the internet", other tools
-// into a generic working step, and a turn that OPENS with reasoning gets a
-// "Reasoning" step. Later reasoning runs glue onto whatever group is underway
-// (they narrate it) rather than splitting the list. The last group is
-// in-progress while still thinking.
-function synthesizeGroups(tools: TimelineStep[], thinking: boolean): Group[] {
-  const groups: Group[] = []
-  let cat: 'retrieval' | 'other' | 'reasoning' | null = null
-  for (const s of tools) {
-    if (isReasoningStep(s)) {
-      if (!groups.length) {
-        groups.push({ key: 'g0', content: 'Reasoning', status: 'completed', tools: [], skills: [] })
-        cat = 'reasoning'
-      }
-      groups[groups.length - 1].tools.push(s)
-      continue
-    }
-    const c = isRetrieval(s) ? 'retrieval' : 'other'
-    if (!groups.length || c !== cat) {
-      groups.push({
-        key: `g${groups.length}`,
-        content: c === 'retrieval' ? 'Searching through the internet' : 'Working through the task',
-        status: 'completed',
-        tools: [],
-        skills: [],
-      })
-      cat = c
-    }
-    groups[groups.length - 1].tools.push(s)
-  }
-  if (thinking && groups.length) groups[groups.length - 1].status = 'in_progress'
-  return groups
-}
-
-// One step (todo): a check once done, otherwise just its text — the active one
-// shimmers (the same neutral effect the answer uses while thinking). Its tools
-// and skills nest beneath it.
-function GroupRow({ group, thinking, isLast }: { group: Group; thinking: boolean; isLast?: boolean }) {
-  const done = group.status === 'completed'
-  const active = thinking && group.status === 'in_progress'
-  const [isExpanded, setIsExpanded] = useState(active)
-
-  useEffect(() => {
-    if (done) setIsExpanded(false)
-    else if (active) setIsExpanded(true)
-  }, [done, active])
-
-  const hasTools = group.skills.length > 0 || group.tools.length > 0
-
-  return (
-    <div className="omni-step-in relative pl-[20px]">
-      {!isLast && (
-        <div className="absolute left-[3px] top-[11px] w-[2px] bg-[var(--border-subtle)]" style={{ height: 'calc(100% + 16px)' }} />
-      )}
-      <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-        <div className={`h-full w-full rounded-full ${active ? 'bg-[var(--foreground)] animate-pulse' : 'bg-[var(--border-subtle)]'}`} />
-      </div>
-      
-      <div className="flex items-start gap-2 text-[13px]">
-        {hasTools ? (
-          <button 
-            onClick={() => setIsExpanded(e => !e)}
-            className={`flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity ${active ? 'omni-shimmer-text font-medium' : done ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}`}
-          >
-            <span>{group.content}</span>
-            <ChevronDown size={14} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-[var(--muted-foreground)]`} />
-          </button>
-        ) : (
-          <span className={active ? 'omni-shimmer-text font-medium' : done ? 'text-[var(--muted-foreground)]' : 'text-[var(--foreground)]'}>
-            {group.content}
-          </span>
+        {clamped && collapsible && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-[var(--background)] to-transparent" />
         )}
       </div>
-      {hasTools && isExpanded && (
-        <div className="mt-2 space-y-1.5">
-          {group.skills.map((sk, k) => (
-            <SkillRow key={`s${k}`} name={sk} />
-          ))}
-          {group.tools.map((s, k) =>
-            isReasoningStep(s) ? (
-              <ReasoningText key={`t${k}`} content={s.content} isActive={active && k === group.tools.length - 1} />
-            ) : (
-              <ToolRow key={`t${k}`} step={s} isActive={active && k === group.tools.length - 1} />
-            )
-          )}
-        </div>
+      {collapsible && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 flex items-center gap-0.5 text-[12px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+        >
+          {open ? 'Show less' : 'Show more'}
+          <ChevronDown size={13} className={`transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+        </button>
       )}
     </div>
   )
+}
+
+function SkillRowContent({ name }: { name: string }) {
+  return (
+    <div className="text-[13px] text-[var(--muted-foreground)]">
+      Using <span className="text-[var(--foreground)]">{name}</span> skill
+    </div>
+  )
+}
+
+// A single flattened timeline entry: reasoning, a skill activation, or a plain
+// tool call — all rendered at the same nesting level (see TimelineRow).
+type Item =
+  | { kind: 'reasoning'; step: ReasoningStep }
+  | { kind: 'skill'; name: string; step: ToolStep }
+  | { kind: 'tool'; step: ToolStep }
+
+// Flatten the raw step stream into render-ready items, chronologically:
+// `write_todos` calls are dropped entirely (no longer used to group steps —
+// the plan is internal bookkeeping, not user-facing structure), a `read_file`
+// on a skill's SKILL.md becomes a `skill` item instead of a raw tool row, and
+// everything else rides through as-is.
+function buildItems(steps: TimelineStep[]): Item[] {
+  const items: Item[] = []
+  for (const s of steps) {
+    if (isReasoningStep(s)) {
+      items.push({ kind: 'reasoning', step: s })
+      continue
+    }
+    if (isTodo(s.tool)) continue
+    const sk = skillOf(s)
+    if (sk) {
+      items.push({ kind: 'skill', name: sk, step: s })
+      continue
+    }
+    items.push({ kind: 'tool', step: s })
+  }
+  return items
+}
+
+// One row on the shared vertical timeline: a connecting line on the left with
+// this item's icon sitting on top of it (a plain dot for reasoning, the
+// tool's own icon for tool calls, Blocks for skills), and its content to the
+// right.
+function TimelineRow({ item, isActive, isLast }: { item: Item; isActive: boolean; isLast: boolean }) {
+  let Icon: LucideIcon | null = null
+  let content: ReactNode
+  if (item.kind === 'reasoning') {
+    content = <ReasoningText content={item.step.content} isActive={isActive} />
+  } else if (item.kind === 'skill') {
+    Icon = Blocks
+    content = <SkillRowContent name={item.name} />
+  } else {
+    const isCode = typeof item.step.args?.code === 'string'
+    Icon = isCode ? Terminal : singleStepInfo(item.step.tool, item.step.args).Icon
+    content = <ToolRowContent step={item.step} isActive={isActive} />
+  }
+
+  return (
+    <div className="omni-step-in relative pl-[22px]">
+      {!isLast && (
+        <div className="absolute left-[7px] top-[18px] w-[2px] bg-[var(--border-subtle)]" style={{ height: 'calc(100% + 4px)' }} />
+      )}
+      <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+        {Icon ? (
+          <Icon size={12} strokeWidth={1.75} className={isActive ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'} />
+        ) : (
+          <div className={`h-2 w-2 rounded-full ${isActive ? 'bg-[var(--foreground)] animate-pulse' : 'bg-[var(--border-subtle)]'}`} />
+        )}
+      </div>
+      {content}
+    </div>
+  )
+}
+
+function formatElapsed(totalSeconds: number) {
+  const s = Math.max(0, Math.round(totalSeconds))
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const rem = s % 60
+  return `${m}m ${String(rem).padStart(2, '0')}s`
 }
 
 interface ToolActivityProps {
@@ -472,123 +335,82 @@ interface ToolActivityProps {
 }
 
 export function ToolActivity({ steps = [], isStreaming, answered, drafting }: ToolActivityProps) {
-  const { todos, toolsByTodo, skillsByTodo, preTools, preSkills } = buildPlan(steps)
-
-  // Thinking phase = streaming with no answer yet.
+  // Thinking phase = streaming with no answer yet. The header's elapsed timer
+  // runs for exactly this phase, then freezes the moment an answer starts.
   const thinking = !!isStreaming && !answered
-  const [open, setOpen] = useState(false)
 
-  // Reveal the plan incrementally: show completed steps plus the current one
-  // (the first not-yet-completed todo), hiding steps that haven't started. Once
-  // answered, the whole checked-off list shows.
-  const firstIncomplete = todos.findIndex((t) => t.status !== 'completed')
-  const visibleTodos = answered || firstIncomplete === -1 ? todos : todos.slice(0, firstIncomplete + 1)
+  const items = buildItems(steps)
+  const hasContent = items.length > 0 || !!drafting
+  const showPlaceholder = thinking && !drafting && items.length === 0
 
-  // Always render a todo layer. With real todos, use them; otherwise synthesize
-  // groups out of the loose tool calls so a plain tool run (fast OR pro) still
-  // reads as "Searching through the internet" etc. Skills/tools nest beneath.
-  let groups: Group[]
-  if (todos.length > 0) {
-    groups = visibleTodos.map((t, i) => ({
-      key: `td${i}`,
-      content: t.content || '',
-      status: (answered ? 'completed' : t.status) as Group['status'],
-      tools: t.content ? toolsByTodo.get(t.content) ?? [] : [],
-      skills: t.content ? skillsByTodo.get(t.content) ?? [] : [],
-    }))
-    // Fallback: tools/skills that ran before the first `write_todos` would otherwise
-    // render as bare standalone rows at the top — they briefly appeared under a
-    // synthetic "Searching…" step, then lost that wrapper the moment the real plan
-    // arrived. Fold them into the first todo so they stay grouped instead of
-    // orphaning. (The first todo is always visible — visibleTodos slices from 0.)
-    if ((preTools.length || preSkills.length) && groups.length > 0) {
-      groups[0] = {
-        ...groups[0],
-        tools: [...preTools, ...groups[0].tools],
-        skills: [...preSkills, ...groups[0].skills],
-      }
-    }
-  } else {
-    groups = synthesizeGroups(preTools, thinking)
-    // Any skills read before a plan (rare without todos) lead the first group.
-    if (preSkills.length) {
-      if (!groups.length) groups.push({ key: 'g0', content: 'Working through the task', status: thinking ? 'in_progress' : 'completed', tools: [], skills: [] })
-      groups[0] = { ...groups[0], skills: [...preSkills, ...groups[0].skills] }
-    }
-  }
+  const [open, setOpen] = useState(true)
 
-  // Pre-plan tools/skills are now folded into the first todo (above), so nothing
-  // renders loose once a real plan exists.
-  const looseSkills: string[] = []
-  const looseTools: ToolStep[] = []
-
-  // Placeholder shimmer the instant thinking starts, before the first
-  // reasoning token / tool call produces a real group — so the UI never sits
-  // empty while the model spins up.
-  const showPlaceholder = thinking && !drafting && groups.length === 0
-
-  const hasContent = groups.length > 0 || looseTools.length > 0 || looseSkills.length > 0 || !!drafting
-  const stepCount = groups.length || looseTools.length + looseSkills.length
-  const showBody = thinking || open
+  // Live elapsed timer: starts at the first step's own timestamp (or mount
+  // time if nothing has streamed in yet), ticks every second while thinking,
+  // and freezes automatically once `thinking` goes false (the interval is
+  // torn down, so `now` simply stops advancing).
+  const startRef = useRef<number | null>(null)
+  if (startRef.current == null && steps.length > 0) startRef.current = steps[0].timestamp
+  useEffect(() => {
+    if (startRef.current == null) startRef.current = Date.now()
+  }, [])
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!thinking) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [thinking])
+  const elapsedSeconds = startRef.current != null ? (now - startRef.current) / 1000 : 0
 
   if (!thinking && !hasContent) return null
 
   return (
     <div className="mb-3 space-y-2">
-      {!thinking && (
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <span>
-            Completed {stepCount} step{stepCount === 1 ? '' : 's'}
-          </span>
-          <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-        </button>
-      )}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+      >
+        <span className={thinking ? 'omni-shimmer-text font-medium' : ''}>
+          {thinking ? `Thinking for ${formatElapsed(elapsedSeconds)}` : `Completed, thinking for ${formatElapsed(elapsedSeconds)}`}
+        </span>
+        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
 
-      {showBody && (
+      {open && (
         <div className="space-y-4 ml-1.5 mt-2 py-1">
-          {/* loose skills/tools that ran before any real plan */}
-          {(looseSkills.length > 0 || looseTools.length > 0) && (
-            <div className="pl-[20px] space-y-4">
-              {looseSkills.map((sk, i) => (
-                <SkillRow key={`sk${i}`} name={sk} />
-              ))}
-              {looseTools.map((s, i) => (
-                <ToolRow key={`pre${i}`} step={s} isActive={thinking && i === looseTools.length - 1} />
-              ))}
-            </div>
-          )}
-
           {/* Nothing has streamed yet — show a bare "Thinking" shimmer so the
               step area isn't empty while the model spins up. Replaced by the
-              first real group (reasoning or tool) the moment one arrives. */}
+              first real item (reasoning or tool) the moment one arrives. */}
           {showPlaceholder && (
-            <div className="omni-step-in relative pl-[20px]">
-              <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-                <div className="h-full w-full rounded-full bg-[var(--foreground)] animate-pulse" />
+            <div className="omni-step-in relative pl-[22px]">
+              <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+                <div className="h-2 w-2 rounded-full bg-[var(--foreground)] animate-pulse" />
               </div>
               <span className="omni-shimmer-text font-medium text-[13px]">Thinking</span>
             </div>
           )}
 
-          {/* the plan — real todos or synthesized groups */}
-          {groups.map((g, i) => {
-            const isLast = i === groups.length - 1 && !drafting
-            return <GroupRow key={g.key} group={g} thinking={thinking} isLast={isLast} />
+          {items.map((item, i) => {
+            const isLastItem = i === items.length - 1 && !drafting
+            return (
+              <TimelineRow
+                key={i}
+                item={item}
+                isActive={thinking && isLastItem}
+                isLast={isLastItem}
+              />
+            )
           })}
 
           {drafting && (
-            <div className="omni-step-in relative pl-[20px]">
-              <div className="absolute left-[0px] top-[7px] flex h-2 w-2 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-                <div className="h-full w-full rounded-full bg-[var(--accent)] animate-pulse" />
+            <div className="omni-step-in relative pl-[22px]">
+              <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
+                <div className="h-2 w-2 rounded-full bg-[var(--accent)] animate-pulse" />
               </div>
-              <div className="flex items-start gap-2 text-[13px]">
-                <span className="omni-shimmer-text-accent font-medium">
-                  {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
-                </span>
-              </div>
+              <span className="omni-shimmer-text-accent font-medium text-[13px]">
+                {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
+              </span>
             </div>
           )}
         </div>
