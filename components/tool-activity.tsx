@@ -241,12 +241,13 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
               ? { maxHeight: `${REASONING_CLAMP_FALLBACK_LINE_H * REASONING_CLAMP_LINES}px` }
               : undefined
         }
-        className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
+        // text-[13px] leading-relaxed here (in addition to `.reasoning-markdown`
+        // on the MarkdownMessage child below) is what getComputedStyle reads for
+        // the line-height measurement — boxRef has no competing classes of its
+        // own, so unlike the child these apply cleanly with nothing to fight.
+        className="overflow-hidden text-[13px] leading-relaxed transition-[max-height] duration-300 ease-in-out"
       >
-        <MarkdownMessage
-          content={revealed}
-          className="text-[13px] leading-relaxed text-[var(--muted-foreground)] [&_p]:my-1 first:[&_p]:mt-0 last:[&_p]:mb-0"
-        />
+        <MarkdownMessage content={revealed} className="reasoning-markdown" />
         {clamped && collapsible && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-[var(--background)] to-transparent" />
         )}
@@ -400,9 +401,11 @@ interface ToolActivityProps {
   isStreaming?: boolean
   answered?: boolean
   drafting?: 'report' | 'chart' | null
+  /** When this whole turn began (epoch ms) — see `ChatMessage.turnStartedAt`. */
+  turnStartedAt?: number
 }
 
-export function ToolActivity({ steps = [], isStreaming, answered, drafting }: ToolActivityProps) {
+export function ToolActivity({ steps = [], isStreaming, answered, drafting, turnStartedAt }: ToolActivityProps) {
   // Thinking phase = streaming with no answer yet. The header's elapsed timer
   // runs for exactly this phase, then freezes the moment an answer starts.
   const thinking = !!isStreaming && !answered
@@ -421,14 +424,26 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   // ── elapsed timer ──────────────────────────────────────────────────────
   // While thinking, tick live off the wall clock. The instant thinking ends
   // — whether that happens live in this session, or the message is loaded
-  // already-completed from history — freeze using the STORED step
-  // timestamps (first vs last), never the current wall-clock time. Using
-  // "now" as the reference for an already-finished message is what caused
-  // the timer to read a huge, ever-growing number on reload: it was really
-  // measuring "time since this message was sent", not "time spent thinking".
+  // already-completed from history — freeze using STORED timestamps, never
+  // the current wall-clock time. Using "now" as the reference for an
+  // already-finished message is what caused the timer to read a huge,
+  // ever-growing number on reload: it was really measuring "time since this
+  // message was sent", not "time spent thinking".
+  //
+  // The start anchor prefers `turnStartedAt` (set once when the stream
+  // begins, before any step exists) over the first step's own timestamp.
+  // chat-view renders this message's tool activity via a DIFFERENT JSX
+  // branch once its `blocks` array goes from empty to non-empty (a plain
+  // fallback `<ToolActivity>` before the first step, a keyed one inside
+  // `blocks.map(...)` after) — React remounts a fresh instance across that
+  // switch, wiping any component-local "when did this start" state. Anchor
+  // to a value that comes from the message itself instead, so it survives
+  // that remount; `firstTs` stays only as a fallback for messages persisted
+  // before this field existed.
   const firstTs = steps[0]?.timestamp
   const lastTs = steps.length > 0 ? steps[steps.length - 1].timestamp : undefined
   const startRef = useRef<number | null>(null)
+  if (startRef.current == null && turnStartedAt != null) startRef.current = turnStartedAt
   if (startRef.current == null && firstTs != null) startRef.current = firstTs
   useEffect(() => {
     if (startRef.current == null && thinking) startRef.current = Date.now()
@@ -457,17 +472,12 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
   // after a page refresh: nothing ever re-collapses a message that was never
   // observed transitioning from thinking to done.
   const [open, setOpen] = useState(() => thinking)
-  const [showDone, setShowDone] = useState(false)
   const prevThinkingRef = useRef(thinking)
   useEffect(() => {
     const was = prevThinkingRef.current
     prevThinkingRef.current = thinking
     if (was && !thinking && open) {
-      setShowDone(true)
-      const t = setTimeout(() => {
-        setShowDone(false)
-        setOpen(false)
-      }, DONE_LINGER_MS)
+      const t = setTimeout(() => setOpen(false), DONE_LINGER_MS)
       return () => clearTimeout(t)
     }
   }, [thinking, open])
@@ -506,8 +516,11 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting }: To
     )
   }
 
+  // Done is a permanent capstone on the completed timeline, not a one-time
+  // animation beat — it must still be there if the user re-expands a turn
+  // that already auto-collapsed, or reopens a completed one from history.
   const showSkeletonTail = thinking && !drafting
-  const showDoneTail = showDone && !drafting
+  const showDoneTail = !thinking && !drafting && hasContent
   const hasTail = showSkeletonTail || showDoneTail || !!drafting
 
   return (

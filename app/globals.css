@@ -846,3 +846,51 @@
   color: transparent;
   animation: omni-shimmer 2.4s linear infinite;
 }
+
+/* ── Reasoning step markdown — compact aside, not full-answer styling ────
+   MarkdownMessage's headings/paragraphs/lists each carry their own hardcoded
+   Tailwind classes (mb-4, leading-[1.8], text-2xl, ...) sized for the main
+   answer. Those are set directly ON those elements, so a className passed to
+   MarkdownMessage's root can't reach past them via inheritance — and even at
+   the root, "text-[13px]" vs MarkdownMessage's own "text-[16px]" is a
+   same-specificity coin flip decided by Tailwind's build-time class order,
+   not the order they appear in the className string. Real selectors here
+   settle both deterministically instead of relying on either. */
+.reasoning-markdown {
+  font-size: 13px !important;
+  line-height: 1.625 !important;
+  color: var(--muted-foreground);
+}
+.reasoning-markdown p,
+.reasoning-markdown li,
+.reasoning-markdown h1,
+.reasoning-markdown h2,
+.reasoning-markdown h3 {
+  font-size: 13px;
+  line-height: 1.625;
+}
+.reasoning-markdown h1,
+.reasoning-markdown h2,
+.reasoning-markdown h3 {
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+  border: none;
+  padding-bottom: 0;
+}
+.reasoning-markdown h1:first-child,
+.reasoning-markdown h2:first-child,
+.reasoning-markdown h3:first-child,
+.reasoning-markdown p:first-child {
+  margin-top: 0;
+}
+.reasoning-markdown p {
+  margin: 0.25em 0;
+}
+.reasoning-markdown p:last-child {
+  margin-bottom: 0;
+}
+.reasoning-markdown ul,
+.reasoning-markdown ol {
+  margin: 0.25em 0;
+  padding-left: 1.1em;
+}

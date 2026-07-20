@@ -1107,6 +1107,12 @@ export function ChatView({
 
       const clearSlowHint = () => {}
 
+      // Captured once, right as this turn's stream starts — the step-timeline
+      // header's elapsed timer anchors to this (not the first step's own
+      // timestamp), so it stays correct across the mid-stream remount that
+      // happens when `blocks` goes from empty to non-empty (see ChatMessage.turnStartedAt).
+      const turnStartedAt = Date.now()
+
       const steps: TimelineStep[] = []
       let text = ''
       // The reasoning run currently receiving tokens. A tool call (or answer
@@ -1147,6 +1153,7 @@ export function ChatView({
             artifacts: [...artifacts],
             sources,
             drafting,
+            turnStartedAt,
             ...regenTag,
           },
         ])
@@ -1243,7 +1250,7 @@ export function ChatView({
               const finalText = text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : '')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, turnStartedAt, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -1259,7 +1266,7 @@ export function ChatView({
                 text || (artifacts.length ? "I've prepared a chart for you — see the panel on the right." : 'No response.')
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
-                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, ...regenTag },
+                { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, turnStartedAt, ...regenTag },
               ]
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
@@ -1275,7 +1282,7 @@ export function ChatView({
       if (isStoppingRef.current) {
         const stoppedMessages: ChatMessage[] = [
           ...baseHistory,
-          { role: 'assistant', content: text, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, ...regenTag },
+          { role: 'assistant', content: text, steps, blocks, widgets, artifacts, sources, drafting: null, stoppedByUser: true, turnStartedAt, ...regenTag },
         ]
         setMessages(stoppedMessages)
         syncToBackend(stoppedMessages, titleRef.current)
@@ -1973,6 +1980,7 @@ export function ChatView({
                                   isStreaming={isCurrentlyStreaming && isLastBlock}
                                   answered={followedByText || !isCurrentlyStreaming}
                                   drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
+                                  turnStartedAt={msg.turnStartedAt}
                                 />
                               )
                             }
@@ -2014,6 +2022,7 @@ export function ChatView({
                               isStreaming={i === streamingIndex && isLoading}
                               answered={!!parsed.text}
                               drafting={reportDrafting ? 'report' : msg.drafting}
+                              turnStartedAt={msg.turnStartedAt}
                             />
                             {/* answer text and inline report cards, in source order */}
                             {parsed.segments.map((seg, si) =>
