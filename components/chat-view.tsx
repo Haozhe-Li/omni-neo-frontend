@@ -10,7 +10,7 @@ import { FileUploadArea } from '@/components/file-upload-area'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesPanel } from '@/components/sources-panel'
-import { ToolActivity } from '@/components/tool-activity'
+import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
@@ -813,7 +813,22 @@ export function ChatView({
     () => messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? mergedSources, verifiedClaims: m.reportVerifiedClaims?.[r.id] }))),
     [messages, mergedSources]
   )
-  const allReports: ReportArtifact[] = useMemo(() => [...parsedReports, ...legacyReports], [parsedReports, legacyReports])
+  // Synthetic "reports" for run_python code steps so they can open in the same
+  // artifact panel — id prefixes here must match what the two `<ToolActivity>`
+  // call sites below pass as `idPrefix` for the very same steps array.
+  const scriptReports: ReportArtifact[] = useMemo(
+    () =>
+      messages.flatMap((m, i) =>
+        m.blocks && m.blocks.length > 0
+          ? m.blocks.flatMap((block, bi) => (block.type === 'tools' ? scriptReportsFromSteps(block.steps, `m${i}-b${bi}`) : []))
+          : scriptReportsFromSteps(m.steps, `m${i}`)
+      ),
+    [messages]
+  )
+  const allReports: ReportArtifact[] = useMemo(
+    () => [...parsedReports, ...legacyReports, ...scriptReports],
+    [parsedReports, legacyReports, scriptReports]
+  )
   const draftingReport = parsedReports.some((r) => !r.complete)
   const hasPanelContent = allArtifacts.length > 0 || allReports.length > 0 || draftingReport
 
@@ -1981,6 +1996,8 @@ export function ChatView({
                                   answered={followedByText || !isCurrentlyStreaming}
                                   drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
                                   turnStartedAt={msg.turnStartedAt}
+                                  idPrefix={`m${i}-b${bi}`}
+                                  onOpenScript={openPanel}
                                 />
                               )
                             }
@@ -2023,6 +2040,8 @@ export function ChatView({
                               answered={!!parsed.text}
                               drafting={reportDrafting ? 'report' : msg.drafting}
                               turnStartedAt={msg.turnStartedAt}
+                              idPrefix={`m${i}`}
+                              onOpenScript={openPanel}
                             />
                             {/* answer text and inline report cards, in source order */}
                             {parsed.segments.map((seg, si) =>
