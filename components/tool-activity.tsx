@@ -14,10 +14,47 @@ import {
   Terminal,
   Blocks,
   CircleCheck,
+  Code2,
   type LucideIcon,
 } from 'lucide-react'
-import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep } from '@/lib/types'
+import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep, type ReportArtifact } from '@/lib/types'
 import { MarkdownMessage } from '@/components/markdown-message'
+
+// One `run_python` call's filename, defaulted the same way everywhere it's
+// read from — the args come straight off a persisted tool-call step, so an
+// older turn recorded before the backend started sending `filename` (or an
+// agent that skips the arg) must fall back identically here and in
+// `scriptReportsFromSteps` below, or the card's title and the panel's title
+// would disagree.
+function scriptFilename(args: any): string {
+  const f = args?.filename
+  return typeof f === 'string' && f.trim() ? f.trim() : 'script.py'
+}
+
+// Synthesizes a "report" per `run_python` call so its code can be opened in
+// the same side-panel reader used for `<report>` artifacts — not a real
+// persisted report, just `content` wrapped in a fenced code block, which
+// rides through the exact same MarkdownMessage + rehype-highlight rendering
+// path as any code block in an answer (same syntax highlighting, same
+// light/dark theme, for free). `idPrefix` must match what `TimelineRow`
+// below computes for the same steps array so a click opens the same id this
+// produces — see the two `<ToolActivity>` call sites in chat-view.tsx.
+export function scriptReportsFromSteps(steps: TimelineStep[] | undefined, idPrefix: string): ReportArtifact[] {
+  if (!steps) return []
+  const out: ReportArtifact[] = []
+  steps.forEach((s, i) => {
+    if (isReasoningStep(s)) return
+    const code = (s as ToolStep).args?.code
+    if (typeof code !== 'string') return
+    out.push({
+      id: `${idPrefix}-script-${i}`,
+      title: scriptFilename((s as ToolStep).args),
+      content: '```python\n' + code + '\n```',
+      complete: true,
+    })
+  })
+  return out
+}
 
 function domainOf(url: string) {
   try {
@@ -67,48 +104,54 @@ function singleStepInfo(tool: string, args: any) {
   return { Icon: Wrench, label: tool || 'Working', chip: undefined }
 }
 
-function CodeStepContent({ code, isRunning }: { code: string; isRunning?: boolean }) {
-  const [open, setOpen] = useState(false)
-  // Show first non-empty line as preview chip in the header.
-  const preview = code.split('\n').find((l) => l.trim()) ?? ''
-
+// run_python's code, shown Perplexity-style: a fixed "Running Python Code"
+// label plus a single clickable file chip (no inline expansion) — clicking
+// opens the code in the artifact side-panel instead, where it renders
+// through the same highlighted-code path as an answer's own code blocks.
+function ScriptCard({ filename, isActive, onOpen }: { filename: string; isActive?: boolean; onOpen?: () => void }) {
   return (
     <div>
+      <div className={`mb-1.5 text-[13px] ${isActive ? 'omni-shimmer-text-accent font-medium' : 'text-[var(--muted-foreground)]'}`}>
+        Running Python Code
+      </div>
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-[13px] text-left hover:opacity-80 transition-opacity"
+        type="button"
+        onClick={onOpen}
+        disabled={!onOpen}
+        className="group flex max-w-[280px] items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-2.5 py-2 text-left transition-colors disabled:cursor-default enabled:hover:bg-[var(--secondary)]/60 enabled:cursor-pointer"
       >
-        <span className={isRunning ? 'omni-shimmer-text font-medium' : 'text-[var(--muted-foreground)]'}>
-          {isRunning ? 'Running Python…' : 'Python'}
-        </span>
-
-        {preview && !isRunning && (
-          <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[11px] font-mono text-[var(--foreground)] max-w-[260px]">
-            {preview.length > 48 ? preview.slice(0, 48) + '…' : preview}
-          </span>
-        )}
-
-        <ChevronDown
-          size={14}
-          className={`shrink-0 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {open && (
-        <div className="mt-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
-          <pre className="p-3 overflow-x-auto text-[12px] leading-relaxed font-mono text-[var(--foreground)] bg-[color-mix(in_srgb,var(--foreground)_3%,var(--background))]">
-            {code}
-          </pre>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)]">
+          <Code2 size={14} strokeWidth={1.75} />
         </div>
-      )}
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-medium text-[var(--foreground)]">{filename}</div>
+          <div className="text-[11px] text-[var(--muted-foreground)]">Python</div>
+        </div>
+      </button>
     </div>
   )
 }
 
-function ToolRowContent({ step, isActive }: { step: ToolStep; isActive?: boolean }) {
-  // run_python (and any tool whose sole arg is `code`) → rich, expandable code preview.
+function ToolRowContent({
+  step,
+  isActive,
+  scriptId,
+  onOpenScript,
+}: {
+  step: ToolStep
+  isActive?: boolean
+  scriptId?: string
+  onOpenScript?: (id: string) => void
+}) {
+  // run_python (and any tool whose sole arg is `code`) → clickable script card.
   if (typeof step.args?.code === 'string') {
-    return <CodeStepContent code={step.args.code} isRunning={isActive} />
+    return (
+      <ScriptCard
+        filename={scriptFilename(step.args)}
+        isActive={isActive}
+        onOpen={scriptId && onOpenScript ? () => onOpenScript(scriptId) : undefined}
+      />
+    )
   }
   const { label, chip } = singleStepInfo(step.tool, step.args)
   return (
@@ -278,28 +321,30 @@ function SkillRowContent({ name }: { name: string }) {
 type Item =
   | { kind: 'reasoning'; step: ReasoningStep }
   | { kind: 'skill'; name: string; step: ToolStep }
-  | { kind: 'tool'; step: ToolStep }
+  | { kind: 'tool'; step: ToolStep; stepIndex: number }
 
 // Flatten the raw step stream into render-ready items, chronologically:
 // `write_todos` calls are dropped entirely (no longer used to group steps —
 // the plan is internal bookkeeping, not user-facing structure), a `read_file`
 // on a skill's SKILL.md becomes a `skill` item instead of a raw tool row, and
-// everything else rides through as-is.
+// everything else rides through as-is. `stepIndex` (position in the original
+// `steps` array, not in this filtered list) is kept on tool items so a code
+// step's card can be given an id that matches `scriptReportsFromSteps`.
 function buildItems(steps: TimelineStep[]): Item[] {
   const items: Item[] = []
-  for (const s of steps) {
+  steps.forEach((s, i) => {
     if (isReasoningStep(s)) {
       items.push({ kind: 'reasoning', step: s })
-      continue
+      return
     }
-    if (isTodo(s.tool)) continue
+    if (isTodo(s.tool)) return
     const sk = skillOf(s)
     if (sk) {
       items.push({ kind: 'skill', name: sk, step: s })
-      continue
+      return
     }
-    items.push({ kind: 'tool', step: s })
-  }
+    items.push({ kind: 'tool', step: s, stepIndex: i })
+  })
   return items
 }
 
@@ -335,7 +380,19 @@ function TimelineLine({ isLast }: { isLast: boolean }) {
 // this item's icon sitting on top of it (a plain dot for reasoning, the
 // tool's own icon for tool calls, Blocks for skills), and its content to the
 // right.
-function TimelineRow({ item, isActive, isLast }: { item: Item; isActive: boolean; isLast: boolean }) {
+function TimelineRow({
+  item,
+  isActive,
+  isLast,
+  idPrefix,
+  onOpenScript,
+}: {
+  item: Item
+  isActive: boolean
+  isLast: boolean
+  idPrefix?: string
+  onOpenScript?: (id: string) => void
+}) {
   let Icon: LucideIcon | null = null
   let content: ReactNode
   if (item.kind === 'reasoning') {
@@ -346,7 +403,12 @@ function TimelineRow({ item, isActive, isLast }: { item: Item; isActive: boolean
   } else {
     const isCode = typeof item.step.args?.code === 'string'
     Icon = isCode ? Terminal : singleStepInfo(item.step.tool, item.step.args).Icon
-    content = <ToolRowContent step={item.step} isActive={isActive} />
+    // Must match `scriptReportsFromSteps`' id scheme exactly — both walk the
+    // same original `steps` array by position, so `item.stepIndex` (index
+    // in that array, not in the filtered `items` list) lines up with the
+    // `i` that function uses for the very same step.
+    const scriptId = isCode && idPrefix ? `${idPrefix}-script-${item.stepIndex}` : undefined
+    content = <ToolRowContent step={item.step} isActive={isActive} scriptId={scriptId} onOpenScript={onOpenScript} />
   }
 
   return (
@@ -403,9 +465,16 @@ interface ToolActivityProps {
   drafting?: 'report' | 'chart' | null
   /** When this whole turn began (epoch ms) — see `ChatMessage.turnStartedAt`. */
   turnStartedAt?: number
+  /** Id prefix for this `steps` array's script cards — must match the prefix
+   * chat-view uses when building the parallel `scriptReportsFromSteps(...)`
+   * list for the artifact panel, so a card's click opens the right report. */
+  idPrefix?: string
+  /** Opens a script's code in the artifact side-panel (same handler as
+   * report/chart cards — see `openPanel` in chat-view.tsx). */
+  onOpenScript?: (id: string) => void
 }
 
-export function ToolActivity({ steps = [], isStreaming, answered, drafting, turnStartedAt }: ToolActivityProps) {
+export function ToolActivity({ steps = [], isStreaming, answered, drafting, turnStartedAt, idPrefix, onOpenScript }: ToolActivityProps) {
   // Thinking phase = streaming with no answer yet. The header's elapsed timer
   // runs for exactly this phase, then freezes the moment an answer starts.
   const thinking = !!isStreaming && !answered
@@ -566,7 +635,16 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, turn
             const isLastByPosition = i === items.length - 1
             const isActive = thinking && isLastByPosition
             const drawsLine = isLastByPosition && !hasTail
-            return <TimelineRow key={i} item={item} isActive={isActive} isLast={drawsLine} />
+            return (
+              <TimelineRow
+                key={i}
+                item={item}
+                isActive={isActive}
+                isLast={drawsLine}
+                idPrefix={idPrefix}
+                onOpenScript={onOpenScript}
+              />
+            )
           })}
 
           {showDoneTail ? <DoneTailRow /> : showSkeletonTail ? <SkeletonTailRow /> : null}
