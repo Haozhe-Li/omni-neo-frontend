@@ -610,15 +610,27 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, turn
           if (e.propertyName !== 'max-height') return
           if (open) setMaxH(null)
         }}
-        // `undefined` here (rather than a `0px` fallback for the closed
-        // steady state) was the bug: `maxH` starts `null` regardless of what
-        // `open` initializes to, and the measuring effect only runs when
-        // `open` *changes* — so a message that mounts already collapsed
-        // (history reload) rendered fully expanded anyway on first paint,
-        // and the first click had to "close" that accidental expansion
-        // before a second click could actually open/close it as expected.
-        style={maxH !== null ? { maxHeight: maxH } : open ? undefined : { maxHeight: '0px' }}
-        className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
+        style={{
+          // `{}` here (rather than a `0px` fallback for the closed steady
+          // state) was the bug: `maxH` starts `null` regardless of what
+          // `open` initializes to, and the measuring effect only runs when
+          // `open` *changes* — so a message that mounts already collapsed
+          // (history reload) rendered fully expanded anyway on first paint,
+          // and the first click had to "close" that accidental expansion
+          // before a second click could actually open/close it as expected.
+          ...(maxH !== null ? { maxHeight: maxH } : open ? {} : { maxHeight: '0px' }),
+          // Opacity fades out faster than the height collapses, so the row
+          // content (including any reasoning text still tail-revealing via
+          // its typewriter) is fully invisible well before the box finishes
+          // shrinking — a bare max-height transition let a still-updating
+          // last row visibly fight the collapsing box, which is what read as
+          // "生硬"/janky. Same easing as the rest of the app's step/row
+          // entrance animations (`omni-step-in`), instead of a plain
+          // `ease-in-out`, so opening and closing feel consistent with them.
+          opacity: open ? 1 : 0,
+          transition: 'max-height 380ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1)',
+        }}
+        className="overflow-hidden"
       >
         <div className="space-y-4 ml-1.5 mt-2 py-1">
           {items.map((item, i) => {
