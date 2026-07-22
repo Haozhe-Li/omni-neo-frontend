@@ -45,11 +45,10 @@ interface AnswerFooterProps {
   ownSources?: Source[]
   onOpenSources?: (sources: Source[], citedNumbers: Set<number>) => void
   onRegenerate?: (mode: AgentMode) => void
-  isLastMessage?: boolean
   regeneratedWith?: AgentMode
 }
 
-export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRegenerate, isLastMessage, regeneratedWith }: AnswerFooterProps) {
+export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRegenerate, regeneratedWith }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
@@ -116,8 +115,10 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
           <Share2 size={16} strokeWidth={1.75} />
         </IconBtn>
 
-        {/* Regenerate — only on the last assistant message */}
-        {isLastMessage && onRegenerate && (
+        {/* Regenerate — available on any assistant message; the caller
+            (chat-view) confirms with the user first if this isn't the last
+            one, since redoing an earlier turn discards everything after it. */}
+        {onRegenerate && (
           <div className="relative" ref={regenRef}>
             <IconBtn onClick={() => setRegenOpen((v) => !v)} title="Regenerate">
               <RotateCcw size={16} strokeWidth={1.75} />

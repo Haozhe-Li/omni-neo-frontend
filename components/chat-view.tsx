@@ -23,6 +23,15 @@ import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
 
@@ -464,6 +473,14 @@ export function ChatView({
   const [editText, setEditText] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const editRef = useRef<HTMLTextAreaElement>(null)
+  // Regenerating/editing a message earlier than the last one discards every
+  // turn after it — confirm before doing that (redoing the last turn, the
+  // common case, still goes through with no prompt).
+  const [pendingRewind, setPendingRewind] = useState<{
+    targetIndex: number
+    newQuery?: string
+    rewindMode?: AgentMode
+  } | null>(null)
 
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
@@ -1619,30 +1636,22 @@ export function ChatView({
   )
 
   // ── rewind: regenerate or edit-and-resend ─────────────────────────────
-  const handleRewind = useCallback(
-    async (newQuery?: string, rewindMode?: AgentMode) => {
+  // `targetIndex` is the index (in `messages`) of the message being redone —
+  // an assistant message for regenerate, the user message being replaced for
+  // edit. Everything from that point onward is discarded and replaced, on
+  // any message now, not just the last one.
+  const performRewind = useCallback(
+    async (targetIndex: number, newQuery?: string, rewindMode?: AgentMode) => {
       const effectiveMode = rewindMode ?? mode
 
       // Always close any open edit box first
       setEditingIndex(null)
 
-      // Compute trimmed history for UI.
-      // For regenerate: drop the last assistant message.
-      // For edit: drop the last assistant + last user, then add new user message.
-      let baseHistory: ChatMessage[]
+      // For regenerate: drop the target assistant message onward.
+      // For edit: drop the target user message onward, then add the edited one.
+      let baseHistory: ChatMessage[] = messages.slice(0, targetIndex)
       if (newQuery !== undefined) {
-        let lastUserIdx = -1
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === 'user') { lastUserIdx = i; break }
-        }
-        baseHistory = lastUserIdx > 0 ? messages.slice(0, lastUserIdx) : []
         baseHistory = [...baseHistory, { role: 'user', content: newQuery }]
-      } else {
-        let lastAiIdx = -1
-        for (let i = messages.length - 1; i >= 0; i--) {
-          if (messages[i].role === 'assistant') { lastAiIdx = i; break }
-        }
-        baseHistory = lastAiIdx >= 0 ? messages.slice(0, lastAiIdx) : messages
       }
 
       // Tag the incoming assistant message as regenerated so we can show the label
@@ -1655,6 +1664,11 @@ export function ChatView({
 
       try {
         const personalization = await buildPersonalization()
+        // `turn`: same convention as a fresh /chat send — the array index the
+        // now-current message will land at. The backend resolves the actual
+        // rewind target from this (see core/routers/chat.py's
+        // _find_rewind_target), so it works for any earlier turn, not just
+        // the most recent one.
         const payload: any = { mode: effectiveMode, turn: baseHistory.length }
         if (newQuery !== undefined) payload.new_query = newQuery
         if (Object.keys(personalization).length) payload.personalization = personalization
@@ -1680,6 +1694,22 @@ export function ChatView({
       }
     },
     [messages, mode, threadId, buildPersonalization, fetchWithAuth, handleStream, requestPin]
+  )
+
+  const handleRewind = useCallback(
+    (targetIndex: number, newQuery?: string, rewindMode?: AgentMode) => {
+      // Redoing the very last turn (regenerate the latest answer, or edit the
+      // message you just sent) is the common case — no prompt, matches prior
+      // behavior. Anything earlier also discards every turn after it, which
+      // is surprising enough to confirm first.
+      const isLastTurn = !messages.slice(targetIndex + 1).some((m) => m.role === 'user')
+      if (isLastTurn) {
+        void performRewind(targetIndex, newQuery, rewindMode)
+      } else {
+        setPendingRewind({ targetIndex, newQuery, rewindMode })
+      }
+    },
+    [messages, performRewind]
   )
 
   // ── send from composer ─────────────────────────────────────────────────
@@ -1878,11 +1908,6 @@ export function ChatView({
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
           <div className="max-w-2xl mx-auto space-y-8 pb-32">
             {(() => {
-              // Index of the last user message (edit only applies to that one)
-              let lastUserIdx = -1
-              for (let i = messages.length - 1; i >= 0; i--) {
-                if (messages[i].role === 'user') { lastUserIdx = i; break }
-              }
               return messages.map((msg, i) => (
               <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? (editingIndex === i ? 'items-stretch' : 'items-end') : 'items-start'}`}>
                 {msg.role === 'user' ? (
@@ -1901,7 +1926,7 @@ export function ChatView({
                         >
                           <Copy size={14} strokeWidth={1.75} />
                         </button>
-                        {i === lastUserIdx && !isLoading && (
+                        {!isLoading && (
                           <button
                             title="Edit message"
                             onClick={() => { setEditingIndex(i); setEditText(msg.content); setTimeout(() => editRef.current?.focus(), 0) }}
@@ -1931,7 +1956,7 @@ export function ChatView({
                               if (e.key === 'Escape') setEditingIndex(null)
                               if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault()
-                                if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) }
+                                if (editText.trim()) { setEditingIndex(null); handleRewind(i, editText.trim()) }
                               }
                             }}
                             rows={1}
@@ -1948,7 +1973,7 @@ export function ChatView({
                           </button>
                           <button
                             disabled={!editText.trim()}
-                            onClick={() => { if (editText.trim()) { setEditingIndex(null); handleRewind(editText.trim()) } }}
+                            onClick={() => { if (editText.trim()) { setEditingIndex(null); handleRewind(i, editText.trim()) } }}
                             className="px-5 py-2 text-[14px] font-medium rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
                           >
                             Done
@@ -2129,8 +2154,7 @@ export function ChatView({
                             sources={mergedSources}
                             ownSources={msg.sources}
                             onOpenSources={openSources}
-                            isLastMessage={i === messages.length - 1}
-                            onRegenerate={(rewindMode) => handleRewind(undefined, rewindMode)}
+                            onRegenerate={(rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                           />
                         ) : null}
@@ -2585,6 +2609,36 @@ export function ChatView({
         onClose={() => { setSourcesOpen(false); setCheckSourceState(null) }}
         checkSource={checkSourceState}
       />
+
+      {/* Confirm before regenerating/editing an earlier message — it discards
+          every turn after it, not just the one being redone. */}
+      <AlertDialog open={!!pendingRewind} onOpenChange={(open) => { if (!open) setPendingRewind(null) }}>
+        <AlertDialogContent className="bg-[var(--background)] border border-[var(--border-subtle)] rounded-xl shadow-lg max-w-sm p-6">
+          <AlertDialogHeader className="gap-3">
+            <AlertDialogTitle className="text-[var(--foreground)] text-base font-medium flex items-center justify-center mb-1">
+              Redo this message?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[var(--muted-foreground)] text-sm text-center leading-relaxed">
+              Everything after this point in the conversation will be discarded and replaced.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 flex flex-row w-full gap-2">
+            <AlertDialogCancel className="flex-1 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors h-10 mt-0">
+              Cancel
+            </AlertDialogCancel>
+            <button
+              onClick={() => {
+                if (pendingRewind) void performRewind(pendingRewind.targetIndex, pendingRewind.newQuery, pendingRewind.rewindMode)
+                setPendingRewind(null)
+              }}
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg h-10 text-sm font-medium transition-colors
+                bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20"
+            >
+              Continue
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
