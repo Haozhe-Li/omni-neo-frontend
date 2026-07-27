@@ -134,19 +134,49 @@ function candidateSpansInLine(line: string, lineOffset: number): RawSpan[] {
     })
 }
 
+// `transformMath` (lib/markdown.ts) later rewrites a `\[...\]`/`[...]` block
+// into `$$...$$` display math — but only at *render* time, after this splices
+// its `<span data-verify>` markers into the raw string. Left undetected here,
+// a bracket-math line reads as ordinary prose (it's got digits, it scores),
+// gets wrapped, and the `<span>` ends up sitting *inside* what becomes a
+// `$$...$$` block. remark-math treats `$$...$$` content as opaque — like a
+// fenced code block — so that `<span>` is never parsed as HTML; it's hurled
+// at KaTeX as literal garbage LaTeX source instead (the tag characters
+// render as mangled math glyphs, e.g. `-` becomes a minus sign). A line that
+// opens, closes, or is entirely one of these blocks must never be offered as
+// a candidate, full stop — unlike the `**`/backtick checks in `isSafeToWrap`,
+// there's no partial-wrap here that would still be safe.
+const SINGLE_LINE_DISPLAY_MATH_RE = /^\\?\[[\s\S]*\\?\]$/
+
+function displayMathBoundary(trimmed: string): 'open' | 'close' | null {
+    if (trimmed === '\\[' || trimmed === '[') return 'open'
+    if (trimmed === '\\]' || trimmed === ']') return 'close'
+    return null
+}
+
 // Splits raw markdown into sentence-ish spans with offsets into the original
-// string, skipping fenced code blocks, headings, table rows and blockquotes
-// (wrapping across those risks corrupting their markdown syntax; list items
-// and plain paragraphs are fair game).
+// string, skipping fenced code blocks, headings, table rows, blockquotes and
+// `\[...\]`/`[...]` display-math blocks (wrapping across those risks
+// corrupting their markdown/LaTeX syntax; list items and plain paragraphs are
+// fair game).
 function collectCandidateSpans(content: string): RawSpan[] {
     const spans: RawSpan[] = []
     let cursor = 0
     let inFence = false
+    let inDisplayMath = false
     for (const line of content.split('\n')) {
         const lineOffset = cursor
         cursor += line.length + 1 // account for the '\n' split() consumed
         if (/^\s*```/.test(line)) { inFence = !inFence; continue }
         if (inFence) continue
+        const trimmed = line.trim()
+        if (inDisplayMath) {
+            if (displayMathBoundary(trimmed) === 'close') inDisplayMath = false
+            continue
+        }
+        const boundary = displayMathBoundary(trimmed)
+        if (boundary === 'open') { inDisplayMath = true; continue }
+        if (SINGLE_LINE_DISPLAY_MATH_RE.test(trimmed)) continue
         spans.push(...candidateSpansInLine(line, lineOffset))
     }
     return spans
