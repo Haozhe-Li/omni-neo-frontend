@@ -551,6 +551,25 @@
   margin-bottom: 0 !important;
 }
 
+/* ── KaTeX display math ──────────────────────────────────────────────────
+   katex.min.css already centers `.katex-display` (text-align: center) — this
+   just adds the breathing room and horizontal-scroll safety net it doesn't
+   ship with: wide equations (long fractions, multi-term sums) would otherwise
+   overflow a narrow chat column and force the whole message to scroll
+   sideways instead of just the formula. Scoped to the class itself (not a
+   parent wrapper) since it's shared by every markdown surface — chat,
+   final-answer, blog — that imports katex.min.css once in app/layout.tsx. */
+.katex-display {
+  /* `margin` needs `!important`: katex.min.css is imported after this
+     stylesheet in app/layout.tsx, so its own `.katex-display { margin: 1em
+     0 }` sits later in the cascade and would otherwise win the tie on
+     specificity alone. */
+  margin: 1.5em 0 !important;
+  padding: 0.25em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 @layer utilities {
   .duration-400 {
     transition-duration: 400ms;
