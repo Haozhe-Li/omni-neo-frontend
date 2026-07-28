@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import {
   Search,
   Globe,
@@ -397,11 +397,17 @@ function activityPreview(items: Item[], drafting?: 'report' | 'chart' | null): s
 // The header's animated text. A plain re-render swapped labels instantly,
 // which read as a hard cut; this runs each change as a short sequence
 // instead — the old label fades out and drifts up, the text is replaced
-// while it's invisible, then the new one fades in from just below. The box's
-// width transitions across the swap too, so the chevron slides to its new
-// spot rather than jumping.
+// while it's invisible, then the new one fades in from just below.
+//
+// The box width deliberately does NOT transition; see the note on the width
+// measurement below for why. The swap still reads smoothly because the width
+// changes at the one moment the label is at opacity 0, so the only thing that
+// visibly moves is the chevron, and it moves while the text is blank.
 const LABEL_FADE_MS = 170
-const LABEL_WIDTH_MS = 300
+
+// useLayoutEffect warns when React renders on the server, and this is a
+// client component that Next still server-renders.
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
   // 'idle' = settled and visible, 'out' = fading the old text away,
@@ -438,18 +444,16 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
   }, [phase])
 
   // Natural width of the current text, measured off a hidden copy that no
-  // layout constrains, NOT off the visible span.
+  // layout constrains, NOT off the visible span — measuring the visible one
+  // means the measurement depends on the very value it produces.
   //
-  // Measuring the visible one is what truncated the label ("Complet…"): its
-  // width is pinned to the previous measurement, so the measurement depends
-  // on the very value it produces. Any single missed or mistimed measure
-  // latches a too-small width permanently, since nothing ever re-measures a
-  // text that isn't changing. The ghost has no width of its own and is out of
-  // flow, so it always reports the true width, and re-measuring on every
-  // render means a stale pin can survive at most one frame.
+  // This has to land BEFORE paint, hence useLayoutEffect: the render that
+  // swaps in a longer label still carries the previous, narrower width, so a
+  // post-paint useEffect would let one frame of clipped text ("Complet…")
+  // through on every swap.
   const ghostRef = useRef<HTMLSpanElement | null>(null)
   const [width, setWidth] = useState<number | null>(null)
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const w = ghostRef.current?.offsetWidth
     if (w != null && w !== width) setWidth(w)
   })
@@ -462,13 +466,23 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
   return (
     <span
       className="relative min-w-0 overflow-hidden"
-      style={{
-        width: width != null ? `${width}px` : undefined,
-        transition: `width ${LABEL_WIDTH_MS}ms cubic-bezier(0.4,0,0.2,1)`,
-      }}
+      // No `transition: width` here, and that is the fix, not an omission.
+      // Animating this box's width while the text inside it is not animated
+      // means that for the length of the transition the box is still the OLD
+      // label's width with the NEW label already in it — and `truncate` duly
+      // ellipsises it ("Completed · 2 ste…"). Worse, the transition only
+      // advances while the document timeline runs, so a backgrounded tab or a
+      // blocked main thread freezes it at the start value and the clipped
+      // label becomes permanent rather than lasting 300ms.
+      style={{ width: width != null ? `${width}px` : undefined }}
     >
       <span
-        className={`block truncate text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
+        // `w-max` rather than a width inherited from the box above: the text
+        // is sized by its own content, so it can never be ellipsised by a
+        // box that is momentarily the wrong size. Genuine overflow (a very
+        // long label on a narrow screen) is clipped by the parent instead —
+        // `activityPreview` already caps the text at PREVIEW_MAX_CHARS.
+        className={`block w-max whitespace-nowrap text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
         style={{
           opacity: phase === 'idle' ? 1 : 0,
           transform: phase === 'out' ? 'translateY(-4px)' : phase === 'enter' ? 'translateY(4px)' : 'translateY(0)',
