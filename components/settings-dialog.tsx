@@ -37,11 +37,12 @@ import {
     MessageSquare,
     CalendarClock,
     Globe,
+    Gift,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getUserLocation, LocationData } from '@/lib/location'
 import { useMemory } from '@/hooks/useMemory'
-import { useUsage } from '@/hooks/useUsage'
+import { useUsage, type RedeemError, type RedeemResult } from '@/hooks/useUsage'
 import { useApi } from '@/hooks/useApi'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -1395,7 +1396,7 @@ function ChatHistorySection() {
 function UsageSection() {
     const { isSignedIn } = useAuth()
     const clerk = useClerk()
-    const { usage, isLoading, lastRefreshedAt, refresh } = useUsage()
+    const { usage, isLoading, lastRefreshedAt, refresh, redeem } = useUsage()
     // Forces a re-render every so often so "Last updated Xm ago" stays accurate
     // without needing a network call.
     const [, forceTick] = useState(0)
@@ -1434,6 +1435,18 @@ function UsageSection() {
                 limit={usage.month_limit}
                 resetLabel={`Renews on ${resetMonthLabel}`}
             />
+            {/* Hidden entirely for the ~everyone who has never redeemed a code:
+                an empty third bar would just raise a question it can't answer. */}
+            {usage.extra_granted > 0 && (
+                <UsageMeter
+                    label="Extra credits"
+                    used={usage.extra_used}
+                    limit={usage.extra_granted}
+                    resetLabel="Spent first · never expires"
+                />
+            )}
+
+            {isSignedIn && <RedeemCodeRow onRedeem={redeem} />}
 
             <div className="py-4 flex items-center justify-between gap-4">
                 <p className="text-[13px] text-[var(--muted-foreground)]">
@@ -1461,6 +1474,81 @@ function UsageSection() {
                 </div>
             )}
         </Section>
+    )
+}
+
+/** Per-reason copy for a failed redemption. Keyed off the backend's
+ * machine-readable `detail.error` rather than any message it sends, so the
+ * wording lives here with the rest of the UI copy. */
+const REDEEM_ERROR_COPY: Record<RedeemError, string> = {
+    invalid_code: "That code isn't valid.",
+    code_expired: 'That code has expired.',
+    code_exhausted: 'That code has already been fully claimed.',
+    already_redeemed: "You've already redeemed this code.",
+    sign_in_required: 'Sign in to redeem a code.',
+    error: 'Something went wrong. Please try again.',
+}
+
+function RedeemCodeRow({ onRedeem }: { onRedeem: (code: string) => Promise<RedeemResult> }) {
+    const [code, setCode] = useState('')
+    const [busy, setBusy] = useState(false)
+    const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+    const submit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        const trimmed = code.trim()
+        if (!trimmed || busy) return
+        setBusy(true)
+        setResult(null)
+        const res = await onRedeem(trimmed)
+        setBusy(false)
+        if (res.ok) {
+            // The hook has already refreshed usage by the time this resolves,
+            // so the extra meter above is showing the new balance as this
+            // message appears.
+            const added = res.creditsAdded ?? 0
+            setResult({ ok: true, text: `${added.toLocaleString()} credits added.` })
+            setCode('')
+        } else {
+            setResult({ ok: false, text: REDEEM_ERROR_COPY[res.error ?? 'error'] })
+        }
+    }
+
+    return (
+        <Row
+            title="Redeem a code"
+            description="Extra credits are spent before your daily and monthly allowances, and never expire."
+            stacked
+        >
+            <form onSubmit={submit} className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <div className="flex flex-1 items-center gap-2 px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] focus-within:border-[var(--muted-foreground)]/40 transition-colors">
+                        <Gift size={14} className="text-[var(--muted-foreground)] shrink-0" />
+                        <input
+                            type="text"
+                            placeholder="OMNI-XXXX-XXXX-XXXX"
+                            value={code}
+                            // Codes are normalized server-side anyway; upper-casing
+                            // as they type just makes the field match the code on
+                            // the card they're reading from.
+                            onChange={(e) => setCode(e.target.value.toUpperCase())}
+                            disabled={busy}
+                            autoComplete="off"
+                            spellCheck={false}
+                            className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm tracking-wide text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] placeholder:tracking-normal disabled:opacity-50"
+                        />
+                    </div>
+                    <SettingButton type="submit" variant="primary" disabled={!code.trim() || busy} className="h-9 px-4">
+                        {busy ? <Loader2 size={13} className="animate-spin" /> : 'Redeem'}
+                    </SettingButton>
+                </div>
+                {result && (
+                    <p className={`text-[13px] ${result.ok ? 'text-[var(--accent)]' : 'text-red-500'}`}>
+                        {result.text}
+                    </p>
+                )}
+            </form>
+        </Row>
     )
 }
 

@@ -12,9 +12,33 @@ export interface UsageData {
   month_used: number
   month_limit: number
   month_remaining: number
+  /**
+   * Redeemed-code balance. A permanent bucket, not a cap: it never resets, it
+   * is spent before the daily/monthly allowances, and what it pays for counts
+   * against neither. `extra_granted` is 0 for anyone who has never redeemed a
+   * code — the UI hides the meter entirely in that case.
+   */
+  extra_granted: number
+  extra_used: number
+  extra_remaining: number
   mode_cost: { fast: number; pro: number; scheduled: number }
   resets_day_at: string
   resets_month_at: string
+}
+
+/** Machine-readable failure reasons from POST /api/redeem (`detail.error`). */
+export type RedeemError =
+  | 'invalid_code'
+  | 'code_expired'
+  | 'code_exhausted'
+  | 'already_redeemed'
+  | 'sign_in_required'
+  | 'error'
+
+export interface RedeemResult {
+  ok: boolean
+  creditsAdded?: number
+  error?: RedeemError
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -79,9 +103,43 @@ export function useUsage() {
     }
   }, [isSignedIn, fetchUsage])
 
-  // True once either budget hits zero — the frontend never shows the
-  // underlying numbers, just this single "you're out" boolean.
-  const exceeded = usage ? usage.day_remaining <= 0 || usage.month_remaining <= 0 : false
+  /**
+   * Redeem a prepaid credit code. Refreshes usage on success so the extra
+   * meter appears (or grows) immediately rather than on the next cache miss.
+   */
+  const redeem = useCallback(
+    async (code: string): Promise<RedeemResult> => {
+      try {
+        const res = await fetchWithAuth(`${BACKEND_URL}/api/redeem`, {
+          method: 'POST',
+          body: JSON.stringify({ code }),
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok) {
+          // FastAPI wraps the raised dict in `detail`.
+          const error: RedeemError = data?.detail?.error ?? 'error'
+          return { ok: false, error }
+        }
+        cachedUsage = null
+        cachedAt = null
+        await fetchUsage()
+        return { ok: true, creditsAdded: data?.credits_added }
+      } catch (e) {
+        console.error('[useUsage] Redeem failed', e)
+        return { ok: false, error: 'error' }
+      }
+    },
+    [fetchWithAuth, fetchUsage]
+  )
 
-  return { usage, isLoading, lastRefreshedAt, refresh, exceeded }
+  // True once the user has no way left to pay for a turn — the frontend never
+  // shows the underlying numbers, just this single "you're out" boolean.
+  // Extra credits are checked first because they're spent first: someone with
+  // a redeemed balance can still chat with both allowances at zero, and
+  // showing them a "limit reached" wall would be flatly wrong.
+  const exceeded = usage
+    ? usage.extra_remaining <= 0 && (usage.day_remaining <= 0 || usage.month_remaining <= 0)
+    : false
+
+  return { usage, isLoading, lastRefreshedAt, refresh, redeem, exceeded }
 }
