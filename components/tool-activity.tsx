@@ -365,20 +365,33 @@ function truncatePreview(s: string, max = PREVIEW_MAX_CHARS): string {
   return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + '…'
 }
 
-// One short line describing the newest item on the timeline. Only concrete
-// actions get a preview — a reasoning run just reads as the generic
-// "Thinking", since its prose streams token by token and belongs in the
-// expandable body, not in a one-line header. Tool calls reuse the exact same
-// label/chip pair their timeline row renders, so the two never disagree.
+// One short line describing the newest concrete action on the timeline.
+//
+// Reasoning is skipped rather than described: its prose streams token by token
+// and belongs in the expandable body, not in a one-line header. Skipped means
+// *passed over*, not "replaced by a placeholder" — the scan walks backwards to
+// the last tool/skill and keeps showing it for as long as the agent is
+// thinking. Falling back to a generic "Thinking" instead made the header
+// bounce between the tool name and that word on every reasoning run, since a
+// turn alternates think → act → think → act throughout.
+//
+// "Thinking" therefore appears exactly once per turn: at the very start,
+// before any action has happened and there is genuinely nothing to report.
+//
+// Tool rows reuse the exact same label/chip pair their timeline row renders,
+// so the header and the row it describes never disagree.
 function activityPreview(items: Item[], drafting?: 'report' | 'chart' | null): string {
   if (drafting) return drafting === 'report' ? 'Drafting report…' : 'Creating chart…'
-  const last = items[items.length - 1]
-  if (!last || last.kind === 'reasoning') return 'Thinking'
-  if (last.kind === 'skill') return truncatePreview(`Using ${last.name} skill`)
-  if (typeof last.step.args?.code === 'string') return 'Writing Python code'
-  const { label, chip } = singleStepInfo(last.step.tool, last.step.args)
-  const chipText = typeof chip === 'string' ? chip.trim() : ''
-  return truncatePreview(chipText ? `${label} ${chipText}` : label)
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    if (item.kind === 'reasoning') continue
+    if (item.kind === 'skill') return truncatePreview(`Using ${item.name} skill`)
+    if (typeof item.step.args?.code === 'string') return 'Writing Python code'
+    const { label, chip } = singleStepInfo(item.step.tool, item.step.args)
+    const chipText = typeof chip === 'string' ? chip.trim() : ''
+    return truncatePreview(chipText ? `${label} ${chipText}` : label)
+  }
+  return 'Thinking'
 }
 
 // The header's animated text. A plain re-render swapped labels instantly,
@@ -424,26 +437,37 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
     }
   }, [phase])
 
-  // Natural width of the current text, measured off the inner span —
-  // `scrollWidth` is the untruncated width even when the box is clipping it.
-  // A plain effect (not layout) is deliberate: the measure lands a frame
-  // after the swap, and the text is at zero opacity for that frame anyway.
-  const innerRef = useRef<HTMLSpanElement | null>(null)
+  // Natural width of the current text, measured off a hidden copy that no
+  // layout constrains, NOT off the visible span.
+  //
+  // Measuring the visible one is what truncated the label ("Complet…"): its
+  // width is pinned to the previous measurement, so the measurement depends
+  // on the very value it produces. Any single missed or mistimed measure
+  // latches a too-small width permanently, since nothing ever re-measures a
+  // text that isn't changing. The ghost has no width of its own and is out of
+  // flow, so it always reports the true width, and re-measuring on every
+  // render means a stale pin can survive at most one frame.
+  const ghostRef = useRef<HTMLSpanElement | null>(null)
   const [width, setWidth] = useState<number | null>(null)
   useEffect(() => {
-    if (innerRef.current) setWidth(innerRef.current.scrollWidth)
-  }, [shown])
+    const w = ghostRef.current?.offsetWidth
+    if (w != null && w !== width) setWidth(w)
+  })
+
+  // `font-medium` has to be on the ghost whenever it's on the visible span:
+  // the shimmer state renders at weight 500 and measuring weight 400 text
+  // would under-report, clipping the label by a few pixels.
+  const weightClass = shimmer ? 'font-medium' : ''
 
   return (
     <span
-      className="min-w-0 overflow-hidden"
+      className="relative min-w-0 overflow-hidden"
       style={{
         width: width != null ? `${width}px` : undefined,
         transition: `width ${LABEL_WIDTH_MS}ms cubic-bezier(0.4,0,0.2,1)`,
       }}
     >
       <span
-        ref={innerRef}
         className={`block truncate text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
         style={{
           opacity: phase === 'idle' ? 1 : 0,
@@ -453,6 +477,15 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
               ? 'none'
               : `opacity ${LABEL_FADE_MS}ms cubic-bezier(0.4,0,0.2,1), transform ${LABEL_FADE_MS}ms cubic-bezier(0.4,0,0.2,1)`,
         }}
+      >
+        {shown}
+      </span>
+      {/* Measurement-only twin: absolutely positioned so it never affects
+          layout, and never width-constrained so it can't be clipped. */}
+      <span
+        ref={ghostRef}
+        aria-hidden
+        className={`pointer-events-none absolute left-0 top-0 whitespace-nowrap opacity-0 ${weightClass}`}
       >
         {shown}
       </span>
@@ -601,11 +634,18 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // had the internal `write_todos` bookkeeping filtered out, so this count
   // matches the rows one-for-one when the body is expanded.
   const actionCount = items.reduce((n, it) => (it.kind === 'reasoning' ? n : n + 1), 0)
-  const headerLabel = thinking
-    ? activityPreview(items, drafting)
-    : actionCount > 0
+  // A turn that only reasoned has nothing to count, and "Completed · 0 steps"
+  // would be a worse way of saying so. It gets a plain description of what it
+  // actually did instead — which is also the honest answer for a greeting, the
+  // usual case here: the agent thought about it and replied, no tools involved.
+  const hasReasoning = items.some((it) => it.kind === 'reasoning')
+  const doneLabel =
+    actionCount > 0
       ? `Completed · ${actionCount} step${actionCount === 1 ? '' : 's'}`
-      : 'Completed'
+      : hasReasoning
+        ? 'Thought about it'
+        : 'Completed'
+  const headerLabel = thinking ? activityPreview(items, drafting) : doneLabel
 
   // ── expand/collapse ────────────────────────────────────────────────────
   // Always starts collapsed, live turn or history alike — the header preview
