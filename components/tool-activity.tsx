@@ -348,6 +348,118 @@ function buildItems(steps: TimelineStep[]): Item[] {
   return items
 }
 
+// ── header preview ──────────────────────────────────────────────────────────
+// The collapsed header shows what the agent is doing RIGHT NOW — a preview of
+// the newest timeline item — instead of an elapsed-time readout. It has to
+// survive being rendered next to a chevron on a narrow screen, so everything
+// below funnels through `truncatePreview`.
+const PREVIEW_MAX_CHARS = 60
+
+function truncatePreview(s: string, max = PREVIEW_MAX_CHARS): string {
+  const flat = (s || '').replace(/\s+/g, ' ').trim()
+  if (flat.length <= max) return flat
+  const cut = flat.slice(0, max)
+  // Prefer a word boundary, but only if it doesn't hack off most of the line
+  // (a single very long token — a URL, say — should just be cut mid-word).
+  const sp = cut.lastIndexOf(' ')
+  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + '…'
+}
+
+// One short line describing the newest item on the timeline. Only concrete
+// actions get a preview — a reasoning run just reads as the generic
+// "Thinking", since its prose streams token by token and belongs in the
+// expandable body, not in a one-line header. Tool calls reuse the exact same
+// label/chip pair their timeline row renders, so the two never disagree.
+function activityPreview(items: Item[], drafting?: 'report' | 'chart' | null): string {
+  if (drafting) return drafting === 'report' ? 'Drafting report…' : 'Creating chart…'
+  const last = items[items.length - 1]
+  if (!last || last.kind === 'reasoning') return 'Thinking'
+  if (last.kind === 'skill') return truncatePreview(`Using ${last.name} skill`)
+  if (typeof last.step.args?.code === 'string') return 'Writing Python code'
+  const { label, chip } = singleStepInfo(last.step.tool, last.step.args)
+  const chipText = typeof chip === 'string' ? chip.trim() : ''
+  return truncatePreview(chipText ? `${label} ${chipText}` : label)
+}
+
+// The header's animated text. A plain re-render swapped labels instantly,
+// which read as a hard cut; this runs each change as a short sequence
+// instead — the old label fades out and drifts up, the text is replaced
+// while it's invisible, then the new one fades in from just below. The box's
+// width transitions across the swap too, so the chevron slides to its new
+// spot rather than jumping.
+const LABEL_FADE_MS = 170
+const LABEL_WIDTH_MS = 300
+
+function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
+  // 'idle' = settled and visible, 'out' = fading the old text away,
+  // 'enter' = new text staged below at zero opacity, one frame before it
+  // animates in (the staging frame must NOT transition, or the label would
+  // visibly slide down to its start position first).
+  const [shown, setShown] = useState(text)
+  const [phase, setPhase] = useState<'idle' | 'out' | 'enter'>('idle')
+  const latest = useRef(text)
+  latest.current = text
+
+  useEffect(() => {
+    if (text === shown) return
+    setPhase('out')
+    const t = setTimeout(() => {
+      // Read from the ref, not the closed-over `text`: several steps can land
+      // inside one fade, and only the newest should be what appears.
+      setShown(latest.current)
+      setPhase('enter')
+    }, LABEL_FADE_MS)
+    return () => clearTimeout(t)
+  }, [text, shown])
+
+  useEffect(() => {
+    if (phase !== 'enter') return
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setPhase('idle'))
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
+  }, [phase])
+
+  // Natural width of the current text, measured off the inner span —
+  // `scrollWidth` is the untruncated width even when the box is clipping it.
+  // A plain effect (not layout) is deliberate: the measure lands a frame
+  // after the swap, and the text is at zero opacity for that frame anyway.
+  const innerRef = useRef<HTMLSpanElement | null>(null)
+  const [width, setWidth] = useState<number | null>(null)
+  useEffect(() => {
+    if (innerRef.current) setWidth(innerRef.current.scrollWidth)
+  }, [shown])
+
+  return (
+    <span
+      className="min-w-0 overflow-hidden"
+      style={{
+        width: width != null ? `${width}px` : undefined,
+        transition: `width ${LABEL_WIDTH_MS}ms cubic-bezier(0.4,0,0.2,1)`,
+      }}
+    >
+      <span
+        ref={innerRef}
+        className={`block truncate text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
+        style={{
+          opacity: phase === 'idle' ? 1 : 0,
+          transform: phase === 'out' ? 'translateY(-4px)' : phase === 'enter' ? 'translateY(4px)' : 'translateY(0)',
+          transition:
+            phase === 'enter'
+              ? 'none'
+              : `opacity ${LABEL_FADE_MS}ms cubic-bezier(0.4,0,0.2,1), transform ${LABEL_FADE_MS}ms cubic-bezier(0.4,0,0.2,1)`,
+        }}
+      >
+        {shown}
+      </span>
+    </span>
+  )
+}
+
 // The bullet that sits on top of the connecting line: an icon for tool/skill
 // rows, a plain dot for reasoning, shared by every row on the timeline
 // (including the trailing skeleton/done rows) so they all line up.
@@ -447,24 +559,11 @@ function DoneTailRow() {
   )
 }
 
-function formatElapsed(totalSeconds: number) {
-  const s = Math.max(0, Math.round(totalSeconds))
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  const rem = s % 60
-  return `${m}m ${String(rem).padStart(2, '0')}s`
-}
-
-// How long the "Done" beat lingers before the timeline auto-collapses.
-const DONE_LINGER_MS = 700
-
 interface ToolActivityProps {
   steps?: TimelineStep[]
   isStreaming?: boolean
   answered?: boolean
   drafting?: 'report' | 'chart' | null
-  /** When this whole turn began (epoch ms) — see `ChatMessage.turnStartedAt`. */
-  turnStartedAt?: number
   /** Id prefix for this `steps` array's script cards — must match the prefix
    * chat-view uses when building the parallel `scriptReportsFromSteps(...)`
    * list for the artifact panel, so a card's click opens the right report. */
@@ -474,82 +573,47 @@ interface ToolActivityProps {
   onOpenScript?: (id: string) => void
 }
 
-export function ToolActivity({ steps = [], isStreaming, answered, drafting, turnStartedAt, idPrefix, onOpenScript }: ToolActivityProps) {
-  // Thinking phase = streaming with no answer yet. The header's elapsed timer
-  // runs for exactly this phase, then freezes the moment an answer starts.
+export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPrefix, onOpenScript }: ToolActivityProps) {
+  // Thinking phase = streaming with no answer yet. The header shimmers and
+  // previews live activity for exactly this phase, then settles once an
+  // answer starts.
   const thinking = !!isStreaming && !answered
 
   const items = buildItems(steps)
   // Sticky once true: if this turn was ever observed thinking (even with zero
   // tool/reasoning steps — a quick chit-chat reply in fast mode, say), keep
-  // rendering through to the "Completed, thinking for Xs" / Done close-out
-  // instead of the whole component vanishing the instant `answered` flips.
-  // Without this, a fast turn with no visible steps would cut straight from
-  // "Thinking for Xs" to nothing — no Done beat, no collapse, just gone.
+  // rendering through to the "Completed" / Done close-out instead of the whole
+  // component vanishing the instant `answered` flips. Without this, a fast
+  // turn with no visible steps would cut straight from "Thinking" to nothing.
   const everThinkingRef = useRef(thinking)
   if (thinking) everThinkingRef.current = true
   const hasContent = items.length > 0 || !!drafting || everThinkingRef.current
 
-  // ── elapsed timer ──────────────────────────────────────────────────────
-  // While thinking, tick live off the wall clock. The instant thinking ends
-  // — whether that happens live in this session, or the message is loaded
-  // already-completed from history — freeze using STORED timestamps, never
-  // the current wall-clock time. Using "now" as the reference for an
-  // already-finished message is what caused the timer to read a huge,
-  // ever-growing number on reload: it was really measuring "time since this
-  // message was sent", not "time spent thinking".
+  // Header text: a live preview of the newest step while thinking, then a
+  // count of what actually happened once the turn is done.
   //
-  // The start anchor prefers `turnStartedAt` (set once when the stream
-  // begins, before any step exists) over the first step's own timestamp.
-  // chat-view renders this message's tool activity via a DIFFERENT JSX
-  // branch once its `blocks` array goes from empty to non-empty (a plain
-  // fallback `<ToolActivity>` before the first step, a keyed one inside
-  // `blocks.map(...)` after) — React remounts a fresh instance across that
-  // switch, wiping any component-local "when did this start" state. Anchor
-  // to a value that comes from the message itself instead, so it survives
-  // that remount; `firstTs` stays only as a fallback for messages persisted
-  // before this field existed.
-  const firstTs = steps[0]?.timestamp
-  const lastTs = steps.length > 0 ? steps[steps.length - 1].timestamp : undefined
-  const startRef = useRef<number | null>(null)
-  if (startRef.current == null && turnStartedAt != null) startRef.current = turnStartedAt
-  if (startRef.current == null && firstTs != null) startRef.current = firstTs
-  useEffect(() => {
-    if (startRef.current == null && thinking) startRef.current = Date.now()
-  }, [thinking])
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!thinking) return
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [thinking])
-  const elapsedSeconds = thinking
-    ? startRef.current != null
-      ? (now - startRef.current) / 1000
-      : 0
-    : startRef.current != null && lastTs != null
-      ? (lastTs - startRef.current) / 1000
-      : 0
+  // Reasoning is left out of that count on purpose — same rule the live
+  // preview follows. A "reasoning run" is just whatever tokens landed
+  // between two tool calls, so the same amount of thinking can arrive as one
+  // run or five depending on how the stream chunked it; counting them would
+  // put a number on the header that moves for reasons the user can't see.
+  // Tool and skill rows are the real, countable actions. `items` has already
+  // had the internal `write_todos` bookkeeping filtered out, so this count
+  // matches the rows one-for-one when the body is expanded.
+  const actionCount = items.reduce((n, it) => (it.kind === 'reasoning' ? n : n + 1), 0)
+  const headerLabel = thinking
+    ? activityPreview(items, drafting)
+    : actionCount > 0
+      ? `Completed · ${actionCount} step${actionCount === 1 ? '' : 's'}`
+      : 'Completed'
 
-  // ── expand/collapse + the "done" beat that precedes auto-collapse ───────
-  // Seed `open` from whether we're thinking RIGHT NOW at mount, not a fixed
-  // `true` — a live turn mounts mid-thought (expanded, as before), but a
-  // message loaded already-completed from history (or a reload mid-session)
-  // mounts with `thinking` already false, so it should start collapsed. A
-  // fixed `true` here was why finished steps sometimes came back expanded
-  // after a page refresh: nothing ever re-collapses a message that was never
-  // observed transitioning from thinking to done.
-  const [open, setOpen] = useState(() => thinking)
-  const prevThinkingRef = useRef(thinking)
-  useEffect(() => {
-    const was = prevThinkingRef.current
-    prevThinkingRef.current = thinking
-    if (was && !thinking && open) {
-      const t = setTimeout(() => setOpen(false), DONE_LINGER_MS)
-      return () => clearTimeout(t)
-    }
-  }, [thinking, open])
+  // ── expand/collapse ────────────────────────────────────────────────────
+  // Always starts collapsed, live turn or history alike — the header preview
+  // is the at-a-glance story, and the step list is opt-in detail. Nothing
+  // auto-collapses it afterwards either: once `open` is true it's because the
+  // user clicked, and yanking it shut when the turn finishes would pull the
+  // text out from under someone mid-read.
+  const [open, setOpen] = useState(false)
 
   // Animated collapse: the body stays mounted and its max-height is measured
   // and transitioned, instead of conditionally unmounting — so toggling never
@@ -580,7 +644,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, turn
   if (thinking && items.length === 0 && !drafting) {
     return (
       <div className="mb-3">
-        <span className="omni-shimmer-text-accent text-[13px] font-medium">Thinking for {formatElapsed(elapsedSeconds)}</span>
+        <span className="omni-shimmer-text-accent text-[13px] font-medium">{headerLabel}</span>
       </div>
     )
   }
@@ -596,12 +660,10 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, turn
     <div className="mb-3 space-y-2">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+        className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
       >
-        <span className={thinking ? 'omni-shimmer-text-accent font-medium' : ''}>
-          {thinking ? `Thinking for ${formatElapsed(elapsedSeconds)}` : `Completed, thinking for ${formatElapsed(elapsedSeconds)}`}
-        </span>
-        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+        <HeaderLabel text={headerLabel} shimmer={thinking} />
+        <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       <div

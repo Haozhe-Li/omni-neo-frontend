@@ -1477,6 +1477,9 @@ function formatResetsIn(resetsAt: string): string {
     return `Resets in ${hours} hours ${minutes} min`
 }
 
+/** Percent used at which a meter switches from accent to `--warning`. */
+const USAGE_WARN_PCT = 80
+
 function UsageMeter({
     label,
     used,
@@ -1489,6 +1492,10 @@ function UsageMeter({
     resetLabel: string
 }) {
     const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
+    // Threshold is checked against the ROUNDED pct, the same number the label
+    // prints — so the bar can never read "80% used" in the normal color, or
+    // go amber while still showing 79%.
+    const low = pct >= USAGE_WARN_PCT
     return (
         <Row title={label} stacked>
             <div className="space-y-2">
@@ -1498,7 +1505,10 @@ function UsageMeter({
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-[var(--secondary)] overflow-hidden">
                     <div
-                        className="h-full rounded-full bg-[var(--accent)] transition-all duration-500"
+                        // `transition-all` already covers background-color, so
+                        // crossing the threshold fades from teal to amber over
+                        // the same 500ms the width animates in.
+                        className={`h-full rounded-full transition-all duration-500 ${low ? 'bg-[var(--warning)]' : 'bg-[var(--accent)]'}`}
                         style={{ width: `${pct}%` }}
                     />
                 </div>
