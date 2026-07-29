@@ -1,7 +1,7 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
@@ -1256,12 +1256,41 @@ export function ChatView({
               patchAssistant()
               break
             case 'error': {
+              // Structured cutoff (see backend core/utils/errors.py) — never
+              // folded into `text` as if the assistant said it. Whatever
+              // legitimate answer streamed before the cutoff (`text`) is kept
+              // as-is; the banner communicates what happened separately (see
+              // the `msg.error` render block below). Finalizes and returns
+              // immediately, same as 'stopped'/'done' below — a backend error
+              // event isn't always followed by a 'done' (e.g. the harmful-query
+              // gate fires before generation even starts), so waiting for one
+              // here would hang the turn.
               clearSlowHint()
-              const chunk = (text ? '\n\n' : '') + (ev.content || 'Something went wrong.')
-              text += chunk
-              appendText(chunk)
-              patchAssistant()
-              break
+              const finalMessages: ChatMessage[] = [
+                ...baseHistory,
+                {
+                  role: 'assistant',
+                  content: text,
+                  steps,
+                  blocks,
+                  widgets,
+                  artifacts,
+                  sources,
+                  drafting: null,
+                  error: {
+                    code: ev.code || 'generation_failed',
+                    message: ev.message || 'Something went wrong.',
+                    requestId: ev.request_id,
+                  },
+                  ...regenTag,
+                },
+              ]
+              setMessages(finalMessages)
+              syncToBackend(finalMessages, titleRef.current)
+              activeReaderRef.current = null
+              setIsLoading(false)
+              setStreamingIndex(-1)
+              return
             }
             case 'stopped': {
               clearSlowHint()
@@ -2135,6 +2164,33 @@ export function ChatView({
                           <div className={`flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)]/55 select-none${parsed.text ? ' mt-4' : ' mt-1'}`}>
                             <Square className="h-2.5 w-2.5 fill-current shrink-0" />
                             <span>Answer skipped by user</span>
+                          </div>
+                        )}
+
+                        {/* structured error banner — a turn the backend cut short
+                            (safety cutoff or a generation failure), never rendered
+                            as if the assistant said it. `safety_terminated` reads
+                            as an enforced boundary (amber); anything else reads as
+                            a retryable failure (destructive/red). */}
+                        {msg.error && !(i === streamingIndex && isLoading) && (
+                          <div
+                            className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[13px] select-none ${parsed.text ? 'mt-4' : 'mt-1'} ${
+                              msg.error.code === 'safety_terminated'
+                                ? 'border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-400'
+                                : 'border-destructive/20 bg-destructive/8 text-destructive'
+                            }`}
+                          >
+                            {msg.error.code === 'safety_terminated' ? (
+                              <ShieldAlert size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 opacity-80" />
+                            ) : (
+                              <AlertTriangle size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 opacity-80" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-medium leading-snug">{msg.error.message}</p>
+                              {msg.error.requestId && (
+                                <p className="mt-1 text-[11px] opacity-60 font-mono select-text">Ref: {msg.error.requestId}</p>
+                              )}
+                            </div>
                           </div>
                         )}
 
