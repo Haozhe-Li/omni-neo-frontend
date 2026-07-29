@@ -1257,25 +1257,35 @@ export function ChatView({
               break
             case 'error': {
               // Structured cutoff (see backend core/utils/errors.py) — never
-              // folded into `text` as if the assistant said it. Whatever
-              // legitimate answer streamed before the cutoff (`text`) is kept
-              // as-is; the banner communicates what happened separately (see
-              // the `msg.error` render block below). Finalizes and returns
-              // immediately, same as 'stopped'/'done' below — a backend error
-              // event isn't always followed by a 'done' (e.g. the harmful-query
-              // gate fires before generation even starts), so waiting for one
+              // folded into `text` as if the assistant said it; the banner
+              // communicates what happened separately (see the `msg.error`
+              // render block below). Finalizes and returns immediately, same
+              // as 'stopped'/'done' below — a backend error event isn't
+              // always followed by a 'done' (e.g. the harmful-query gate
+              // fires before generation even starts), so waiting for one
               // here would hang the turn.
+              //
+              // `safety_terminated` specifically means whatever streamed
+              // before the cutoff (partial answer text, reasoning, tool
+              // steps) is exactly the content that tripped the guard or led
+              // up to it — the whole reason this turn is being cut off. Drop
+              // all of it here rather than leaving it half-displayed: a
+              // guard catching the leak "most of the way through" isn't a
+              // partial success worth keeping half of. `generation_failed`/
+              // `no_output` aren't a disclosure risk the same way, so those
+              // keep whatever legitimate partial answer streamed.
               clearSlowHint()
+              const isSafetyCutoff = ev.code === 'safety_terminated'
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
                 {
                   role: 'assistant',
-                  content: text,
-                  steps,
-                  blocks,
-                  widgets,
-                  artifacts,
-                  sources,
+                  content: isSafetyCutoff ? '' : text,
+                  steps: isSafetyCutoff ? [] : steps,
+                  blocks: isSafetyCutoff ? [] : blocks,
+                  widgets: isSafetyCutoff ? [] : widgets,
+                  artifacts: isSafetyCutoff ? [] : artifacts,
+                  sources: isSafetyCutoff ? [] : sources,
                   drafting: null,
                   error: {
                     code: ev.code || 'generation_failed',
