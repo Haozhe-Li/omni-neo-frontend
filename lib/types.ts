@@ -29,6 +29,17 @@ export interface SSEEvent {
   kind?: string
   spec?: any
   artifacts?: string[]
+  /**
+   * `error` events only (see backend core/utils/errors.py): a closed-vocabulary
+   * reason ('safety_terminated' | 'generation_failed' | 'no_output', treat
+   * unrecognized values as a generic failure — new codes can ship on the
+   * backend before the frontend knows about them). `message` is ready-to-
+   * display copy; never construct your own from `code`. `request_id`
+   * correlates a user report to the server-side log line and is safe to show.
+   */
+  code?: string
+  message?: string
+  request_id?: string
 }
 
 export function parseSSEEvent(raw: any): SSEEvent {
@@ -167,6 +178,20 @@ export interface VerifiedClaim {
   claim: string
 }
 
+/**
+ * A turn cut short by a backend `error` SSE event (core/utils/errors.py),
+ * stored on the message instead of folded into `content` — the assistant
+ * never "said" this, the backend enforced it. `code` drives which banner
+ * variant renders (see chat-view.tsx); `message` is ready-to-display copy;
+ * `requestId` is a random per-occurrence id safe to show for support
+ * reference, not a request identifier.
+ */
+export interface ChatError {
+  code: string
+  message: string
+  requestId?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -192,6 +217,8 @@ export interface ChatMessage {
   regeneratedWith?: AgentMode
   /** Set when the user manually stopped generation mid-stream. */
   stoppedByUser?: boolean
+  /** Set when this turn ended via a backend `error` SSE event. See `ChatError`. */
+  error?: ChatError
   /**
    * Sentence spans that silently came back with a `/check_source` hit during
    * this message's background claim-check (see `lib/verify-claims.ts`),
