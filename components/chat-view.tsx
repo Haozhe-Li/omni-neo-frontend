@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
+import { canHighlightExcerpt } from '@/lib/highlight'
 
 interface ChatViewProps {
   query: string
@@ -944,7 +945,14 @@ export function ChatView({
             if (!response.ok) continue
             const data = await response.json()
             const matches: CheckSourceMatch[] = data?.matches ?? []
-            if (matches.length > 0) {
+            // Only surface a dashed underline for an automatic (background)
+            // hit when at least one match's excerpt actually locates inside
+            // its chunk — an unhighlightable match here would render as a
+            // mark with nothing to show. Manual checks (`handleCheckSource`)
+            // are unaffected and always display every match, highlightable
+            // or not.
+            const hasHighlightableMatch = matches.some((m) => canHighlightExcerpt(m.chunk, m.excerpt, m.title, m.url))
+            if (hasHighlightableMatch) {
               // Land each hit the moment it's confirmed rather than batching
               // behind the slowest candidate — an early sentence's dashed
               // underline shows up as soon as it's found, instead of every
@@ -1048,7 +1056,9 @@ export function ChatView({
             if (!response.ok) continue
             const data = await response.json()
             const matches: CheckSourceMatch[] = data?.matches ?? []
-            if (matches.length > 0) {
+            // Same highlightability gate as the message-level sweep above.
+            const hasHighlightableMatch = matches.some((m) => canHighlightExcerpt(m.chunk, m.excerpt, m.title, m.url))
+            if (hasHighlightableMatch) {
               persistReportVerifiedClaim(messageIndex, reportId, {
                 id: candidate.id,
                 start: candidate.start,

@@ -128,6 +128,15 @@ function stripChunkHeader(chunk: string, title?: string, url?: string): string {
   return i === 0 ? chunk : lines.slice(i).join('\n').replace(/^\s+/, '')
 }
 
+// Whether `excerptRaw` can actually be located inside `chunkRaw` (same
+// matching logic as `highlightExcerpt`, without building the segments) —
+// used to decide whether an automatic check-source hit is worth surfacing
+// as a highlightable dashed underline at all.
+export function canHighlightExcerpt(chunkRaw: string, excerptRaw: string, title?: string, url?: string): boolean {
+  const chunk = stripChunkHeader(chunkRaw, title, url)
+  return findMatchRange(chunk, excerptRaw) !== null
+}
+
 export function highlightExcerpt(chunkRaw: string, excerptRaw: string, title?: string, url?: string): HighlightSegment[] {
   const chunk = stripChunkHeader(chunkRaw, title, url)
   const match = findMatchRange(chunk, excerptRaw)
