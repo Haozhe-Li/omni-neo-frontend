@@ -58,3 +58,25 @@ export async function handleUsageLimitResponse(res: Response): Promise<boolean> 
     return false
   }
 }
+
+/**
+ * If `res` is a 403 carrying the backend's structured thread_locked body
+ * (core/routers/chat.py's `_thread_locked_detail`), return its message so the
+ * caller can flip local lock state and show it instead of the generic 403
+ * copy. This is a defense-in-depth path — normally the composer is already
+ * disabled before this request fires (see chat-view.tsx's `isLocked`); this
+ * only matters for a race (e.g. another tab's turn locked the thread after
+ * this one loaded). Returns null for any other status/body shape, leaving
+ * `res`'s body unread.
+ */
+export async function parseThreadLockedResponse(res: Response): Promise<{ reason?: string; message: string } | null> {
+  if (res.status !== 403) return null
+  try {
+    const body = await res.json()
+    const detail = body?.detail
+    if (!detail || detail.error !== 'thread_locked') return null
+    return { reason: detail.reason, message: detail.message || 'This conversation has been locked.' }
+  } catch {
+    return null
+  }
+}

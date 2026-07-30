@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen, CalendarClock } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen, CalendarClock, Lock } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -31,6 +31,8 @@ interface StoredChat {
     timestamp: number
     model?: string
     isExpiring?: boolean
+    /** Locked for safety (core/stream.py's SAFETY_TERMINATED path) — no more sends/regenerates on this thread. */
+    isLocked?: boolean
 }
 
 interface AppSidebarProps {
@@ -179,6 +181,7 @@ export function AppSidebar({
                     timestamp: new Date(t.updated_at).getTime(),
                     model: 'auto',
                     isExpiring: false,
+                    isLocked: !!t.is_locked,
                 }))
 
             remoteItems.sort((a, b) => b.timestamp - a.timestamp)
@@ -222,6 +225,7 @@ export function AppSidebar({
                         query: r.title || 'Untitled Chat',
                         timestamp: new Date(r.updated_at).getTime(),
                         model: 'auto',
+                        isLocked: !!r.is_locked,
                     }))
                     : []
                 setSearchResults(results)
@@ -744,6 +748,9 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                                         <span className="text-sm truncate flex-1">
                                             {chat.query}
                                         </span>
+                                        {chat.isLocked && (
+                                            <Lock size={11} className="shrink-0 opacity-70" aria-label="Locked" />
+                                        )}
                                         {generatingThreadIds.has(chat.thread_id) && (
                                             <span className="relative flex h-2 w-2 shrink-0">
                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
@@ -968,8 +975,11 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                                                             <MessageSquare size={16} />
                                                         )}
                                                     </div>
-                                                    <span className="text-sm truncate flex-1 pr-6">
-                                                        {chat.query}
+                                                    <span className="text-sm truncate flex-1 pr-6 flex items-center gap-1.5">
+                                                        <span className="truncate">{chat.query}</span>
+                                                        {chat.isLocked && (
+                                                            <Lock size={11} className="shrink-0 opacity-70" aria-label="Locked" />
+                                                        )}
                                                     </span>
                                                     <div
                                                         onClick={(e) => onSingleDeleteClick(e, chat.thread_id)}

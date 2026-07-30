@@ -16,7 +16,7 @@ import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { StreamingText } from '@/components/streaming-text'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
-import { getAiRequestErrorMessage, getLocalISOString, handleUsageLimitResponse } from '@/lib/utils'
+import { getAiRequestErrorMessage, getLocalISOString, handleUsageLimitResponse, parseThreadLockedResponse } from '@/lib/utils'
 import { getUserLocation } from '@/lib/location'
 import { isMemoryEnabled } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -49,7 +49,14 @@ interface ChatViewProps {
   // Already-fetched history for an existing thread (e.g. resumed via a /thread/{id}
   // link). When present, ChatView renders straight from it instead of firing its
   // own initial-load fetch, so there's no loading-placeholder flash.
-  preloadedThread?: { messages: ChatMessage[]; is_generating?: boolean; title?: string } | null
+  preloadedThread?: {
+    messages: ChatMessage[]
+    is_generating?: boolean
+    title?: string
+    is_locked?: boolean
+    locked_reason?: string
+    locked_at?: string
+  } | null
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -453,6 +460,9 @@ export function ChatView({
   // A user-set title (persisted backend-side) always wins over the raw first
   // query, so a rename survives a refresh / re-opening the /thread/{id} link.
   const [title, setTitle] = useState(() => preloadedThread?.title?.trim() || query)
+  // Set once this conversation trips the backend's safety guard — no more
+  // sends/regenerates, but the existing history stays fully visible/readable.
+  const [isLocked, setIsLocked] = useState(() => !!preloadedThread?.is_locked)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -1276,6 +1286,11 @@ export function ChatView({
               // keep whatever legitimate partial answer streamed.
               clearSlowHint()
               const isSafetyCutoff = ev.code === 'safety_terminated'
+              // The backend locks the conversation server-side the instant it
+              // emits this event (core/stream.py) — mirror that immediately
+              // rather than waiting for the next thread fetch, so the composer
+              // disables itself the moment this turn ends.
+              if (isSafetyCutoff) setIsLocked(true)
               const finalMessages: ChatMessage[] = [
                 ...baseHistory,
                 {
@@ -1394,6 +1409,12 @@ export function ChatView({
           body: JSON.stringify(payload),
         })
         if (!res.ok) {
+          const lockInfo = await parseThreadLockedResponse(res)
+          if (lockInfo) {
+            setIsLocked(true)
+            toast.error(lockInfo.message)
+            throw new Error(lockInfo.message)
+          }
           const handled = await handleUsageLimitResponse(res)
           const msg = handled ? 'Usage limit reached.' : getAiRequestErrorMessage(res.status)
           if (!handled) toast.error(msg)
@@ -1420,12 +1441,13 @@ export function ChatView({
   // loading state. Shared by the preloaded path and the fetch-on-mount path
   // below so the two don't drift apart.
   const applyLoadedThread = useCallback(
-    async (data: { messages?: unknown; is_generating?: boolean; title?: string }) => {
+    async (data: { messages?: unknown; is_generating?: boolean; title?: string; is_locked?: boolean }) => {
       if (!Array.isArray(data?.messages) || data.messages.length === 0) return false
       const loadedMessages = data.messages as ChatMessage[]
       setMessages(loadedMessages)
       if (loadedMessages[0]?.mode) setMode(loadedMessages[0].mode)
       if (data.title?.trim()) setTitle(data.title.trim())
+      setIsLocked(!!data.is_locked)
 
       if (data.is_generating) {
         // A background generation is in progress — reconnect to it.
@@ -1710,6 +1732,12 @@ export function ChatView({
           body: JSON.stringify(payload),
         })
         if (!res.ok) {
+          const lockInfo = await parseThreadLockedResponse(res)
+          if (lockInfo) {
+            setIsLocked(true)
+            toast.error(lockInfo.message)
+            throw new Error(lockInfo.message)
+          }
           const handled = await handleUsageLimitResponse(res)
           const msg = handled ? 'Usage limit reached.' : getAiRequestErrorMessage(res.status)
           if (!handled) toast.error(msg)
@@ -1730,6 +1758,7 @@ export function ChatView({
 
   const handleRewind = useCallback(
     (targetIndex: number, newQuery?: string, rewindMode?: AgentMode) => {
+      if (isLocked) return
       // Redoing the very last turn (regenerate the latest answer, or edit the
       // message you just sent) is the common case — no prompt, matches prior
       // behavior. Anything earlier also discards every turn after it, which
@@ -1741,12 +1770,12 @@ export function ChatView({
         setPendingRewind({ targetIndex, newQuery, rewindMode })
       }
     },
-    [messages, performRewind]
+    [messages, performRewind, isLocked]
   )
 
   // ── send from composer ─────────────────────────────────────────────────
   const handleSend = async () => {
-    if (isLoading) return
+    if (isLoading || isLocked) return
     if (attachedFiles.some((f) => f.status === 'uploading')) {
       toast.info('Please wait for the file to finish uploading.')
       return
@@ -2179,16 +2208,12 @@ export function ChatView({
 
                         {/* structured error banner — a turn the backend cut short
                             (safety cutoff or a generation failure), never rendered
-                            as if the assistant said it. `safety_terminated` reads
-                            as an enforced boundary (amber); anything else reads as
-                            a retryable failure (destructive/red). */}
+                            as if the assistant said it. Always the destructive/red
+                            treatment, whether it's a safety cutoff or a retryable
+                            failure — both read as "this didn't go through". */}
                         {msg.error && !(i === streamingIndex && isLoading) && (
                           <div
-                            className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[13px] select-none ${parsed.text ? 'mt-4' : 'mt-1'} ${
-                              msg.error.code === 'safety_terminated'
-                                ? 'border-amber-500/25 bg-amber-500/8 text-amber-700 dark:text-amber-400'
-                                : 'border-destructive/20 bg-destructive/8 text-destructive'
-                            }`}
+                            className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[13px] select-none border-destructive/20 bg-destructive/8 text-destructive-foreground ${parsed.text ? 'mt-4' : 'mt-1'}`}
                           >
                             {msg.error.code === 'safety_terminated' ? (
                               <ShieldAlert size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 opacity-80" />
@@ -2211,7 +2236,7 @@ export function ChatView({
                             sources={mergedSources}
                             ownSources={msg.sources}
                             onOpenSources={openSources}
-                            onRegenerate={(rewindMode) => handleRewind(i, undefined, rewindMode)}
+                            onRegenerate={isLocked ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                           />
                         ) : null}
@@ -2302,7 +2327,8 @@ export function ChatView({
                 onBlur={() => setIsFocused(false)}
                 onKeyDown={handleKeyDown}
                 onPaste={onPaste}
-                placeholder={isRecording ? 'Listening...' : "Ask anything..."}
+                readOnly={isLocked}
+                placeholder={isLocked ? 'This conversation has been locked and can no longer be continued.' : isRecording ? 'Listening...' : "Ask anything..."}
                 className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-[15px] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
                 style={{ minHeight: '52px' }}
               />
@@ -2315,11 +2341,11 @@ export function ChatView({
                   <div>
                     <button
                       type="button"
-                      onClick={() => { if (!isLoading) setPlusMenuOpen(p => !p) }}
-                      disabled={isLoading}
+                      onClick={() => { if (!isLoading && !isLocked) setPlusMenuOpen(p => !p) }}
+                      disabled={isLoading || isLocked}
                       className={`
                         flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                        ${!isLoading
+                        ${!isLoading && !isLocked
                           ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
                           : 'bg-muted text-muted-foreground cursor-not-allowed'
                         }
@@ -2533,10 +2559,10 @@ export function ChatView({
                   <button
                     type="button"
                     onClick={handleSst}
-                    disabled={isLoading}
+                    disabled={isLoading || isLocked}
                     className={`
                       relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                      ${!isLoading
+                      ${!isLoading && !isLocked
                         ? isRecording
                           ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
                           : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
@@ -2564,10 +2590,10 @@ export function ChatView({
                     <button
                       type="button"
                       onClick={handleSend}
-                      disabled={(!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || attachedFiles.some((f) => f.status === 'uploading')}
+                      disabled={isLocked || (!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || attachedFiles.some((f) => f.status === 'uploading')}
                       className={`
                         flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                        ${(input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0) && !attachedFiles.some((f) => f.status === 'uploading')
+                        ${!isLocked && (input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0) && !attachedFiles.some((f) => f.status === 'uploading')
                             ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
                             : 'bg-muted text-muted-foreground cursor-not-allowed'
                         }
