@@ -11,6 +11,7 @@ import {
   FileText,
   Wrench,
   ChevronDown,
+  ChevronRight,
   Terminal,
   Blocks,
   CircleCheck,
@@ -717,7 +718,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
         className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
       >
         <HeaderLabel text={headerLabel} shimmer={thinking} />
-        <ChevronDown size={14} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronRight size={14} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
       </button>
 
       <div

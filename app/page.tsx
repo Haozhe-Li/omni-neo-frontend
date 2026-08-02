@@ -110,6 +110,13 @@ export default function Home() {
     setView('home')
     setCurrentQuery('')
     setCurrentThreadId('')
+    // Undo `setShareableUrl`'s replaceState: the address bar can be showing
+    // `/thread/{id}` (faked, without an actual route change) from a prior
+    // chat while still mounted on `/` — reset it back to `/` so it doesn't
+    // keep pointing at a thread that's no longer shown (or, if the thread
+    // was just deleted, at an id that no longer exists and would 404 on
+    // refresh).
+    if (typeof window !== 'undefined') window.history.replaceState({}, '', '/')
   }, [])
 
   const handleSelectThread = useCallback(
