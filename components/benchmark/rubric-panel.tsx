@@ -60,7 +60,7 @@ export function RubricPanel({ failures, cases }: RubricPanelProps) {
     }, [failures, minEvaluated, kind])
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
             <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border-subtle)]">
                     <div>

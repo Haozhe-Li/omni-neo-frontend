@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { Sparkles, Trophy } from 'lucide-react'
 import {
-    OMNI_WEIGHTS,
+    OMNI_QUALITY_FLOOR,
     type LeaderboardRowWithIndex,
     fmtScore,
     providerColor,
@@ -57,11 +57,10 @@ export function OmniIndexHero({ rows, selected, onSelectModel }: OmniIndexHeroPr
                             Omni Index
                         </div>
                         <p className="mt-1 text-[12px] text-[var(--muted-foreground)] max-w-md">
-                            Our composite ranking — quality, latency and cost folded into one score
-                            (score {Math.round(OMNI_WEIGHTS.score * 100)}% · cost{' '}
-                            {Math.round(OMNI_WEIGHTS.cost * 100)}% · latency{' '}
-                            {Math.round(OMNI_WEIGHTS.latency * 100)}%). A model has to be good on all
-                            three to rank well — being free or instant alone won&apos;t carry it.
+                            Our composite ranking — quality first, with speed and cost as a
+                            tiebreaker. Being fast or cheap can only move a model&apos;s score by up
+                            to {Math.round((1 - OMNI_QUALITY_FLOOR) * 100)}%; it can never out-rank a
+                            model that is meaningfully more accurate.
                         </p>
                         {unpriced > 0 && (
                             <p className="mt-1 text-[10px] text-[var(--muted-foreground)]">

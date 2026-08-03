@@ -7,6 +7,7 @@ import {
     providerColor,
     providerLabel,
     compareModels,
+    modelFamilyGroup,
 } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
 
@@ -23,16 +24,19 @@ interface ModelPickerProps {
  * same selection, so comparing three models is one click each rather than a
  * per-widget filter.
  *
- * Grouped by family because that is how the matrix is actually designed: six
- * of the thirteen models are one family (gpt-oss-120b) crossed over provider
- * and reasoning effort, and a flat alphabetical list would scatter those six
- * across the whole picker and hide the structure worth comparing.
+ * Grouped by product line (`modelFamilyGroup`), not the raw `model_family`
+ * column — six of the thirteen models are one exact family (gpt-oss-120b)
+ * crossed over provider and reasoning effort, so a flat alphabetical list
+ * would scatter those six and hide the structure worth comparing. Coarser
+ * than that: every Gemini variant and every gpt-5.x variant also collapse
+ * into one "gemini" / "gpt-5" group each, rather than showing as a pile of
+ * one-model groups.
  */
 export function ModelPicker({ rows, selected, onToggle, onSetMany }: ModelPickerProps) {
     const families = useMemo(() => {
         const byFamily = new Map<string, LeaderboardRow[]>()
         for (const row of rows) {
-            const family = row.model_family ?? 'other'
+            const family = modelFamilyGroup(row.model_family)
             if (!byFamily.has(family)) byFamily.set(family, [])
             byFamily.get(family)!.push(row)
         }
@@ -114,7 +118,7 @@ export function ModelPicker({ rows, selected, onToggle, onSetMany }: ModelPicker
                                         </span>
                                         <span
                                             className={cn(
-                                                'text-[13px] truncate flex-1',
+                                                'text-[13px] truncate flex-1 min-w-0',
                                                 on ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'
                                             )}
                                         >

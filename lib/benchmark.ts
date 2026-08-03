@@ -231,6 +231,26 @@ export function providerLabel(provider: string | null | undefined): string {
     return provider === 'google_genai' ? 'google' : provider
 }
 
+/**
+ * Coarse product-line grouping for the model picker, distinct from
+ * `model_family` itself. `model_family` stays at exact-weights granularity
+ * (the eval's pricing lookups and the gpt-oss-120b provider×effort grid both
+ * depend on that precision — e.g. `gemini-3-flash-preview` and
+ * `gemini-3.6-flash` are priced ~3x apart and must never merge there). This
+ * only reshapes how the *picker* buckets rows: every Gemini variant under one
+ * "gemini" group, every gpt-5.x variant under one "gpt-5" group, gpt-oss-120b
+ * and gpt-oss-20b together under "gpt-oss", etc. Falls through to the raw
+ * family for anything not covered (currently qwen/glm/gemma, which are
+ * already one family each and need no grouping).
+ */
+export function modelFamilyGroup(family: string | null | undefined): string {
+    const f = family ?? 'other'
+    if (f.startsWith('gemini')) return 'gemini'
+    if (f.startsWith('gpt-5')) return 'gpt-5'
+    if (f.startsWith('gpt-oss')) return 'gpt-oss'
+    return f
+}
+
 export function seriesColor(index: number): string {
     return SERIES_COLORS[index % SERIES_COLORS.length]
 }
@@ -327,27 +347,37 @@ export function suiteOf(caseId: string): string {
  * sortable score, computed entirely client-side from fields the leaderboard
  * API already returns (no backend change, no new endpoint).
  *
- * Weighted GEOMETRIC mean, not a weighted sum: a model that is instant and
- * free but wrong should not out-rank one that is actually right. A linear
- * blend lets a zero-quality model keep banking points on the other two axes;
- * a product collapses toward zero the moment any single axis does.
- * `score` currently 0..1 already; the odd model with a stray negative check
- * total is floored at 0 before the exponent so a fractional power never goes
- * complex.
+ * quality * (bounded efficiency multiplier) — NOT a weighted geometric mean.
+ * An earlier version used `score^0.75 * latencyScore^0.1 * priceScore^0.15`,
+ * and on paper that reads as "quality dominates." It didn't in practice:
+ * real quality scores cluster tightly (roughly 0.7-0.95, under a 1.4x range),
+ * while latency/cost swing 10-100x across the roster. In a geometric mean,
+ * what determines each axis's actual pull on the result is weight × log-range
+ * — so latency and cost's huge dynamic range let their small nominal weights
+ * (0.1 and 0.15) out-pull quality's large nominal weight (0.75) whenever a
+ * fast/cheap model faced a slower/pricier-but-better one. That's the exact
+ * failure this shape is built to rule out.
  *
- * Latency and cost become "higher is better" scores in (0, 1] via a
- * saturating curve — `ref / (ref + x)` — rather than min-max against the rows
- * on screen. Min-max would make the same model's index drift up or down
- * purely because a different subset of models happened to be selected; the
- * saturating curve is anchored to fixed reference points instead, so a
- * model's index is stable across filters. The refs are calibration points,
- * not derived from data: `OMNI_LATENCY_REF_MS` is "a latency that scores
- * 0.5", ditto `OMNI_PRICE_REF_USD` for cost per case.
+ * Now quality directly multiplies the result — nothing on the cost/latency
+ * side can zero it out or swap two models whose quality gap exceeds
+ * `1 - OMNI_QUALITY_FLOOR`, no matter how extreme their speed/cost is.
+ * Cost and latency only modulate that quality score within a fixed, capped
+ * band (`OMNI_QUALITY_FLOOR` to 1.0) — a tiebreaker among close-quality
+ * models, not a force that can out-vote a real quality difference.
+ *
+ * Latency and cost still become "higher is better" scores in (0, 1] via a
+ * saturating curve — `ref / (ref + x)` — anchored to fixed reference points
+ * rather than min-max against the rows on screen, so a model's index doesn't
+ * drift just because a different subset happens to be selected. The refs are
+ * calibration points, not derived from data: `OMNI_LATENCY_REF_MS` is "a
+ * latency that scores 0.5", ditto `OMNI_PRICE_REF_USD` for cost per case.
+ * Within that band, cost still counts for more than latency (0.6 : 0.4),
+ * matching the old formula's 0.15 : 0.1 ratio.
  */
-export const OMNI_WEIGHTS = {
-    score: 0.75,
-    cost: 0.15,
-    latency: 0.1,
+export const OMNI_QUALITY_FLOOR = 0.9
+export const OMNI_EFFICIENCY_WEIGHTS = {
+    cost: 0.6,
+    latency: 0.4,
 } as const
 
 export const OMNI_LATENCY_REF_MS = 5000
@@ -364,12 +394,11 @@ export function omniIndex(
 
     const latencyScore = OMNI_LATENCY_REF_MS / (OMNI_LATENCY_REF_MS + latency_ms_p50)
     const priceScore = OMNI_PRICE_REF_USD / (OMNI_PRICE_REF_USD + cost_usd_per_case)
+    const efficiency =
+        OMNI_EFFICIENCY_WEIGHTS.cost * priceScore + OMNI_EFFICIENCY_WEIGHTS.latency * latencyScore
 
-    return (
-        Math.max(score, 0) ** OMNI_WEIGHTS.score *
-        latencyScore ** OMNI_WEIGHTS.latency *
-        priceScore ** OMNI_WEIGHTS.cost
-    )
+    const multiplier = OMNI_QUALITY_FLOOR + (1 - OMNI_QUALITY_FLOOR) * efficiency
+    return Math.max(score, 0) * multiplier
 }
 
 // ── metric registry ─────────────────────────────────────────────────────────

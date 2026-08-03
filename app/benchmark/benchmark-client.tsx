@@ -278,7 +278,7 @@ export function BenchmarkClient() {
                         />
 
                         {/* stat row */}
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-6">
                             <StatTile
                                 label="Models"
                                 value={String(headline.count)}
@@ -305,7 +305,7 @@ export function BenchmarkClient() {
                             />
                         </div>
 
-                        <div className="grid gap-6 lg:grid-cols-[260px_1fr] items-start">
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr] items-start">
                             {/* sticky control column */}
                             <aside className="lg:sticky lg:top-6 space-y-3">
                                 <ModelPicker
@@ -321,13 +321,13 @@ export function BenchmarkClient() {
                             </aside>
 
                             <main className="min-w-0 space-y-4">
-                                <nav className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--muted)] w-fit">
+                                <nav className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--muted)] w-full overflow-x-auto sm:w-fit">
                                     {VIEWS.map(({ key, label, icon: Icon }) => (
                                         <button
                                             key={key}
                                             onClick={() => setView(key)}
                                             className={cn(
-                                                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] transition-colors',
+                                                'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-md text-[12px] transition-colors',
                                                 view === key
                                                     ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
                                                     : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
@@ -475,7 +475,7 @@ function Row({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
             <dt className="text-[var(--muted-foreground)]">{k}</dt>
             <dd
                 className={cn(
-                    'tabular-nums truncate',
+                    'tabular-nums truncate min-w-0',
                     warn ? 'text-[var(--warning)]' : 'text-[var(--foreground)]'
                 )}
             >

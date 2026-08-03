@@ -170,7 +170,7 @@ export function QualityScatter({
                         {xDef.higherIsBetter ? 'right' : 'left'} is better — the frontier is what matters, not the ranking.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <MetricSelect
                         label="X"
                         value={xMetric}
