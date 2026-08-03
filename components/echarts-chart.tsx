@@ -18,6 +18,16 @@ export function EChartsChart({ option, className = '' }: EChartsChartProps) {
   const chartRef = useRef<any>(null)
   const { resolvedTheme } = useTheme()
 
+  // The init effect below is async (it dynamically imports echarts) and re-runs
+  // whenever the theme resolves or changes, which disposes and rebuilds the
+  // chart. Reading `option` from its own closure would then replay whatever
+  // option existed when that effect started — so a chart whose data changed
+  // while the import was in flight, or which was rebuilt by a theme flip, would
+  // silently render stale axes and stale series. A ref always holds the
+  // current one.
+  const optionRef = useRef(option)
+  optionRef.current = option
+
   useEffect(() => {
     let disposed = false
     let resizeObserver: ResizeObserver | null = null
@@ -30,7 +40,7 @@ export function EChartsChart({ option, className = '' }: EChartsChartProps) {
         { renderer: 'canvas' }
       )
       try {
-        chartRef.current.setOption(option, true)
+        chartRef.current.setOption(optionRef.current, true)
       } catch (e) {
         console.error('Failed to render chart option', e)
       }
