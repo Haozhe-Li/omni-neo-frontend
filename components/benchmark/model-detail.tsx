@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { GitCompare } from 'lucide-react'
+import { GitCompare, Images, Lock, Type, Unlock } from 'lucide-react'
 import {
     METRICS,
     RANK_TILES,
@@ -18,6 +18,7 @@ import {
     median,
     benchRoutes,
     modelSummary,
+    modelTraits,
     omniBreakdown,
     providerColor,
     providerLabel,
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils'
 // ── header ──────────────────────────────────────────────────────────────────
 export function ModelHeader({ row, run }: { row: LeaderboardRowWithIndex; run: EvalRun | undefined }) {
     const color = providerColor(row.provider)
+    const traits = modelTraits(row.model_family, row.model_label)
     return (
         <header className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--muted-foreground)]">
@@ -64,14 +66,66 @@ export function ModelHeader({ row, run }: { row: LeaderboardRowWithIndex; run: E
                 </Link>
             </div>
 
+            {/* What the model *is*, as opposed to how it scored. Neither of
+                these comes out of the eval — see modelTraits. */}
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <TraitBadge
+                    on={traits.multimodal}
+                    onLabel="Multimodal"
+                    offLabel="Text only"
+                    icon={traits.multimodal ? Images : Type}
+                />
+                <TraitBadge
+                    on={traits.openWeights}
+                    onLabel="Open weights"
+                    offLabel="Proprietary"
+                    icon={traits.openWeights ? Unlock : Lock}
+                />
+            </div>
+
             {run && (
-                <p className="mt-2 text-[12px] text-[var(--muted-foreground)]">
+                <p className="mt-2.5 text-[12px] text-[var(--muted-foreground)]">
                     {run.n_cases ?? row.n_results} cases
                     {run.repeats > 1 && ` × ${run.repeats} repeats`}
                     {run.suites.length > 0 && ` · ${run.suites.join(', ')}`}
                 </p>
             )}
         </header>
+    )
+}
+
+/**
+ * One capability chip.
+ *
+ * Both states are rendered rather than only the positive one: "not multimodal"
+ * is as much a fact about a model as "multimodal", and showing the badge only
+ * when true would leave the reader unable to tell a text-only model from one
+ * whose modality nobody recorded. The off state is muted, not red — text-only
+ * is a property, not a fault.
+ */
+function TraitBadge({
+    on,
+    onLabel,
+    offLabel,
+    icon: Icon,
+}: {
+    on: boolean
+    onLabel: string
+    offLabel: string
+    icon: typeof Images
+}) {
+    return (
+        <span
+            className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]',
+                on
+                    ? 'border-[var(--accent)]/30 bg-[var(--accent)]/[0.07] text-[var(--foreground)]'
+                    : 'border-[var(--border-subtle)] text-[var(--muted-foreground)]'
+            )}
+        >
+            <Icon className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+            {on ? onLabel : offLabel}
+        </span>
     )
 }
 

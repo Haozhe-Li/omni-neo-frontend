@@ -61,13 +61,19 @@ export function CompareRadar({
                 bottom: 0,
                 itemWidth: 8,
                 itemHeight: 8,
+                itemGap: 14,
                 icon: 'circle',
+                padding: [4, 8],
                 textStyle: { fontSize: 11, color: theme.axis },
             },
             radar: {
                 indicator: suites.map((s) => ({ name: s, max: 1 })),
-                radius: '62%',
-                center: ['50%', '46%'],
+                // Pulled in and up from 62%/46%: the polygon is not the widest
+                // thing here, its suite labels are, and at the old size those
+                // reached the legend on a short container. Same collision the
+                // scatter's axis name had with its legend.
+                radius: '56%',
+                center: ['50%', '44%'],
                 axisName: { fontSize: 10, color: theme.axis },
                 splitLine: { lineStyle: { color: theme.grid } },
                 splitArea: { show: false },

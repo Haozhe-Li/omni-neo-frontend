@@ -101,7 +101,12 @@ export function TradeoffScatter({
                 backgroundColor: 'transparent',
                 animationDuration: 520,
                 animationEasing: 'cubicOut',
-                grid: { left: 58, right: 20, top: 20, bottom: 54, containLabel: false },
+                // Bottom band has to seat two stacked things — the x-axis
+                // name and the legend under it. At 54 they overlapped: the
+                // axis name sits `nameGap` below the plot, the legend sits on
+                // the container's bottom edge, and there was not enough
+                // between them for both.
+                grid: { left: 58, right: 20, top: 20, bottom: 78, containLabel: false },
                 tooltip: {
                     trigger: 'item',
                     borderWidth: 0,
@@ -202,7 +207,9 @@ export function TradeoffScatter({
                     bottom: 0,
                     itemWidth: 8,
                     itemHeight: 8,
+                    itemGap: 14,
                     icon: 'circle',
+                    padding: [4, 8],
                     textStyle: { fontSize: 11, color: axisText },
                     data: [...byProvider.keys()].map((p) => providerLabel(p)),
                 },
