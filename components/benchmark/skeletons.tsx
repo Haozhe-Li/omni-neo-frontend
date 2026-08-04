@@ -128,6 +128,38 @@ export function ModelPageSkeleton() {
     )
 }
 
+export function MetricPageSkeleton() {
+    return (
+        <div className="space-y-4">
+            <div>
+                <SkeletonBlock className="h-8 w-52" />
+                <SkeletonBlock className="mt-3 h-3 w-96 max-w-full" />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+                {Array.from({ length: 8 }).map((_, i) => (
+                    <SkeletonBlock key={i} className="h-8 w-24" />
+                ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonBlock key={i} className="h-[74px] rounded-xl" />
+                ))}
+            </div>
+            {/* Rows, not bars: this page's ranking is a horizontal list. */}
+            <div className="space-y-px rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-3 sm:p-5">
+                {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 py-2">
+                        <SkeletonBlock className="h-3 w-4 shrink-0" />
+                        <SkeletonBlock className="h-4 w-32 shrink-0" />
+                        <SkeletonBlock className="h-4 flex-1" style={{ maxWidth: `${92 - i * 6}%` }} />
+                        <SkeletonBlock className="h-4 w-14 shrink-0" />
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 export function ComparePageSkeleton() {
     return (
         <div className="space-y-6">

@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import {
     METRICS,
     type LeaderboardRowWithIndex,
@@ -57,7 +57,6 @@ export function MetricBarCard({
     limit = 10,
 }: MetricBarCardProps) {
     const router = useRouter()
-    const [expanded, setExpanded] = useState(false)
     const def = METRICS[metric]
 
     const { entries, missing } = useMemo(() => {
@@ -80,38 +79,62 @@ export function MetricBarCard({
         return { entries: scored, missing: absent }
     }, [rows, metric, def])
 
-    const visible = expanded ? entries : entries.slice(0, limit)
+    const visible = entries.slice(0, limit)
     const hidden = entries.length - visible.length
 
-    /**
-     * The baseline is fitted to whatever is on screen, not to the full roster:
-     * expanding from ten bars to eighteen brings in lower values, and a scale
-     * that ignored them would clip the new bars off the bottom of the plot.
-     */
+    /** The baseline is fitted to what is actually drawn, not the full roster. */
     const scale = useMemo(
         () => barScale(visible.flatMap((e) => [e.value, ...(e.track === null ? [] : [e.track])])),
         [visible]
     )
 
-    const open = (label: string) => router.push(benchRoutes.model(label))
+    /**
+     * Two destinations from one card: a bar opens that model, anywhere else
+     * opens the metric's own page. Bars stop propagation rather than the card
+     * checking what was hit, so the more specific target wins by construction.
+     */
+    const openModel = (label: string) => router.push(benchRoutes.model(label))
+    const openMetric = () => router.push(benchRoutes.metric(metric))
     const pct = (v: number) => barPercent(v, scale, MIN_BAR)
 
     return (
         <section
+            onClick={openMetric}
+            role="link"
+            tabIndex={0}
+            onKeyDown={(e) => {
+                if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault()
+                    openMetric()
+                }
+            }}
+            aria-label={`${title} — see all models`}
             className={cn(
-                'flex min-w-0 flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-4 sm:p-5',
+                'group/card flex min-w-0 cursor-pointer flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-4 transition-colors sm:p-5',
+                'hover:border-[var(--accent)]/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
                 wide && 'sm:col-span-2 xl:col-span-3'
             )}
         >
-            <header className="min-w-0">
-                <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
-                    <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-                        style={{ backgroundColor: 'var(--accent)' }}
-                    />
-                    {title}
-                </h2>
-                <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted-foreground)]">{blurb}</p>
+            <header className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h2 className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-[var(--foreground)]">
+                        <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                            style={{ backgroundColor: 'var(--accent)' }}
+                        />
+                        {title}
+                    </h2>
+                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted-foreground)]">
+                        {blurb}
+                    </p>
+                </div>
+                {/* Standing hint that the card itself goes somewhere — without
+                    it, the only clickable-looking things here are the bars, and
+                    those go somewhere else. */}
+                <ArrowUpRight
+                    className="h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-colors group-hover/card:text-[var(--accent)]"
+                    strokeWidth={1.5}
+                />
             </header>
 
             {entries.length === 0 ? (
@@ -136,7 +159,10 @@ export function MetricBarCard({
                                 return (
                                     <button
                                         key={`${dataVersion}-${entry.row.model_label}`}
-                                        onClick={() => open(entry.row.model_label)}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            openModel(entry.row.model_label)
+                                        }}
                                         title={`${entry.row.model_label} · ${def?.format(entry.value) ?? entry.value}`}
                                         className="group relative flex h-full min-w-0 flex-1 cursor-pointer flex-col items-center justify-end rounded-t outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                                     >
@@ -224,7 +250,10 @@ export function MetricBarCard({
                             return (
                                 <li key={`${dataVersion}-${entry.row.model_label}`}>
                                     <button
-                                        onClick={() => open(entry.row.model_label)}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            openModel(entry.row.model_label)
+                                        }}
                                         className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left outline-none transition-colors active:bg-[var(--muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                                     >
                                         <span
@@ -275,20 +304,14 @@ export function MetricBarCard({
                     </ul>
 
                     <footer className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-[var(--border-subtle)] pt-2.5">
-                        {hidden > 0 || expanded ? (
-                            <button
-                                onClick={() => setExpanded((v) => !v)}
-                                className="inline-flex items-center gap-1 text-[11px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-                            >
-                                <ChevronDown
-                                    className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')}
-                                    strokeWidth={1.5}
-                                />
-                                {expanded ? 'Show top 10' : `Show all ${entries.length}`}
-                            </button>
-                        ) : (
-                            <span />
-                        )}
+                        {/* Was an in-place expand. The metric's own page shows the
+                            same full list with the definition and the other
+                            metrics beside it, so expanding here would only be a
+                            worse version of somewhere the card already goes. */}
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent)]">
+                            {hidden > 0 ? `All ${entries.length} models` : 'About this metric'}
+                            <ArrowUpRight className="h-3 w-3" strokeWidth={1.75} />
+                        </span>
 
                         <span className="text-[10px] text-[var(--muted-foreground)]">
                             {/* Say it in words as well as with the break mark. A
