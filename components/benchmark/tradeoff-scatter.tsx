@@ -291,7 +291,9 @@ function AxisSelect({
             options={items}
             prefix={axis}
             ariaLabel={`${axis} axis metric`}
-            className="w-[9.5rem] shrink-0 sm:w-[11rem]"
+            // Half the row each on a phone, so the two triggers stay side by
+            // side at any width instead of wrapping onto separate lines.
+            className="w-[calc(50%-0.25rem)] shrink-0 sm:w-[11rem]"
         />
     )
 }
