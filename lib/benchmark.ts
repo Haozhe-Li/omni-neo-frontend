@@ -613,6 +613,88 @@ export function paretoFrontier<T>(
     return front.sort((a, b) => x(a) - x(b))
 }
 
+// ── bar scale ───────────────────────────────────────────────────────────────
+/**
+ * Where a bar chart's baseline should sit for a given set of values.
+ *
+ * A bar encodes magnitude *from its baseline*, so moving that baseline off zero
+ * exaggerates differences — the classic misleading chart. It is also the only
+ * way to read a metric whose values are all bunched together: quality scores
+ * land between roughly 0.85 and 0.94, and against a zero baseline eighteen
+ * models render as eighteen bars of visually identical height. Both of those
+ * are real failures, and which one you get depends entirely on the metric.
+ *
+ * So the baseline is chosen from the data's own dynamic range rather than fixed
+ * either way. Latency and cost span an order of magnitude and keep an honest
+ * zero baseline; quality and pass rate are compressed and get a fitted one.
+ * When it *is* fitted, the caller is told (`truncated`) and must say so on the
+ * chart — a magnified axis is legitimate, silently magnifying one is not.
+ */
+export interface BarScale {
+    /** Value at the foot of the bar. */
+    floor: number
+    /** Value at a full-height bar. */
+    max: number
+    /** True when `floor` is not zero, so the UI can declare the magnification. */
+    truncated: boolean
+}
+
+/**
+ * Below this relative spread, a zero-baseline chart is unreadable and the
+ * baseline gets fitted. 0.4 means "the smallest value is more than 60% of the
+ * largest" — at that point every bar is in the top half of the plot.
+ */
+const SPREAD_FLOOR = 0.4
+
+/** How much of the data's range to keep as air under the smallest bar. */
+const HEADROOM = 0.3
+
+export function barScale(values: number[]): BarScale {
+    const clean = values.filter((v) => typeof v === 'number' && !Number.isNaN(v))
+    if (clean.length === 0) return { floor: 0, max: 1, truncated: false }
+
+    const max = Math.max(...clean)
+    const min = Math.min(...clean)
+
+    // A single value, all-equal values, or anything touching zero or below has
+    // no meaningful range to fit against — keep the honest baseline.
+    if (clean.length < 2 || max <= 0 || max === min) return { floor: 0, max, truncated: false }
+
+    if ((max - min) / max >= SPREAD_FLOOR) return { floor: 0, max, truncated: false }
+
+    // Leave the smallest bar a visible stub rather than sitting it exactly on
+    // the floor, where it would read as "zero" — the opposite of the truth for
+    // a value that is within a few percent of the leader.
+    const floor = Math.max(0, min - HEADROOM * (max - min))
+    return { floor, max, truncated: floor > 0 }
+}
+
+/** A value's height in a {@link BarScale}, as a percentage. */
+export function barPercent(value: number, scale: BarScale, minimum = 2): number {
+    const span = scale.max - scale.floor
+    if (span <= 0) return 100
+    return Math.max(((value - scale.floor) / span) * 100, minimum)
+}
+
+// ── routes ──────────────────────────────────────────────────────────────────
+/**
+ * Every link into this section, in one place.
+ *
+ * The benchmark is built to be liftable out of the app into a site of its own,
+ * where `/benchmark/models` becomes `/models`. Route strings scattered across a
+ * dozen components would each be an edit on that day; this is one constant.
+ */
+export const BENCH_BASE = '/benchmark'
+
+export const benchRoutes = {
+    overview: () => BENCH_BASE,
+    model: (label: string) => `${BENCH_BASE}/model/${modelSlug(label)}`,
+    compare: (labels: string[] = []) =>
+        labels.length === 0
+            ? `${BENCH_BASE}/compare`
+            : `${BENCH_BASE}/compare?models=${labels.map(modelSlug).join(',')}`,
+}
+
 // ── model slugs ─────────────────────────────────────────────────────────────
 /**
  * URL-safe id for a model page.

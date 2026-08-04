@@ -7,13 +7,13 @@ import { GitCompare, Info } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { MetricBarCard, ProviderLegend } from '@/components/benchmark/metric-bar-card'
 import { TradeoffScatter } from '@/components/benchmark/tradeoff-scatter'
-import { EmptyState } from '@/components/benchmark/page-shell'
+import { BatchFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
 import { MetricGridSkeleton, ScatterSkeleton } from '@/components/benchmark/skeletons'
 import {
     METRIC_CARDS,
     type EvalRun,
     fmtDate,
-    modelSlug,
+    benchRoutes,
 } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
 
@@ -56,7 +56,7 @@ export function OverviewClient() {
         }
         const next = new URLSearchParams(searchParams.toString())
         next.set(which, key)
-        router.replace(`/benchmark?${next.toString()}`, { scroll: false })
+        router.replace(`${benchRoutes.overview()}?${next.toString()}`, { scroll: false })
     }
 
     // Bumped whenever the underlying rows change, so bars replay their grow
@@ -76,14 +76,17 @@ export function OverviewClient() {
 
     if (models.length === 0) return <EmptyState />
 
-    const compareHref = `/benchmark/compare?models=${models
-        .slice(0, 3)
-        .map((m) => modelSlug(m.model_label))
-        .join(',')}`
+    const compareHref = benchRoutes.compare(models.slice(0, 3).map((m) => m.model_label))
 
     return (
-        <div className={cn('space-y-4 transition-opacity duration-200', refreshing && 'opacity-50')}>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className={cn('transition-opacity duration-200', refreshing && 'opacity-50')}>
+            <PageHeading
+                title="Benchmarks"
+                description="How each model behaves in Omni's pro mode — skill triggering, output contracts, answer quality, and what it costs to get there."
+                aside={<BatchFilter />}
+            />
+
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <ProviderLegend rows={models} />
                 <Link
                     href={compareHref}
@@ -94,41 +97,43 @@ export function OverviewClient() {
                 </Link>
             </div>
 
-            <p className="text-[11px] text-[var(--muted-foreground)]">
+            <p className="mb-4 text-[11px] text-[var(--muted-foreground)]">
                 Every bar is a link — tap one to open that model.
             </p>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {METRIC_CARDS.map((card, i) => (
-                    <div
-                        key={card.key}
-                        className={cn('omni-rise min-w-0', card.wide && 'sm:col-span-2 xl:col-span-3')}
-                        style={{ ['--rise-delay' as string]: `${Math.min(i * 45, 320)}ms` }}
-                    >
-                        <MetricBarCard
-                            rows={models}
-                            metric={card.key}
-                            title={card.title}
-                            blurb={card.blurb}
-                            wide={card.wide}
-                            dataVersion={dataVersion}
-                            limit={card.wide ? 13 : 10}
-                        />
-                    </div>
-                ))}
-            </div>
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {METRIC_CARDS.map((card, i) => (
+                        <div
+                            key={card.key}
+                            className={cn('omni-rise min-w-0', card.wide && 'sm:col-span-2 xl:col-span-3')}
+                            style={{ ['--rise-delay' as string]: `${Math.min(i * 45, 320)}ms` }}
+                        >
+                            <MetricBarCard
+                                rows={models}
+                                metric={card.key}
+                                title={card.title}
+                                blurb={card.blurb}
+                                wide={card.wide}
+                                dataVersion={dataVersion}
+                                limit={card.wide ? 13 : 10}
+                            />
+                        </div>
+                    ))}
+                </div>
 
-            <div className="omni-rise" style={{ ['--rise-delay' as string]: '360ms' }}>
-                <TradeoffScatter
-                    rows={models}
-                    xMetric={xMetric}
-                    yMetric={yMetric}
-                    onXMetricChange={setAxis('x')}
-                    onYMetricChange={setAxis('y')}
-                />
-            </div>
+                <div className="omni-rise" style={{ ['--rise-delay' as string]: '360ms' }}>
+                    <TradeoffScatter
+                        rows={models}
+                        xMetric={xMetric}
+                        yMetric={yMetric}
+                        onXMetricChange={setAxis('x')}
+                        onYMetricChange={setAxis('y')}
+                    />
+                </div>
 
-            <RunConditions runs={[...runByModel.values()]} caseCount={matrix?.cases.length ?? null} />
+                <RunConditions runs={[...runByModel.values()]} caseCount={matrix?.cases.length ?? null} />
+            </div>
         </div>
     )
 }

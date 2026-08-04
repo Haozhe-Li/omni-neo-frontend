@@ -1,5 +1,8 @@
 import { BenchmarkProvider } from '@/components/benchmark/benchmark-provider'
 import { BenchmarkShell } from '@/components/benchmark/page-shell'
+// Section-scoped stylesheet, kept separate from the app's globals so this whole
+// directory can be lifted into a standalone site in one move.
+import '@/styles/benchmark.css'
 
 /**
  * Wraps every `/benchmark/*` route in one data provider and one header.

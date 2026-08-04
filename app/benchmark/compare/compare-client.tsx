@@ -7,8 +7,8 @@ import { ComparePicker, MAX_COMPARE } from '@/components/benchmark/compare-picke
 import { CompareBars, CompareCases, CompareRadar, HeadToHead } from '@/components/benchmark/compare-charts'
 import { TradeoffScatter } from '@/components/benchmark/tradeoff-scatter'
 import { ComparePageSkeleton } from '@/components/benchmark/skeletons'
-import { EmptyState } from '@/components/benchmark/page-shell'
-import { findBySlug, modelSlug, seriesColor } from '@/lib/benchmark'
+import { BatchFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
+import { BENCH_BASE, findBySlug, modelSlug, seriesColor } from '@/lib/benchmark'
 
 /**
  * Up to four models, head to head.
@@ -46,7 +46,7 @@ export function CompareClient() {
             if (labels.length === 0) next.delete('models')
             else next.set('models', labels.map(modelSlug).join(','))
             const qs = next.toString()
-            router.replace(`/benchmark/compare${qs ? `?${qs}` : ''}`, { scroll: false })
+            router.replace(`${BENCH_BASE}/compare${qs ? `?${qs}` : ''}`, { scroll: false })
         },
         [router, searchParams]
     )
@@ -90,17 +90,13 @@ export function CompareClient() {
 
     return (
         <div className={cnOpacity(refreshing)}>
-            <h1 className="text-[22px] font-semibold tracking-tight text-[var(--foreground)] sm:text-[26px]">
-                Compare models
-            </h1>
-            <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-[var(--muted-foreground)]">
-                Up to four at a time — enough to see a real difference, few enough that the shapes stay
-                readable.
-            </p>
+            <PageHeading
+                title="Compare models"
+                description="Up to four at a time — enough to see a real difference, few enough that the shapes stay readable."
+                aside={<BatchFilter />}
+            />
 
-            <div className="mt-5">
-                <ComparePicker rows={models} selected={selected} onChange={setSelected} colorOf={colorOf} />
-            </div>
+            <ComparePicker rows={models} selected={selected} onChange={setSelected} colorOf={colorOf} />
 
             {rows.length === 0 ? (
                 <p className="mt-6 rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] px-5 py-10 text-center text-[13px] text-[var(--muted-foreground)]">

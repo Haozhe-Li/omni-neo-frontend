@@ -1,0 +1,148 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Benchmark section styles.
+
+   Kept in its own file, imported by app/benchmark/layout.tsx, rather than added
+   to the app-wide globals.css. This section is built to be liftable into a
+   standalone site later, and everything it needs to draw itself — its design
+   tokens and its animations — should travel in one file rather than have to be
+   picked out of a thousand-line stylesheet by hand on the day it moves.
+
+   Tokens fall back to the app's own variables where they exist, so today this
+   inherits Omni's theme automatically and on extraction only the fallbacks in
+   this block need values.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.omni-bench {
+  --bench-accent: var(--accent, #20B2AA);
+  --bench-surface: var(--card, #ffffff);
+  --bench-canvas: var(--background, #f3f3ee);
+  --bench-ink: var(--foreground, #1a1a1a);
+  --bench-ink-muted: var(--muted-foreground, #6b6b6b);
+  --bench-line: var(--border-subtle, rgba(0, 0, 0, 0.05));
+  --bench-track: var(--muted, #eaeae5);
+  --bench-warning: var(--warning, #f59e0b);
+
+  /* Bars are capped rather than filling their slot: a column that touches its
+     neighbours reads as one continuous mass, and the gap is what makes the
+     count legible at a glance. */
+  --bench-bar-max: 44px;
+  --bench-bar-radius: 4px;
+}
+
+/* ── skeletons ─────────────────────────────────────────────────────────────
+   The app's .animate-shimmer sweeps `--accent` across the element, which is
+   right for a one-off progress affordance and much too loud for a page-wide
+   skeleton — eight shimmering teal cards read as an error state. This sweeps
+   neutral ink instead, so a loading page looks like the page it is about to
+   become. */
+@keyframes omni-skeleton-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.omni-skeleton {
+  background-color: var(--muted);
+  background-image: linear-gradient(90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--foreground) 6%, transparent) 50%,
+      transparent 100%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: omni-skeleton-sweep 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* ── bar entrances ─────────────────────────────────────────────────────────
+   Bars grow from nothing on mount. `--bar-size` is set inline per bar; the
+   custom property is what the keyframe animates to, so one class serves both
+   the vertical (height) and horizontal (width) orientations. */
+@keyframes omni-bar-grow-v {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--bar-size);
+  }
+}
+
+@keyframes omni-bar-grow-h {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: var(--bar-size);
+  }
+}
+
+.omni-bar-v {
+  height: var(--bar-size);
+  animation: omni-bar-grow-v 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--bar-delay, 0ms);
+}
+
+.omni-bar-h {
+  width: var(--bar-size);
+  animation: omni-bar-grow-h 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--bar-delay, 0ms);
+}
+
+/* Card entrance. Unlike .stagger-children this takes its delay from an inline
+   custom property, because the benchmark grid has more cards than that rule
+   has nth-child stops and the delay has to keep counting past the eighth. */
+.omni-rise {
+  opacity: 0;
+  animation: fade-up 0.42s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: var(--rise-delay, 0ms);
+}
+
+/* fade-up is defined in the app's globals.css. Redeclared here so this file is
+   self-sufficient on extraction; an identical @keyframes is harmless. */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── axis break ────────────────────────────────────────────────────────────
+   The zigzag under a bar whose baseline is not zero. It is the conventional
+   mark for a magnified axis, and it sits on the chart itself so the caveat
+   travels with a screenshot of the chart — a footnote alone does not. */
+.omni-axis-break {
+  background-image: linear-gradient(135deg,
+      var(--bench-canvas) 25%, transparent 25%, transparent 50%,
+      var(--bench-canvas) 50%, var(--bench-canvas) 75%, transparent 75%);
+  background-size: 6px 6px;
+}
+
+/* Honour the OS setting: everything above still lands in its final state, it
+   just gets there immediately. Skeletons keep a static tint so they remain
+   legible as placeholders without pulsing. */
+@media (prefers-reduced-motion: reduce) {
+
+  .omni-skeleton,
+  .omni-bar-v,
+  .omni-bar-h,
+  .omni-rise {
+    animation: none !important;
+  }
+
+  .omni-rise {
+    opacity: 1;
+  }
+
+  .omni-skeleton {
+    background-image: none;
+  }
+}
