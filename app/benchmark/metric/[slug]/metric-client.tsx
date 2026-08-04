@@ -5,8 +5,9 @@ import { GitCompare } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { MetricDistribution, MetricRanking } from '@/components/benchmark/metric-ranking'
 import { MetricExplainer, MetricSwitcher } from '@/components/benchmark/metric-switcher'
-import { BatchFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
+import { ModelFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
 import { MetricPageSkeleton } from '@/components/benchmark/skeletons'
+import { NoModelsMatch } from '@/components/benchmark/model-filter'
 import { METRICS, benchRoutes, metricCardBySlug } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
 
@@ -19,7 +20,7 @@ import { cn } from '@/lib/utils'
  * the field, and the definition that the overview can only gesture at.
  */
 export function MetricClient({ slug }: { slug: string }) {
-    const { models, loading, refreshing } = useBenchmarkData()
+    const { models, visibleModels, loading, refreshing } = useBenchmarkData()
     const card = metricCardBySlug(slug)
 
     if (!card) {
@@ -46,20 +47,23 @@ export function MetricClient({ slug }: { slug: string }) {
             <PageHeading
                 title={card.title}
                 description={card.doc.what}
-                aside={<BatchFilter />}
+                aside={<ModelFilter />}
             />
 
             <div className="mb-5">
                 <MetricSwitcher active={card.key} />
             </div>
 
+            {visibleModels.length === 0 ? (
+                <NoModelsMatch />
+            ) : (
             <div className="space-y-4">
                 <div className="omni-rise" style={{ ['--rise-delay' as string]: '0ms' }}>
-                    <MetricDistribution card={card} rows={models} />
+                    <MetricDistribution card={card} rows={visibleModels} />
                 </div>
 
                 <div className="omni-rise" style={{ ['--rise-delay' as string]: '60ms' }}>
-                    <MetricRanking card={card} rows={models} />
+                    <MetricRanking card={card} rows={visibleModels} />
                 </div>
 
                 <div className="omni-rise" style={{ ['--rise-delay' as string]: '120ms' }}>
@@ -82,6 +86,7 @@ export function MetricClient({ slug }: { slug: string }) {
                     </Link>
                 </div>
             </div>
+            )}
         </div>
     )
 }

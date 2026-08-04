@@ -7,7 +7,8 @@ import { GitCompare, Info } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { MetricBarCard, ProviderLegend } from '@/components/benchmark/metric-bar-card'
 import { TradeoffScatter } from '@/components/benchmark/tradeoff-scatter'
-import { BatchFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
+import { ModelFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
+import { NoModelsMatch } from '@/components/benchmark/model-filter'
 import { MetricGridSkeleton, ScatterSkeleton } from '@/components/benchmark/skeletons'
 import {
     METRIC_CARDS,
@@ -30,7 +31,7 @@ import { cn } from '@/lib/utils'
 export function OverviewClient() {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const { models, runByModel, loading, refreshing, matrix } = useBenchmarkData()
+    const { models, visibleModels, runByModel, loading, refreshing, matrix } = useBenchmarkData()
 
     // Axis choice lives in the URL so a particular trade-off view is a link
     // someone can send, not a state you have to describe in words.
@@ -59,9 +60,9 @@ export function OverviewClient() {
         router.replace(`${benchRoutes.overview()}?${next.toString()}`, { scroll: false })
     }
 
-    // Bumped whenever the underlying rows change, so bars replay their grow
-    // animation on a manual refresh instead of silently swapping values.
-    const dataVersion = useMemo(() => Date.now(), [models])
+    // Bumped whenever the drawn rows change, so bars replay their grow
+    // animation on a refresh or a filter change instead of silently swapping.
+    const dataVersion = useMemo(() => Date.now(), [visibleModels])
 
     const showSkeleton = loading || (refreshing && models.length === 0)
 
@@ -85,11 +86,11 @@ export function OverviewClient() {
             <PageHeading
                 title="Benchmarks"
                 description="How each model behaves in Omni's pro mode — skill triggering, output contracts, answer quality, and what it costs to get there."
-                aside={<BatchFilter />}
+                aside={<ModelFilter />}
             />
 
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <ProviderLegend rows={models} />
+                <ProviderLegend rows={visibleModels} />
                 <Link
                     href={compareHref}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/[0.06] px-3 py-1.5 text-[12px] font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/[0.12]"
@@ -103,6 +104,9 @@ export function OverviewClient() {
                 Every bar is a link — tap one to open that model.
             </p>
 
+            {visibleModels.length === 0 ? (
+                <NoModelsMatch />
+            ) : (
             <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {METRIC_CARDS.map((card, i) => (
@@ -112,7 +116,7 @@ export function OverviewClient() {
                             style={{ ['--rise-delay' as string]: `${Math.min(i * 45, 320)}ms` }}
                         >
                             <MetricBarCard
-                                rows={models}
+                                rows={visibleModels}
                                 metric={card.key}
                                 title={card.title}
                                 blurb={card.blurb}
@@ -126,7 +130,7 @@ export function OverviewClient() {
 
                 <div className="omni-rise" style={{ ['--rise-delay' as string]: '360ms' }}>
                     <TradeoffScatter
-                        rows={models}
+                        rows={visibleModels}
                         xMetric={xMetric}
                         yMetric={yMetric}
                         onXMetricChange={setAxis('x')}
@@ -136,6 +140,7 @@ export function OverviewClient() {
 
                 <RunConditions runs={[...runByModel.values()]} caseCount={matrix?.cases.length ?? null} />
             </div>
+            )}
         </div>
     )
 }

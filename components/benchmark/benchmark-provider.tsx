@@ -16,8 +16,15 @@ import {
     type LeaderboardRowWithIndex,
     type MatrixResponse,
     compareModels,
+    modelTraits,
     omniIndex,
 } from '@/lib/benchmark'
+
+/** The trait facets a reader can narrow the roster by. */
+export interface ModelFilters {
+    multimodal: boolean
+    openWeights: boolean
+}
 
 /**
  * One fetch of the benchmark data for the whole `/benchmark` route tree.
@@ -39,16 +46,16 @@ interface BenchmarkContextValue {
     /** Newest completed run per model — carries suite scores and provenance. */
     runByModel: Map<string, EvalRun>
     /**
-     * Every distinct run batch, for the filter.
+     * The roster after the reader's trait filter.
      *
-     * Carries the run count and the most recent run per batch, not just the
-     * name: a bare list of labels like `nightly-2026-08` gives no way to tell a
-     * full matrix run from a two-model smoke test, which is exactly what you
-     * are choosing between.
+     * Kept separate from `models` rather than replacing it, because the two
+     * answer different questions. A ranking shows what the reader asked to see;
+     * a model page's "#3 of 18" must stay measured against the whole field, or
+     * a rank would silently improve as you hid competitors.
      */
-    batches: { label: string; runs: number; latest: string }[]
-    label: string
-    setLabel: (label: string) => void
+    visibleModels: LeaderboardRowWithIndex[]
+    filters: ModelFilters
+    setFilters: (filters: ModelFilters) => void
 
     loading: boolean
     /** True only while a manual refresh is in flight, so views can skeleton. */
@@ -74,7 +81,7 @@ export function useBenchmarkData(): BenchmarkContextValue {
 export function BenchmarkProvider({ children }: { children: ReactNode }) {
     const { fetchEval, forceRefresh } = useEvalFetch()
 
-    const [label, setLabel] = useState('')
+    const [filters, setFilters] = useState<ModelFilters>({ multimodal: false, openWeights: false })
     const [leaderboard, setLeaderboard] = useState<LeaderboardRow[] | null>(null)
     const [runs, setRuns] = useState<EvalRun[]>([])
     const [loading, setLoading] = useState(true)
@@ -92,20 +99,14 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
     const [bust, setBust] = useState('')
 
     const load = useCallback(async () => {
-        const scope = label ? { label } : {}
         const cacheBust = bust ? { _ts: bust } : {}
         const [board, runList] = await Promise.all([
-            fetchEval<{ rows: LeaderboardRow[] }>('leaderboard', { ...scope, ...cacheBust }),
-            fetchEval<{ runs: EvalRun[] }>('runs', {
-                limit: 200,
-                status: 'done',
-                ...scope,
-                ...cacheBust,
-            }),
+            fetchEval<{ rows: LeaderboardRow[] }>('leaderboard', cacheBust),
+            fetchEval<{ runs: EvalRun[] }>('runs', { limit: 200, status: 'done', ...cacheBust }),
         ])
         setLeaderboard(board.rows)
         setRuns(runList.runs)
-    }, [fetchEval, label, bust])
+    }, [fetchEval, bust])
 
     useEffect(() => {
         let cancelled = false
@@ -131,7 +132,6 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         setMatrixLoading(true)
         fetchEval<MatrixResponse>('matrix', {
             latest_per_model: true,
-            ...(label ? { label } : {}),
             ...(bust ? { _ts: bust } : {}),
         })
             .then((data) => {
@@ -148,7 +148,7 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         return () => {
             cancelled = true
         }
-    }, [matrixWanted, fetchEval, label, bust])
+    }, [matrixWanted, fetchEval, bust])
 
     const loadMatrix = useCallback(() => setMatrixWanted(true), [])
 
@@ -211,33 +211,30 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         return map
     }, [runs])
 
-    // Newest batch first: the one you want is almost always the last one run.
-    const batches = useMemo(() => {
-        const by = new Map<string, { label: string; runs: number; latest: string }>()
-        for (const run of runs) {
-            if (!run.label) continue
-            const seen = by.get(run.label)
-            if (!seen) {
-                by.set(run.label, { label: run.label, runs: 1, latest: run.started_at })
-            } else {
-                seen.runs += 1
-                if (new Date(run.started_at) > new Date(seen.latest)) seen.latest = run.started_at
-            }
-        }
-        return [...by.values()].sort(
-            (a, b) => new Date(b.latest).getTime() - new Date(a.latest).getTime()
-        )
-    }, [runs])
+    // Applied here rather than in each page so the choice survives navigation
+    // between the overview, a metric page and back.
+    const visibleModels = useMemo(() => {
+        if (!filters.multimodal && !filters.openWeights) return models
+        return models.filter((row) => {
+            const traits = modelTraits(row.model_family, row.model_label)
+            // Both ticked means both must hold — the ordinary reading of two
+            // filters, and the only one that makes ticking the second do
+            // anything.
+            if (filters.multimodal && !traits.multimodal) return false
+            if (filters.openWeights && !traits.openWeights) return false
+            return true
+        })
+    }, [models, filters])
 
     const value = useMemo(
         (): BenchmarkContextValue => ({
             models,
             runByModel,
-            batches,
-            label,
-            setLabel,
-            // `leaderboard === null` rather than the loading flag: a batch
-            // change refetches with rows already on screen, and blanking the
+            visibleModels,
+            filters,
+            setFilters,
+            // `leaderboard === null` rather than the loading flag: a manual
+            // refresh refetches with rows already on screen, and blanking the
             // page to a skeleton for that would be a worse read than leaving
             // the old rows up for the moment it takes.
             loading: loading && leaderboard === null,
@@ -252,8 +249,8 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         [
             models,
             runByModel,
-            batches,
-            label,
+            visibleModels,
+            filters,
             loading,
             leaderboard,
             refreshing,
