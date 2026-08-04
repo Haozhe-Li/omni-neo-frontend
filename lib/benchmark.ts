@@ -255,6 +255,40 @@ export function seriesColor(index: number): string {
     return SERIES_COLORS[index % SERIES_COLORS.length]
 }
 
+// ── model traits ────────────────────────────────────────────────────────────
+/**
+ * Facts about a model that the evaluation does not measure.
+ *
+ * The eval records what a model *did*; whether it can read an image, or
+ * whether you can download its weights, is a property of the model itself and
+ * has to be stated here. Kept as a hand-maintained classification rather than
+ * pretending it comes from the data — and keyed on the family group, so a new
+ * variant of a family it already knows (another gpt-oss effort level, another
+ * gemini flash) is classified correctly without an edit.
+ *
+ * Note that `gpt-oss` is open weights despite the name it shares with the
+ * closed gpt-5 line, which is why these match on the family group rather than
+ * on a `gpt` prefix. Gemma is likewise open weights, unlike Gemini.
+ */
+export interface ModelTraits {
+    multimodal: boolean
+    openWeights: boolean
+}
+
+/** Families that take text only. Everything else is treated as multimodal. */
+const TEXT_ONLY = ['gpt-oss', 'glm']
+/** Families whose weights are not published. Everything else is open. */
+const CLOSED_WEIGHTS = ['gpt-5', 'gemini']
+
+export function modelTraits(family: string | null | undefined, label?: string): ModelTraits {
+    const group = modelFamilyGroup(family ?? label ?? '')
+    const matches = (list: string[]) => list.some((f) => group === f || group.startsWith(`${f}-`))
+    return {
+        multimodal: !matches(TEXT_ONLY),
+        openWeights: !matches(CLOSED_WEIGHTS),
+    }
+}
+
 /**
  * Score -> background colour, as a teal ramp.
  *

@@ -36,8 +36,50 @@ export function BenchmarkShell({ children }: { children: React.ReactNode }) {
                 ) : (
                     children
                 )}
+
+                <BenchmarkFooter />
             </div>
         </div>
+    )
+}
+
+/**
+ * Same footer as the rest of the site.
+ *
+ * Shown at every width, unlike the home page's `hidden md:flex` version: these
+ * pages are public, shareable and meant to stand on their own, and the one
+ * place that says who made them and who holds the copyright should not be the
+ * thing that disappears on a phone.
+ */
+function BenchmarkFooter() {
+    return (
+        <footer className="mt-14 flex w-full flex-col items-center justify-center gap-4 py-6">
+            <div className="flex flex-col items-center gap-1 text-[10px] text-[var(--muted-foreground)]/60">
+                <p>
+                    &copy; {new Date().getFullYear()}{' '}
+                    <a
+                        href="https://omniknows.xyz"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-[family-name:var(--font-plex)] underline decoration-[var(--muted-foreground)]/30 underline-offset-2 transition-colors hover:text-[var(--foreground)] hover:decoration-[var(--foreground)]"
+                    >
+                        Omni Knows
+                    </a>
+                    {'. All rights reserved.'}
+                </p>
+                <p>
+                    Made with love by{' '}
+                    <a
+                        href="https://haozhe.li"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline decoration-[var(--muted-foreground)]/30 underline-offset-2 transition-colors hover:text-[var(--foreground)] hover:decoration-[var(--foreground)]"
+                    >
+                        Haozhe Li
+                    </a>
+                </p>
+            </div>
+        </footer>
     )
 }
 
