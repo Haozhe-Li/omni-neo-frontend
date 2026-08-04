@@ -38,8 +38,15 @@ interface BenchmarkContextValue {
     models: LeaderboardRowWithIndex[]
     /** Newest completed run per model — carries suite scores and provenance. */
     runByModel: Map<string, EvalRun>
-    /** Every distinct run batch label, for the header filter. */
-    labels: string[]
+    /**
+     * Every distinct run batch, for the filter.
+     *
+     * Carries the run count and the most recent run per batch, not just the
+     * name: a bare list of labels like `nightly-2026-08` gives no way to tell a
+     * full matrix run from a two-model smoke test, which is exactly what you
+     * are choosing between.
+     */
+    batches: { label: string; runs: number; latest: string }[]
     label: string
     setLabel: (label: string) => void
 
@@ -204,17 +211,29 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         return map
     }, [runs])
 
-    const labels = useMemo(() => {
-        const set = new Set<string>()
-        for (const run of runs) if (run.label) set.add(run.label)
-        return [...set].sort()
+    // Newest batch first: the one you want is almost always the last one run.
+    const batches = useMemo(() => {
+        const by = new Map<string, { label: string; runs: number; latest: string }>()
+        for (const run of runs) {
+            if (!run.label) continue
+            const seen = by.get(run.label)
+            if (!seen) {
+                by.set(run.label, { label: run.label, runs: 1, latest: run.started_at })
+            } else {
+                seen.runs += 1
+                if (new Date(run.started_at) > new Date(seen.latest)) seen.latest = run.started_at
+            }
+        }
+        return [...by.values()].sort(
+            (a, b) => new Date(b.latest).getTime() - new Date(a.latest).getTime()
+        )
     }, [runs])
 
     const value = useMemo(
         (): BenchmarkContextValue => ({
             models,
             runByModel,
-            labels,
+            batches,
             label,
             setLabel,
             // `leaderboard === null` rather than the loading flag: a batch
@@ -233,7 +252,7 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         [
             models,
             runByModel,
-            labels,
+            batches,
             label,
             loading,
             leaderboard,

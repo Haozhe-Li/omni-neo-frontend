@@ -2,7 +2,7 @@
 
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { BenchmarkNav } from '@/components/benchmark/benchmark-nav'
-import { cn } from '@/lib/utils'
+import { BatchSelect } from '@/components/benchmark/batch-select'
 
 /**
  * The frame every benchmark route renders inside.
@@ -76,32 +76,14 @@ export function PageHeading({
     )
 }
 
-/** The run-batch filter, rendered by whichever page wants it. */
+/**
+ * The run-batch filter, rendered by whichever page wants it.
+ *
+ * Kept as a named export so pages don't have to know which component draws it —
+ * see batch-select.tsx for why it is hand-built rather than a `<select>`.
+ */
 export function BatchFilter() {
-    const { labels, label, setLabel } = useBenchmarkData()
-    if (labels.length === 0) return null
-
-    return (
-        <label className="flex items-center gap-2">
-            <span className="text-[11px] text-[var(--muted-foreground)]">Batch</span>
-            <select
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                className={cn(
-                    'max-w-[52vw] cursor-pointer truncate rounded-lg border border-[var(--border-subtle)]',
-                    'bg-[var(--card)] px-2.5 py-1.5 text-[12px] text-[var(--foreground)]',
-                    'outline-none transition-colors focus:border-[var(--accent)]'
-                )}
-            >
-                <option value="">All run batches</option>
-                {labels.map((l) => (
-                    <option key={l} value={l}>
-                        {l}
-                    </option>
-                ))}
-            </select>
-        </label>
-    )
+    return <BatchSelect />
 }
 
 /** Shown on the overview when the tables exist but nothing has been run yet. */

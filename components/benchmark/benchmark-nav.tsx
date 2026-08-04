@@ -28,10 +28,18 @@ import { cn } from '@/lib/utils'
  * the app has one top-bar language rather than two.
  */
 
-/** Where the wordmark points, and what it says. One swap on extraction. */
+/**
+ * Where the wordmark points, and what it says. One swap on extraction.
+ *
+ * It points at the benchmark's own home, not at Omni's. A wordmark in a bar
+ * means "the top of the thing you are in", and this section is a thing of its
+ * own — it is expected to be lifted into a standalone site, where a logo that
+ * navigated out of the product would be plainly wrong. Making it the section
+ * root today is what that link is going to mean anyway.
+ */
 function BrandMark() {
     return (
-        <Link href="/" className="group flex shrink-0 items-center gap-2">
+        <Link href={benchRoutes.overview()} className="group flex shrink-0 items-center gap-2">
             <Image
                 src="/android-chrome-512x512.png"
                 alt=""

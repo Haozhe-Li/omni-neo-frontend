@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen, CalendarClock, Lock } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen, CalendarClock, Lock, BarChart3, ArrowUpRight } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -666,6 +666,45 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                         </div>
                     )}
                 </button>
+
+                {/* Benchmarks — an anchor rather than a router push, because it
+                    opens in its own tab: the section is a separate destination
+                    (and is meant to become a separate site), so following it
+                    should not tear down the thread you were in the middle of. */}
+                <a
+                    href="/benchmark"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                        if (isMobile && onToggle) onToggle()
+                    }}
+                    className={`
+                        group flex items-center gap-3 w-full p-2 rounded-lg
+                        hover:bg-[var(--secondary)]
+                        transition-all duration-200
+                        ${!isExpanded ? 'justify-center' : ''}
+                        text-[var(--foreground)]
+                    `}
+                    title="Benchmarks — opens in a new tab"
+                >
+                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
+                        <BarChart3 size={18} />
+                    </div>
+                    {isExpanded && (
+                        <div className="flex items-center justify-between gap-2 flex-1 min-w-0">
+                            <span className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-sm font-medium">Benchmarks</span>
+                                <span className="shrink-0 rounded-full bg-[var(--accent)]/12 px-1.5 py-px text-[10px] font-medium leading-[1.4] text-[var(--accent)]">
+                                    New
+                                </span>
+                            </span>
+                            <ArrowUpRight
+                                size={14}
+                                className="shrink-0 text-[var(--muted-foreground)] transition-colors group-hover:text-[var(--foreground)]"
+                            />
+                        </div>
+                    )}
+                </a>
 
                 {/* Scheduled — jumps straight into Settings' Scheduled Research tab */}
                 <button
