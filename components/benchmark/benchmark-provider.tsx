@@ -15,9 +15,8 @@ import {
     type LeaderboardRow,
     type LeaderboardRowWithIndex,
     type MatrixResponse,
-    compareModels,
+    dedupeLeaderboard,
     modelTraits,
-    omniIndex,
 } from '@/lib/benchmark'
 
 /** The trait facets a reader can narrow the roster by. */
@@ -177,28 +176,10 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
         }
     }, [forceRefresh])
 
-    /**
-     * Collapse the leaderboard to one row per model.
-     *
-     * The view spans every run ever recorded, and runs accumulate — a smoke run
-     * and a full matrix run of the same model both persist forever. Without
-     * this, one model appears several times with different case coverage and
-     * the same name lands at two different scores in one chart.
-     */
-    const models = useMemo(() => {
-        const newest = new Map<string, LeaderboardRow>()
-        for (const row of leaderboard ?? []) {
-            const existing = newest.get(row.model_label)
-            if (!existing || new Date(row.started_at) > new Date(existing.started_at)) {
-                newest.set(row.model_label, row)
-            }
-        }
-        // omni_index is computed once per model here rather than inline per
-        // consumer, so every chart reads the same number off the row.
-        return [...newest.values()]
-            .sort(compareModels)
-            .map((row): LeaderboardRowWithIndex => ({ ...row, omni_index: omniIndex(row) }))
-    }, [leaderboard])
+    // See dedupeLeaderboard: collapses the raw response to one row per model
+    // (runs accumulate forever) and computes omni_index once, shared with the
+    // llm.txt route so the two never arrive at a different number.
+    const models = useMemo(() => dedupeLeaderboard(leaderboard ?? []), [leaderboard])
 
     const runByModel = useMemo(() => {
         const map = new Map<string, EvalRun>()
