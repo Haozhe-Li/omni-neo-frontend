@@ -475,9 +475,256 @@ export const X_AXIS_METRICS = [
     'reasoning_tokens_mean',
 ] as const
 
+export const Y_AXIS_METRICS = ['score', 'omni_index', 'pass_rate', 'error_rate'] as const
+
 export function metricValue(row: Record<string, unknown>, key: string): number | null {
     const v = row[key]
     return typeof v === 'number' && !Number.isNaN(v) ? v : null
+}
+
+// ── overview cards ──────────────────────────────────────────────────────────
+/**
+ * The overview page is one bar chart per metric, so the page is a `.map` over
+ * this list rather than eight hand-written cards. `blurb` is the one line under
+ * the card title — it says what the metric means, not what the chart is.
+ *
+ * Order is the reading order: the composite first, then quality, then the two
+ * axes that trade against it (speed, cost), then the diagnostics.
+ */
+export interface MetricCardDef {
+    key: string
+    /** Short title on the card — not METRICS[key].label, which is axis-length. */
+    title: string
+    blurb: string
+    /** Renders full-width at the top of the grid instead of in a column. */
+    wide?: boolean
+}
+
+export const METRIC_CARDS: MetricCardDef[] = [
+    {
+        key: 'omni_index',
+        title: 'Omni Index',
+        blurb: 'Quality, with speed and cost as a capped tiebreaker · Higher is better',
+        wide: true,
+    },
+    { key: 'score', title: 'Quality', blurb: 'Weighted rubric score across every case · Higher is better' },
+    { key: 'pass_rate', title: 'Hard checks', blurb: 'Share of cases passing every must-pass check · Higher is better' },
+    { key: 'latency_ms_p50', title: 'Speed', blurb: 'Median wall-clock time to finish a case · Lower is better' },
+    { key: 'ttft_ms_p50', title: 'Time to first token', blurb: 'Median wait before anything streams back · Lower is better' },
+    { key: 'cost_usd_per_case', title: 'Cost per case', blurb: 'Average USD to answer one case · Lower is better' },
+    { key: 'output_tokens_mean', title: 'Verbosity', blurb: 'Mean output tokens per case · Lower is better' },
+    { key: 'error_rate', title: 'Error rate', blurb: 'Share of runs that errored or timed out · Lower is better' },
+]
+
+/** The five metrics that get a rank tile on a model page, in tile order. */
+export const RANK_TILES: { key: string; title: string; hint: string }[] = [
+    { key: 'omni_index', title: 'Omni Index', hint: 'quality × efficiency' },
+    { key: 'score', title: 'Quality', hint: 'rubric score' },
+    { key: 'latency_ms_p50', title: 'Speed', hint: 'median latency' },
+    { key: 'cost_usd_per_case', title: 'Price', hint: 'USD per case' },
+    { key: 'output_tokens_mean', title: 'Verbosity', hint: 'output tokens' },
+]
+
+// ── ranking & distribution ──────────────────────────────────────────────────
+/**
+ * Where one model sits on one metric, among the models that have that metric.
+ *
+ * `total` counts only rows with a value, not every row on the page — an
+ * unpriced model is absent from the price ranking rather than last in it, so
+ * "#3 / 9" on a page of thirteen models is correct, not a bug.
+ *
+ * `percentile` is 1 for the best value and 0 for the worst, already flipped for
+ * lower-is-better metrics, so a meter can render it without knowing which way
+ * the metric points.
+ */
+export interface MetricRank {
+    rank: number
+    total: number
+    value: number
+    percentile: number
+    median: number
+}
+
+export function rankOn(
+    rows: Record<string, unknown>[],
+    key: string,
+    modelLabel: string
+): MetricRank | null {
+    const def = METRICS[key]
+    if (!def) return null
+
+    const scored = rows
+        .map((r) => ({ label: String(r.model_label ?? ''), value: metricValue(r, key) }))
+        .filter((r): r is { label: string; value: number } => r.value !== null)
+    if (scored.length === 0) return null
+
+    const mine = scored.find((r) => r.label === modelLabel)
+    if (!mine) return null
+
+    const sorted = [...scored].sort((a, b) =>
+        def.higherIsBetter ? b.value - a.value : a.value - b.value
+    )
+    const rank = sorted.findIndex((r) => r.label === modelLabel) + 1
+    const percentile = sorted.length === 1 ? 1 : 1 - (rank - 1) / (sorted.length - 1)
+
+    return {
+        rank,
+        total: sorted.length,
+        value: mine.value,
+        percentile,
+        median: median(scored.map((r) => r.value)) ?? mine.value,
+    }
+}
+
+export function median(values: number[]): number | null {
+    const clean = values.filter((v) => typeof v === 'number' && !Number.isNaN(v)).sort((a, b) => a - b)
+    if (clean.length === 0) return null
+    const mid = Math.floor(clean.length / 2)
+    return clean.length % 2 === 0 ? (clean[mid - 1] + clean[mid]) / 2 : clean[mid]
+}
+
+/**
+ * The models nothing else beats on both axes at once.
+ *
+ * The scatter's whole argument is "pick from the frontier, not from the top of
+ * a list", and asking a reader to derive that frontier by eye from thirteen
+ * scattered dots is asking too much. A point is on it when no other point is at
+ * least as good on both axes and strictly better on one.
+ */
+export function paretoFrontier<T>(
+    points: T[],
+    x: (p: T) => number,
+    y: (p: T) => number,
+    xHigherIsBetter: boolean,
+    yHigherIsBetter: boolean
+): T[] {
+    const better = (a: number, b: number, higher: boolean) => (higher ? a > b : a < b)
+    const atLeast = (a: number, b: number, higher: boolean) => (higher ? a >= b : a <= b)
+
+    const front = points.filter((p) =>
+        !points.some(
+            (q) =>
+                q !== p &&
+                atLeast(x(q), x(p), xHigherIsBetter) &&
+                atLeast(y(q), y(p), yHigherIsBetter) &&
+                (better(x(q), x(p), xHigherIsBetter) || better(y(q), y(p), yHigherIsBetter))
+        )
+    )
+    return front.sort((a, b) => x(a) - x(b))
+}
+
+// ── model slugs ─────────────────────────────────────────────────────────────
+/**
+ * URL-safe id for a model page.
+ *
+ * Model labels carry parentheses, dots and spaces (`gpt-oss-120b (high)`,
+ * `gemini-3.6-flash`), all of which survive `encodeURIComponent` but make an
+ * unreadable, un-pasteable URL. Slugs are matched back case-insensitively
+ * against the roster, with the raw label as a fallback so an old link built
+ * from an encoded label still resolves.
+ */
+export function modelSlug(label: string): string {
+    return label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+}
+
+export function findBySlug<T extends { model_label: string }>(rows: T[], slug: string): T | null {
+    const wanted = decodeURIComponent(slug)
+    return (
+        rows.find((r) => modelSlug(r.model_label) === wanted) ??
+        rows.find((r) => r.model_label === wanted) ??
+        rows.find((r) => modelSlug(r.model_label) === modelSlug(wanted)) ??
+        null
+    )
+}
+
+// ── generated prose ─────────────────────────────────────────────────────────
+/**
+ * The paragraph at the top of a model page, written from the numbers.
+ *
+ * Deliberately deterministic — no model call. Every clause is a comparison the
+ * reader could verify off the charts below it, and phrasing it once here means
+ * "above average" always means the same thing (better than the median on that
+ * metric) instead of drifting per sentence.
+ */
+export function modelSummary(
+    row: LeaderboardRowWithIndex,
+    all: LeaderboardRowWithIndex[]
+): string[] {
+    const rows = all as unknown as Record<string, unknown>[]
+    const label = row.model_label
+    const sentences: string[] = []
+
+    const band = (r: MetricRank): string => {
+        if (r.total < 3) return 'in a field too small to place'
+        if (r.rank === 1) return 'the best of any model here'
+        if (r.percentile >= 0.75) return `among the top of the ${r.total} models measured`
+        if (r.percentile >= 0.45) return 'around the middle of the field'
+        return `in the slower half of the ${r.total} models measured`
+    }
+
+    const quality = rankOn(rows, 'score', label)
+    if (quality) {
+        const vs =
+            quality.value > quality.median
+                ? `above the median of ${fmtScore(quality.median)}`
+                : quality.value < quality.median
+                    ? `below the median of ${fmtScore(quality.median)}`
+                    : 'exactly at the median'
+        sentences.push(
+            `${label} scores ${fmtScore(quality.value)} on quality — ${vs} — ranking #${quality.rank} of ${quality.total}.`
+        )
+    }
+
+    const speed = rankOn(rows, 'latency_ms_p50', label)
+    if (speed) {
+        sentences.push(
+            `It finishes a case in ${fmtMs(speed.value)} at the median, ${band(speed)} (median ${fmtMs(speed.median)}).`
+        )
+    }
+
+    const cost = rankOn(rows, 'cost_usd_per_case', label)
+    if (cost) {
+        const ratio = cost.median > 0 ? cost.value / cost.median : null
+        const rel =
+            ratio === null
+                ? ''
+                : ratio >= 1.15
+                    ? ` — roughly ${ratio.toFixed(1)}× the median case`
+                    : ratio <= 0.85
+                        ? ` — about ${(1 / ratio).toFixed(1)}× cheaper than the median case`
+                        : ' — close to the median case'
+        sentences.push(`Each case costs ${fmtCost(cost.value)}${rel}.`)
+    } else {
+        sentences.push(
+            'No price is recorded for this model, so it is left out of every cost comparison rather than counted as free.'
+        )
+    }
+
+    const verbosity = rankOn(rows, 'output_tokens_mean', label)
+    if (verbosity && verbosity.median > 0) {
+        const ratio = verbosity.value / verbosity.median
+        const word = ratio >= 1.3 ? 'notably verbose' : ratio <= 0.7 ? 'notably terse' : 'about average in length'
+        sentences.push(
+            `Answers run ${fmtTokens(verbosity.value)} output tokens, ${word} against the ${fmtTokens(verbosity.median)}-token median.`
+        )
+    }
+
+    if (row.error_rate !== null && row.error_rate > 0.02) {
+        sentences.push(
+            `${fmtPct(row.error_rate)} of its runs errored or timed out, which caps how far the other numbers can be trusted.`
+        )
+    }
+
+    if (row.omni_index === null) {
+        sentences.push(
+            'It has no Omni Index: that composite needs quality, latency and price together, and at least one is missing.'
+        )
+    }
+
+    return sentences
 }
 
 /** Stable, readable model ordering: family, then provider, then effort. */
