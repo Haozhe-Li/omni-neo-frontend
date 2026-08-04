@@ -493,28 +493,161 @@ export function metricValue(row: Record<string, unknown>, key: string): number |
  */
 export interface MetricCardDef {
     key: string
+    /**
+     * URL segment for this metric's own page. Readable rather than the raw key
+     * — `/metric/cost` beats `/metric/cost_usd_per_case`, and these pages are
+     * the section's main search surface, so the address is part of the content.
+     */
+    slug: string
     /** Short title on the card — not METRICS[key].label, which is axis-length. */
     title: string
     blurb: string
     /** Renders full-width at the top of the grid instead of in a column. */
     wide?: boolean
+    /**
+     * Metrics worth showing beside each row on this metric's page.
+     *
+     * Deliberately two or three, not every column: a full grid of numbers is
+     * the leaderboard table this section was built to replace. These are only
+     * the ones that explain the ranking — the terms behind the Omni Index, the
+     * tail behind a median latency.
+     */
+    context: string[]
+    /**
+     * How the metric is defined, in four parts.
+     *
+     * Written as data rather than markup because a standalone benchmark site
+     * needs a methodology page, and that page is these eight entries collected
+     * — a `.map` if this stays structured, a rewrite if it becomes JSX.
+     */
+    doc: {
+        /** One sentence: what the number is. */
+        what: string
+        /** Where it comes from — the pipeline, the formula. */
+        how: string
+        /** How to read it: what counts as good, what gap is meaningful. */
+        reading: string
+        /** What it does not say, and what would make it misleading. */
+        caveat: string
+    }
 }
 
 export const METRIC_CARDS: MetricCardDef[] = [
     {
         key: 'omni_index',
+        slug: 'omni-index',
         title: 'Omni Index',
         blurb: 'Quality, with speed and cost as a capped tiebreaker · Higher is better',
         wide: true,
+        context: ['score', 'latency_ms_p50', 'cost_usd_per_case'],
+        doc: {
+            what: 'Omni’s own answer to "which model should I use" — quality, speed and price folded into one sortable number.',
+            how: `Quality multiplied by a bounded efficiency term: index = score × (${OMNI_QUALITY_FLOOR} + ${(1 - OMNI_QUALITY_FLOOR).toFixed(2)} × efficiency), where efficiency blends a price score and a latency score ${OMNI_EFFICIENCY_WEIGHTS.cost} to ${OMNI_EFFICIENCY_WEIGHTS.latency}. Each of those is a saturating curve, ref / (ref + x), against fixed reference points — ${OMNI_LATENCY_REF_MS / 1000}s of latency and $${OMNI_PRICE_REF_USD} per case each score 0.5. The references are calibration constants, not derived from the models on screen, so a model’s index does not drift when a different subset is selected.`,
+            reading: `Quality is the dominant term by construction. Speed and cost together can only move the result by ${Math.round((1 - OMNI_QUALITY_FLOOR) * 100)}%, so they break ties between close models and can never lift a fast, cheap model above a meaningfully more accurate one.`,
+            caveat: 'A model with no price recorded gets no index at all rather than a free ride — it is absent from this ranking, not last in it. The shape is also a deliberate editorial choice: it encodes that accuracy matters more than either speed or price, which is right for research work and would be wrong for a high-volume classifier.',
+        },
     },
-    { key: 'score', title: 'Quality', blurb: 'Weighted rubric score across every case · Higher is better' },
-    { key: 'pass_rate', title: 'Hard checks', blurb: 'Share of cases passing every must-pass check · Higher is better' },
-    { key: 'latency_ms_p50', title: 'Speed', blurb: 'Median wall-clock time to finish a case · Lower is better' },
-    { key: 'ttft_ms_p50', title: 'Time to first token', blurb: 'Median wait before anything streams back · Lower is better' },
-    { key: 'cost_usd_per_case', title: 'Cost per case', blurb: 'Average USD to answer one case · Lower is better' },
-    { key: 'output_tokens_mean', title: 'Verbosity', blurb: 'Mean output tokens per case · Lower is better' },
-    { key: 'error_rate', title: 'Error rate', blurb: 'Share of runs that errored or timed out · Lower is better' },
+    {
+        key: 'score',
+        slug: 'quality',
+        title: 'Quality',
+        blurb: 'Weighted rubric score across every case · Higher is better',
+        context: ['pass_rate', 'error_rate'],
+        doc: {
+            what: 'How well the answers actually satisfied what each case asked for, from 0 to 1.',
+            how: 'Every case carries a rubric of weighted checks — deterministic ones that inspect the output directly (did it produce a report, did it call the right skill, is the table well-formed) and judge-model ones that read the answer against a written criterion. A case’s score is its weighted pass fraction; the model’s score is the weighted mean across cases, averaged over repeats.',
+            reading: 'Scores cluster: most models land within a narrow band near the top, so a gap of 0.02 is noise and a gap of 0.08 is real. The per-case view on a model’s page is where a headline score becomes legible — two models on the same number often fail completely different cases.',
+            caveat: 'Part of this is a judge model’s opinion, so it inherits that model’s biases, and runs judged by different models are not strictly comparable. A high error rate also silently deflates the score, since a run that crashed scores zero on everything it did not reach.',
+        },
+    },
+    {
+        key: 'pass_rate',
+        slug: 'hard-checks',
+        title: 'Hard checks',
+        blurb: 'Share of cases passing every must-pass check · Higher is better',
+        context: ['score', 'error_rate'],
+        doc: {
+            what: 'The fraction of cases where nothing that had to happen failed to happen.',
+            how: 'A subset of each rubric is marked must-pass — the contract rather than the craft: the report exists, the right skill was triggered, the requested chart was produced, the negative case was correctly refused. A case passes only if every one of them passes; partial credit does not apply.',
+            reading: 'This is the floor and quality is the ceiling. A model can score well on quality while failing hard checks, and that combination means good prose that did not do what it was told — usually worse in production than a duller answer that honoured the contract.',
+            caveat: 'It is all-or-nothing per case, so it moves in coarse jumps and one flaky check can cost a whole case. Read it beside quality, never instead of it.',
+        },
+    },
+    {
+        key: 'latency_ms_p50',
+        slug: 'speed',
+        title: 'Speed',
+        blurb: 'Median wall-clock time to finish a case · Lower is better',
+        context: ['latency_ms_p95', 'ttft_ms_p50', 'turns_mean'],
+        doc: {
+            what: 'How long a whole case takes end to end, at the median.',
+            how: 'Wall-clock from the request until the final answer is complete — every LLM turn plus every tool call in between, exactly as a user would experience it. The median across cases and repeats, not the mean, so one pathological case cannot dominate.',
+            reading: 'Compare it against p95 in the context column. A model whose p95 is close to its p50 is predictable; one whose p95 is several times its p50 is usually getting stuck in long tool loops on a minority of cases, and that tail is what users actually complain about.',
+            caveat: 'This includes time spent in searches and page fetches, which are network-bound and not the model’s doing — so it measures the agent, not the raw model. Runs with the tool cache off see real network latency and are not comparable to cached runs.',
+        },
+    },
+    {
+        key: 'ttft_ms_p50',
+        slug: 'first-token',
+        title: 'Time to first token',
+        blurb: 'Median wait before anything streams back · Lower is better',
+        context: ['ttft_answer_ms_p50', 'latency_ms_p50'],
+        doc: {
+            what: 'How long the screen stays empty before the model produces anything at all.',
+            how: 'Median time from the request to the first streamed chunk of any kind, including a reasoning block or a tool call the user never sees as prose.',
+            reading: 'This is the perceived responsiveness number, and it is often uncorrelated with total latency — a model can start instantly and then grind, or think for eight seconds and finish quickly. The context column also carries time to the first *answer prose*, which is closer to what the reader experiences as "it started".',
+            caveat: 'A model that opens with a long reasoning block scores well here while still feeling slow, because the first thing to arrive was not an answer. That is exactly why both numbers are recorded.',
+        },
+    },
+    {
+        key: 'cost_usd_per_case',
+        slug: 'cost',
+        title: 'Cost per case',
+        blurb: 'Average USD to answer one case · Lower is better',
+        context: ['score', 'output_tokens_mean', 'reasoning_tokens_mean'],
+        doc: {
+            what: 'What one case costs in API spend, on average.',
+            how: 'Token counts from the run, priced with the per-model rates in the eval_pricing table — input, output, cached input and reasoning tokens each at their own rate, summed across every turn of the case.',
+            reading: 'The spread here is the widest of any metric on the page, often two orders of magnitude, which is why the trade-off chart uses a log axis. Read it against quality: the useful question is never "what is cheapest" but "what is the cheapest thing that is good enough".',
+            caveat: 'A model with no row in eval_pricing has no cost, and is left out of this ranking rather than shown at $0 — otherwise an unpriced model would win every cost comparison it appeared in. Prices also change, and these are the rates in the table at the time the page loaded, not at the time of the run.',
+        },
+    },
+    {
+        key: 'output_tokens_mean',
+        slug: 'verbosity',
+        title: 'Verbosity',
+        blurb: 'Mean output tokens per case · Lower is better',
+        context: ['reasoning_tokens_mean', 'cost_usd_per_case', 'score'],
+        doc: {
+            what: 'How much the model writes to answer one case.',
+            how: 'Mean output tokens per case, counted across every turn. Reasoning tokens are counted separately and shown alongside, since on most providers they are billed but never shown to the reader.',
+            reading: 'Lower is better only up to a point — this is a cost and latency driver, not a quality signal. The interesting models are the ones that are terse *and* score well; a model that is terse and scores badly is just not doing the work.',
+            caveat: 'Cases differ in how much output they legitimately need, so this is only comparable between models on the same case set. It is not a measure of writing quality in either direction.',
+        },
+    },
+    {
+        key: 'error_rate',
+        slug: 'errors',
+        title: 'Error rate',
+        blurb: 'Share of runs that errored or timed out · Lower is better',
+        context: ['score', 'pass_rate', 'turns_mean'],
+        doc: {
+            what: 'How often a case did not complete at all.',
+            how: 'The share of results whose status is error or timeout rather than ok — provider errors, refusals that broke the harness, context overflows, and runs that hit the wall-clock or turn limit.',
+            reading: 'Treat this as a gate before reading anything else. Under a couple of percent is background noise; above that, every other number for the model is computed over the subset of cases that survived, and the quality score is dragged down by cases that scored zero for never finishing.',
+            caveat: 'It does not distinguish the model’s fault from the harness’s. A provider outage during a run shows up here identically to a model that reliably loops until it hits the turn limit.',
+        },
+    },
 ]
+
+export function metricCard(key: string): MetricCardDef | null {
+    return METRIC_CARDS.find((c) => c.key === key) ?? null
+}
+
+export function metricCardBySlug(slug: string): MetricCardDef | null {
+    const wanted = decodeURIComponent(slug).toLowerCase()
+    return METRIC_CARDS.find((c) => c.slug === wanted) ?? METRIC_CARDS.find((c) => c.key === wanted) ?? null
+}
 
 /** The five metrics that get a rank tile on a model page, in tile order. */
 export const RANK_TILES: { key: string; title: string; hint: string }[] = [
@@ -689,6 +822,9 @@ export const BENCH_BASE = '/benchmark'
 export const benchRoutes = {
     overview: () => BENCH_BASE,
     model: (label: string) => `${BENCH_BASE}/model/${modelSlug(label)}`,
+    /** A metric's own full-roster ranking page. Accepts a key or a slug. */
+    metric: (keyOrSlug: string) =>
+        `${BENCH_BASE}/metric/${metricCard(keyOrSlug)?.slug ?? keyOrSlug}`,
     compare: (labels: string[] = []) =>
         labels.length === 0
             ? `${BENCH_BASE}/compare`
