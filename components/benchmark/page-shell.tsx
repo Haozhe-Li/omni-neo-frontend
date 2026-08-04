@@ -2,7 +2,7 @@
 
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { BenchmarkNav } from '@/components/benchmark/benchmark-nav'
-import { BatchSelect } from '@/components/benchmark/batch-select'
+import { ModelFilter as FilterMenu } from '@/components/benchmark/model-filter'
 
 /**
  * The frame every benchmark route renders inside.
@@ -87,10 +87,10 @@ function BenchmarkFooter() {
  * A page's own heading.
  *
  * Each route renders exactly one of these, which is what stops the section
- * repeating itself. `aside` is where a page-level control goes — the run-batch
- * filter is one, and it belongs to the page rather than the nav bar: it is used
- * rarely, it only affects what the page below it shows, and on a phone it is
- * the one thing that would not fit in the bar.
+ * repeating itself. `aside` is where a page-level control goes — the roster
+ * filter is one, and it belongs to the page rather than the nav bar: it only
+ * affects what the page below it shows, and on a phone it is the one thing
+ * that would not fit in the bar.
  */
 export function PageHeading({
     title,
@@ -119,13 +119,13 @@ export function PageHeading({
 }
 
 /**
- * The run-batch filter, rendered by whichever page wants it.
+ * The roster filter, rendered by whichever page shows a list of models.
  *
- * Kept as a named export so pages don't have to know which component draws it —
- * see batch-select.tsx for why it is hand-built rather than a `<select>`.
+ * Re-exported here so pages keep importing their header furniture from one
+ * place — see model-filter.tsx for the component itself.
  */
-export function BatchFilter() {
-    return <BatchSelect />
+export function ModelFilter() {
+    return <FilterMenu />
 }
 
 /** Shown on the overview when the tables exist but nothing has been run yet. */

@@ -863,6 +863,8 @@ export const benchRoutes = {
         labels.length === 0
             ? `${BENCH_BASE}/compare`
             : `${BENCH_BASE}/compare?models=${labels.map(modelSlug).join(',')}`,
+    /** The plain-text dump of every model's raw scores, meant for LLM readers. */
+    llmTxt: () => `${BENCH_BASE}/llm.txt`,
 }
 
 // ── model slugs ─────────────────────────────────────────────────────────────
@@ -990,4 +992,28 @@ export function compareModels(a: LeaderboardRow, b: LeaderboardRow): number {
     const ea = EFFORT_ORDER[a.reasoning_effort ?? ''] ?? -1
     const eb = EFFORT_ORDER[b.reasoning_effort ?? ''] ?? -1
     return ea - eb
+}
+
+/**
+ * Collapse a raw leaderboard response to one row per model, with `omni_index`
+ * computed once.
+ *
+ * Runs accumulate forever — a smoke run and a full matrix run of the same
+ * model both persist — so without this a model can appear more than once with
+ * different case coverage, and the same name would land at two different
+ * scores depending which consumer looked. Shared by the client provider and
+ * the llm.txt route, which both need exactly this collapse and must not
+ * arrive at it two different ways.
+ */
+export function dedupeLeaderboard(rows: LeaderboardRow[]): LeaderboardRowWithIndex[] {
+    const newest = new Map<string, LeaderboardRow>()
+    for (const row of rows) {
+        const existing = newest.get(row.model_label)
+        if (!existing || new Date(row.started_at) > new Date(existing.started_at)) {
+            newest.set(row.model_label, row)
+        }
+    }
+    return [...newest.values()]
+        .sort(compareModels)
+        .map((row): LeaderboardRowWithIndex => ({ ...row, omni_index: omniIndex(row) }))
 }

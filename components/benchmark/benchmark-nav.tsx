@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, GitCompare, RefreshCw } from 'lucide-react'
+import { BarChart3, Bot, GitCompare, RefreshCw } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { BENCH_BASE, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
@@ -109,6 +109,23 @@ export function BenchmarkNav() {
                             </Link>
                         )
                     })}
+
+                    {/* Not a section of the app — a plain-text resource, not a
+                        page with a layout — so this is a bare `<a>` rather than
+                        a `Link`. It opens in a new tab for the same reason the
+                        sidebar's Benchmarks entry does: following it leaves the
+                        interactive site behind entirely, which should not cost
+                        the tab you were already on. */}
+                    <a
+                        href={benchRoutes.llmTxt()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Every model's raw scores as plain text, written for LLMs to read"
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] sm:px-3"
+                    >
+                        <Bot className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        LLM.txt
+                    </a>
                 </nav>
 
                 {/* Actions. Currently one button; the slot is where a standalone

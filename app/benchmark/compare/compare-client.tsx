@@ -7,7 +7,7 @@ import { ComparePicker, MAX_COMPARE } from '@/components/benchmark/compare-picke
 import { CompareBars, CompareCases, CompareRadar, HeadToHead } from '@/components/benchmark/compare-charts'
 import { TradeoffScatter } from '@/components/benchmark/tradeoff-scatter'
 import { ComparePageSkeleton } from '@/components/benchmark/skeletons'
-import { BatchFilter, EmptyState, PageHeading } from '@/components/benchmark/page-shell'
+import { EmptyState, PageHeading } from '@/components/benchmark/page-shell'
 import { BENCH_BASE, findBySlug, modelSlug, seriesColor } from '@/lib/benchmark'
 
 /** Where the reader's own selection is remembered between visits. */
@@ -155,7 +155,6 @@ export function CompareClient() {
             <PageHeading
                 title="Compare models"
                 description="Up to four at a time — enough to see a real difference, few enough that the shapes stay readable."
-                aside={<BatchFilter />}
             />
 
             <ComparePicker rows={models} selected={selected} onChange={setSelected} colorOf={colorOf} />
