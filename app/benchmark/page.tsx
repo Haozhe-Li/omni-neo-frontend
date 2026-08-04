@@ -1,5 +1,7 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
-import { BenchmarkClient } from './benchmark-client'
+import { OverviewClient } from './overview-client'
+import { MetricGridSkeleton, ScatterSkeleton } from '@/components/benchmark/skeletons'
 
 export const metadata: Metadata = {
     title: 'Benchmarks',
@@ -14,5 +16,18 @@ export const metadata: Metadata = {
 }
 
 export default function BenchmarkPage() {
-    return <BenchmarkClient />
+    // useSearchParams (the scatter's axis state) opts a client component into
+    // client-side rendering, which Next requires a Suspense boundary for.
+    return (
+        <Suspense
+            fallback={
+                <div className="space-y-4">
+                    <MetricGridSkeleton />
+                    <ScatterSkeleton />
+                </div>
+            }
+        >
+            <OverviewClient />
+        </Suspense>
+    )
 }
