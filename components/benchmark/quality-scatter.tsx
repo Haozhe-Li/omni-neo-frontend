@@ -102,6 +102,13 @@ export function QualityScatter({
                 },
                 xAxis: {
                     type: useLog ? 'log' : 'value',
+                    // Fit the axis to the data instead of anchoring at zero.
+                    // Quality scores all land in a narrow band near the top of
+                    // 0..1, so a zero-anchored axis spends most of its height on
+                    // empty space and squashes every real difference between
+                    // models into a few pixels — the opposite of what this chart
+                    // is for. (No effect on a log axis, which never includes 0.)
+                    scale: true,
                     name: `${xDef.label}${useLog ? ' (log)' : ''}`,
                     nameLocation: 'middle',
                     nameGap: 32,
@@ -117,6 +124,7 @@ export function QualityScatter({
                 },
                 yAxis: {
                     type: 'value',
+                    scale: true,
                     name: yDef.label,
                     nameLocation: 'middle',
                     nameGap: 42,
@@ -144,7 +152,9 @@ export function QualityScatter({
                         color: '#6b6b6b',
                         formatter: (p: any) => p.data.row.model_label,
                     },
-                    labelLayout: { hideOverlap: true },
+                    // minMargin keeps hideOverlap from counting labels as clear
+                    // when they are technically adjacent but visually touching.
+                    labelLayout: { hideOverlap: true, minMargin: 4 },
                     data: pts.map((p) => ({ value: [p.x, p.y], row: p.row })),
                 })),
                 legend: {

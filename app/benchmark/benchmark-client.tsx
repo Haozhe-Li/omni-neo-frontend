@@ -305,7 +305,7 @@ export function BenchmarkClient() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_1fr] items-start">
+                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[290px_1fr] items-start">
                             {/* sticky control column */}
                             <aside className="lg:sticky lg:top-6 space-y-3">
                                 <ModelPicker

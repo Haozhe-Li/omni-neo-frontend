@@ -217,12 +217,18 @@ export function StatTile({
     hint?: string
 }) {
     return (
-        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3">
-            <div className="text-[11px] uppercase tracking-wider text-[var(--muted-foreground)]">{label}</div>
-            <div className="mt-1 text-[22px] font-semibold tabular-nums text-[var(--foreground)] leading-none">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3.5 transition-colors hover:border-[var(--accent)]/30">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]">
+                {label}
+            </div>
+            <div className="mt-1.5 text-[24px] font-semibold tabular-nums leading-none tracking-tight text-[var(--foreground)]">
                 {value}
             </div>
-            {hint && <div className="mt-1.5 text-[11px] text-[var(--muted-foreground)]">{hint}</div>}
+            {hint && (
+                <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]" title={hint}>
+                    {hint}
+                </div>
+            )}
         </div>
     )
 }

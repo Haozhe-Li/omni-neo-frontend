@@ -102,6 +102,10 @@ export function ModelPicker({ rows, selected, onToggle, onSetMany }: ModelPicker
                                     <button
                                         key={model.model_label}
                                         onClick={() => onToggle(model.model_label)}
+                                        // The longest labels still truncate in this column, and
+                                        // they differ only in the suffix — keep the full name
+                                        // reachable rather than only the ambiguous head.
+                                        title={model.model_label}
                                         className={cn(
                                             'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors',
                                             on ? 'bg-[var(--secondary)]' : 'hover:bg-[var(--secondary)]/60'
@@ -129,7 +133,11 @@ export function ModelPicker({ rows, selected, onToggle, onSetMany }: ModelPicker
                                                 {model.reasoning_effort}
                                             </span>
                                         )}
-                                        <span className="text-[10px] text-[var(--muted-foreground)] shrink-0 w-14 text-right">
+                                        {/* Natural width, not a fixed w-14: every pixel reserved
+                                            here is taken from the label, and these labels differ
+                                            only in their SUFFIX (`-low` / `-medium` / `-high`),
+                                            which is precisely what truncation eats first. */}
+                                        <span className="text-[10px] text-[var(--muted-foreground)] shrink-0 text-right">
                                             {providerLabel(model.provider)}
                                         </span>
                                     </button>

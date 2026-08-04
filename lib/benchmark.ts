@@ -383,22 +383,52 @@ export const OMNI_EFFICIENCY_WEIGHTS = {
 export const OMNI_LATENCY_REF_MS = 5000
 export const OMNI_PRICE_REF_USD = 0.01
 
-export function omniIndex(
+/** The parts behind one model's {@link omniIndex}, for explaining the score. */
+export interface OmniBreakdown {
+    /** Raw quality, the term that dominates the product. */
+    quality: number
+    /** Latency mapped to (0,1] — higher is faster. */
+    latencyScore: number
+    /** Cost mapped to (0,1] — higher is cheaper. */
+    priceScore: number
+    /** Weighted blend of the two above, in (0,1]. */
+    efficiency: number
+    /** What efficiency multiplies quality by, in [OMNI_QUALITY_FLOOR, 1]. */
+    multiplier: number
+    index: number
+}
+
+/**
+ * The index plus the terms that produced it.
+ *
+ * Exposed separately from {@link omniIndex} so the UI can show *why* a model
+ * ranks where it does — a bare composite number invites "where did that come
+ * from", and the answer is three sub-scores the caller would otherwise have to
+ * recompute (and risk drifting from) on its own.
+ */
+export function omniBreakdown(
     row: Pick<LeaderboardRow, 'score' | 'latency_ms_p50' | 'cost_usd_per_case'>
-): number | null {
+): OmniBreakdown | null {
     const { score, latency_ms_p50, cost_usd_per_case } = row
     // A NULL cost means "unpriced", not "free" — same rule fmtCost enforces.
     // An unpriced model must not win the index just because its price axis
     // is missing, the way it would if this defaulted a missing cost to 0.
     if (score === null || latency_ms_p50 === null || cost_usd_per_case === null) return null
 
+    const quality = Math.max(score, 0)
     const latencyScore = OMNI_LATENCY_REF_MS / (OMNI_LATENCY_REF_MS + latency_ms_p50)
     const priceScore = OMNI_PRICE_REF_USD / (OMNI_PRICE_REF_USD + cost_usd_per_case)
     const efficiency =
         OMNI_EFFICIENCY_WEIGHTS.cost * priceScore + OMNI_EFFICIENCY_WEIGHTS.latency * latencyScore
-
     const multiplier = OMNI_QUALITY_FLOOR + (1 - OMNI_QUALITY_FLOOR) * efficiency
-    return Math.max(score, 0) * multiplier
+
+    return { quality, latencyScore, priceScore, efficiency, multiplier, index: quality * multiplier }
+}
+
+export function omniIndex(
+    row: Pick<LeaderboardRow, 'score' | 'latency_ms_p50' | 'cost_usd_per_case'>
+): number | null {
+    return omniBreakdown(row)?.index ?? null
 }
 
 // ── metric registry ─────────────────────────────────────────────────────────
