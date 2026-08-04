@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Plus, X } from 'lucide-react'
+import { Check, Plus, Trash2, X } from 'lucide-react'
 import {
     type LeaderboardRowWithIndex,
     compareModels,
@@ -71,9 +71,11 @@ export function ComparePicker({ rows, selected, onChange, colorOf }: ComparePick
                 {selected.length > 0 && (
                     <button
                         onClick={() => onChange([])}
-                        className="text-[11px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+                        title="Remove every selected model"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] text-[var(--muted-foreground)] transition-colors hover:border-[var(--foreground)]/20 hover:text-[var(--foreground)]"
                     >
-                        Clear
+                        <Trash2 className="h-3 w-3" strokeWidth={1.5} />
+                        Clear all
                     </button>
                 )}
             </div>
