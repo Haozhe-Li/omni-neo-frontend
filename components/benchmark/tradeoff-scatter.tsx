@@ -3,6 +3,7 @@
 import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { EChartsChart, useChartTheme } from '@/components/echarts-chart'
+import { SelectMenu, type SelectOption } from '@/components/benchmark/select-menu'
 import {
     METRICS,
     X_AXIS_METRICS,
@@ -14,7 +15,6 @@ import {
     providerColor,
     providerLabel,
 } from '@/lib/benchmark'
-import { cn } from '@/lib/utils'
 
 interface TradeoffScatterProps {
     rows: LeaderboardRowWithIndex[]
@@ -223,9 +223,12 @@ export function TradeoffScatter({
                         axes at once.
                     </p>
                 </div>
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:shrink-0 sm:px-0">
-                    <AxisSelect label="X" value={xMetric} options={[...X_AXIS_METRICS]} onChange={onXMetricChange} />
-                    <AxisSelect label="Y" value={yMetric} options={[...Y_AXIS_METRICS]} onChange={onYMetricChange} />
+                {/* Wraps rather than scrolls: an overflow-x-auto row would clip
+                    the dropdown panel, which is absolutely positioned inside it.
+                    Two fixed-width triggers fit side by side down to 320px. */}
+                <div className="flex flex-wrap gap-2 sm:shrink-0 sm:flex-nowrap">
+                    <AxisSelect axis="X" value={xMetric} options={[...X_AXIS_METRICS]} onChange={onXMetricChange} />
+                    <AxisSelect axis="Y" value={yMetric} options={[...Y_AXIS_METRICS]} onChange={onYMetricChange} />
                 </div>
             </div>
 
@@ -252,34 +255,43 @@ export function TradeoffScatter({
 }
 
 function AxisSelect({
-    label,
+    axis,
     value,
     options,
     onChange,
 }: {
-    label: string
+    axis: 'X' | 'Y'
     value: string
     options: string[]
     onChange: (v: string) => void
 }) {
+    const items = useMemo(
+        (): SelectOption[] =>
+            options.map((key) => {
+                const def = METRICS[key]
+                return {
+                    value: key,
+                    label: def?.label ?? key,
+                    // Which way is good is the thing a reader has to hold in
+                    // their head to read this chart, and it differs per option —
+                    // cost down is good, quality up is good. Saying it on the
+                    // option means they never have to.
+                    hint: def
+                        ? `${def.higherIsBetter ? 'higher' : 'lower'} is better${def.log ? ' · log axis' : ''}`
+                        : undefined,
+                }
+            }),
+        [options]
+    )
+
     return (
-        <label className="flex shrink-0 items-center gap-1.5">
-            <span className="text-[11px] text-[var(--muted-foreground)]">{label}</span>
-            <select
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className={cn(
-                    'cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[var(--background)]',
-                    'px-2 py-1.5 text-[12px] text-[var(--foreground)] outline-none',
-                    'transition-colors focus:border-[var(--accent)]'
-                )}
-            >
-                {options.map((key) => (
-                    <option key={key} value={key}>
-                        {METRICS[key]?.label ?? key}
-                    </option>
-                ))}
-            </select>
-        </label>
+        <SelectMenu
+            value={value}
+            onChange={onChange}
+            options={items}
+            prefix={axis}
+            ariaLabel={`${axis} axis metric`}
+            className="w-[9.5rem] shrink-0 sm:w-[11rem]"
+        />
     )
 }
