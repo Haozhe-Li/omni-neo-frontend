@@ -76,7 +76,9 @@ export function OverviewClient() {
 
     if (models.length === 0) return <EmptyState />
 
-    const compareHref = benchRoutes.compare(models.slice(0, 3).map((m) => m.model_label))
+    // Deliberately parameterless: the compare page restores whatever you had
+    // selected last, and naming models here would override that on every visit.
+    const compareHref = benchRoutes.compare()
 
     return (
         <div className={cn('transition-opacity duration-200', refreshing && 'opacity-50')}>
