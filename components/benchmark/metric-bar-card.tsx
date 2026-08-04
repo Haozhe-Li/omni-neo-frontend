@@ -6,8 +6,10 @@ import { ChevronDown } from 'lucide-react'
 import {
     METRICS,
     type LeaderboardRowWithIndex,
+    barPercent,
+    barScale,
+    benchRoutes,
     metricValue,
-    modelSlug,
     omniBreakdown,
     providerColor,
     providerLabel,
@@ -78,16 +80,21 @@ export function MetricBarCard({
         return { entries: scored, missing: absent }
     }, [rows, metric, def])
 
-    const scaleMax = useMemo(
-        () => Math.max(...entries.map((e) => Math.max(e.value, e.track ?? 0)), Number.EPSILON),
-        [entries]
-    )
-
     const visible = expanded ? entries : entries.slice(0, limit)
     const hidden = entries.length - visible.length
 
-    const open = (label: string) => router.push(`/benchmark/model/${modelSlug(label)}`)
-    const pct = (v: number) => Math.max((v / scaleMax) * 100, MIN_BAR)
+    /**
+     * The baseline is fitted to whatever is on screen, not to the full roster:
+     * expanding from ten bars to eighteen brings in lower values, and a scale
+     * that ignored them would clip the new bars off the bottom of the plot.
+     */
+    const scale = useMemo(
+        () => barScale(visible.flatMap((e) => [e.value, ...(e.track === null ? [] : [e.track])])),
+        [visible]
+    )
+
+    const open = (label: string) => router.push(benchRoutes.model(label))
+    const pct = (v: number) => barPercent(v, scale, MIN_BAR)
 
     return (
         <section
@@ -120,7 +127,7 @@ export function MetricBarCard({
                     <div className="mt-5 hidden sm:block">
                         <div
                             className={cn(
-                                'flex items-end gap-1 sm:gap-1.5',
+                                'flex items-end gap-1.5',
                                 wide ? 'h-[210px]' : 'h-[180px]'
                             )}
                         >
@@ -131,16 +138,19 @@ export function MetricBarCard({
                                         key={`${dataVersion}-${entry.row.model_label}`}
                                         onClick={() => open(entry.row.model_label)}
                                         title={`${entry.row.model_label} · ${def?.format(entry.value) ?? entry.value}`}
-                                        className="group relative flex h-full min-w-0 flex-1 cursor-pointer flex-col justify-end rounded-t-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                                        className="group relative flex h-full min-w-0 flex-1 cursor-pointer flex-col items-center justify-end rounded-t outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                                     >
-                                        <span className="mb-1 block h-3.5 truncate text-center text-[10px] font-medium leading-none tabular-nums text-[var(--foreground)]">
+                                        <span className="mb-1 block h-3.5 w-full truncate text-center text-[10px] font-medium leading-none tabular-nums text-[var(--foreground)]">
                                             {def?.format(entry.value)}
                                         </span>
 
-                                        {/* flex-1 under a fixed-height column gives this
-                                            box a definite height, which is what lets the
-                                            bars below size themselves as a percentage. */}
-                                        <span className="relative block w-full flex-1">
+                                        {/* Capped width, centred: a column that fills its
+                                            whole slot runs into its neighbours and the row
+                                            reads as one mass instead of n bars. */}
+                                        <span
+                                            className="relative block w-full flex-1"
+                                            style={{ maxWidth: 'var(--bench-bar-max)' }}
+                                        >
                                             {/* Quality track: only the Omni Index sets
                                                 this. The gap between the faint bar and
                                                 the solid one IS the speed/cost drag —
@@ -148,7 +158,7 @@ export function MetricBarCard({
                                                 is a product of two terms. */}
                                             {entry.track !== null && (
                                                 <span
-                                                    className="omni-bar-v absolute bottom-0 left-0 block w-full rounded-t-md"
+                                                    className="omni-bar-v absolute bottom-0 left-0 block w-full rounded-t"
                                                     style={{
                                                         ['--bar-size' as string]: `${pct(entry.track)}%`,
                                                         ['--bar-delay' as string]: `${i * 26}ms`,
@@ -158,7 +168,7 @@ export function MetricBarCard({
                                                 />
                                             )}
                                             <span
-                                                className="omni-bar-v absolute bottom-0 left-0 block w-full rounded-t-md transition-[filter] duration-200 group-hover:brightness-110 group-active:brightness-95"
+                                                className="omni-bar-v absolute bottom-0 left-0 block w-full rounded-t transition-[filter] duration-200 group-hover:brightness-110 group-active:brightness-95"
                                                 style={{
                                                     ['--bar-size' as string]: `${pct(entry.value)}%`,
                                                     ['--bar-delay' as string]: `${i * 26}ms`,
@@ -171,10 +181,22 @@ export function MetricBarCard({
                             })}
                         </div>
 
+                        {/* The conventional break mark for a magnified axis, on
+                            the chart itself so the caveat survives a screenshot
+                            of it — a footnote alone would not. */}
+                        {scale.truncated && (
+                            <div className="flex items-center gap-2 pt-1">
+                                <span className="omni-axis-break h-1.5 flex-1 opacity-70" />
+                                <span className="shrink-0 text-[9px] tabular-nums text-[var(--muted-foreground)]">
+                                    from {def?.format(scale.floor)}
+                                </span>
+                            </div>
+                        )}
+
                         {/* Angled labels, anchored under each bar's centre. The
-                            row is a mirror of the bar row so columns line up at
-                            any width without hard-coding a bar width. */}
-                        <div className="flex gap-1 pt-1.5 sm:gap-1.5" style={{ height: 78 }}>
+                            row mirrors the bar row so columns line up at any
+                            width without hard-coding a bar width. */}
+                        <div className="flex gap-1.5 pt-1.5" style={{ height: 92 }}>
                             {visible.map((entry) => (
                                 <div key={entry.row.model_label} className="relative min-w-0 flex-1">
                                     <span
@@ -182,7 +204,7 @@ export function MetricBarCard({
                                         style={{ backgroundColor: providerColor(entry.row.provider) }}
                                     />
                                     <span
-                                        className="absolute right-1/2 top-3.5 block max-w-[110px] origin-top-right -rotate-45 truncate text-[10px] leading-none text-[var(--muted-foreground)]"
+                                        className="absolute right-1/2 top-3.5 block max-w-[104px] origin-top-right -rotate-45 truncate text-[10px] leading-none text-[var(--muted-foreground)]"
                                         title={entry.row.model_label}
                                     >
                                         {entry.row.model_label}
@@ -212,7 +234,17 @@ export function MetricBarCard({
                                         <span className="w-[34%] shrink-0 truncate text-[11px] text-[var(--foreground)]">
                                             {entry.row.model_label}
                                         </span>
-                                        <span className="relative h-3.5 min-w-0 flex-1">
+                                        <span
+                                            className={cn(
+                                                'relative h-3.5 min-w-0 flex-1 rounded-sm',
+                                                // The track makes the fitted baseline
+                                                // visible on mobile, where there is no
+                                                // room for a break mark: a bar that
+                                                // starts short of the rail is obviously
+                                                // not starting at zero.
+                                                scale.truncated && 'bg-[var(--muted)]'
+                                            )}
+                                        >
                                             {entry.track !== null && (
                                                 <span
                                                     className="omni-bar-h absolute inset-y-0 left-0 rounded-sm"
@@ -258,15 +290,26 @@ export function MetricBarCard({
                             <span />
                         )}
 
-                        {missing.length > 0 && (
-                            <span className="text-[10px] text-[var(--muted-foreground)]">
-                                {missing.length} model{missing.length > 1 ? 's' : ''} without a value{' '}
-                                {/* Never draw a missing price as a $0 bar — the backend
-                                    writes NULL, not zero, precisely so an unpriced model
-                                    can't win every cost comparison it appears in. */}
-                                omitted, not counted as zero
-                            </span>
-                        )}
+                        <span className="text-[10px] text-[var(--muted-foreground)]">
+                            {/* Say it in words as well as with the break mark. A
+                                magnified axis is legitimate; a silent one is not. */}
+                            {scale.truncated && (
+                                <>
+                                    Axis starts at {def?.format(scale.floor)} — these models are
+                                    close, so bar length shows the gap, not the value.
+                                </>
+                            )}
+                            {scale.truncated && missing.length > 0 && ' · '}
+                            {missing.length > 0 && (
+                                <>
+                                    {/* Never draw a missing price as a $0 bar — the backend
+                                        writes NULL, not zero, precisely so an unpriced model
+                                        can't win every cost comparison it appears in. */}
+                                    {missing.length} model{missing.length > 1 ? 's' : ''} without a
+                                    value omitted, not counted as zero
+                                </>
+                            )}
+                        </span>
                     </footer>
                 </>
             )}

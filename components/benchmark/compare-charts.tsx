@@ -9,6 +9,8 @@ import {
     METRIC_CARDS,
     type EvalRun,
     type LeaderboardRowWithIndex,
+    barPercent,
+    barScale,
     fmtScore,
     metricValue,
     shortCaseId,
@@ -139,14 +141,21 @@ export function CompareBars({ rows, colorOf }: CompareProps) {
                     const best = def?.higherIsBetter
                         ? Math.max(...present.map((v) => v.value))
                         : Math.min(...present.map((v) => v.value))
-                    const share = (v: number) =>
+                    const goodness = (v: number) =>
                         def?.higherIsBetter
                             ? best === 0
-                                ? 100
-                                : (v / best) * 100
+                                ? 1
+                                : v / best
                             : v === 0
-                                ? 100
-                                : (best / v) * 100
+                                ? 1
+                                : best / v
+
+                    // Four close models all land near 1.0 on that ratio and draw
+                    // four bars of the same length — the same compression the
+                    // overview's fitted baseline exists to fix, so it is fixed
+                    // the same way and declared the same way.
+                    const scale = barScale(present.map((v) => goodness(v.value)))
+                    const share = (v: number) => barPercent(goodness(v), scale, 2)
 
                     const winner = present.reduce((a, b) =>
                         def?.higherIsBetter ? (b.value > a.value ? b : a) : b.value < a.value ? b : a
@@ -159,7 +168,7 @@ export function CompareBars({ rows, colorOf }: CompareProps) {
                                     {card.title}
                                 </h3>
                                 <span className="truncate text-[10px] text-[var(--muted-foreground)]">
-                                    best: {winner.label}
+                                    {scale.truncated && 'close · '}best: {winner.label}
                                 </span>
                             </div>
 
@@ -174,7 +183,7 @@ export function CompareBars({ rows, colorOf }: CompareProps) {
                                                 <span
                                                     className="omni-bar-h absolute inset-y-0 left-0 rounded-sm"
                                                     style={{
-                                                        ['--bar-size' as string]: `${Math.max(Math.min(share(v.value), 100), 2)}%`,
+                                                        ['--bar-size' as string]: `${Math.min(share(v.value), 100)}%`,
                                                         ['--bar-delay' as string]: `${i * 30}ms`,
                                                         backgroundColor: colorOf(v.label),
                                                     }}

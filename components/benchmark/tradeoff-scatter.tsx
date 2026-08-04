@@ -9,7 +9,7 @@ import {
     Y_AXIS_METRICS,
     type LeaderboardRowWithIndex,
     metricValue,
-    modelSlug,
+    benchRoutes,
     paretoFrontier,
     providerColor,
     providerLabel,
@@ -235,7 +235,7 @@ export function TradeoffScatter({
                 onEvent={{
                     click: (params: any) => {
                         const label = params?.data?.row?.model_label
-                        if (label) router.push(`/benchmark/model/${modelSlug(label)}`)
+                        if (label) router.push(benchRoutes.model(label))
                     },
                 }}
                 style={{ height }}

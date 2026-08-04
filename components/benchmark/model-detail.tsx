@@ -16,7 +16,7 @@ import {
     fmtScore,
     fmtTokens,
     median,
-    modelSlug,
+    benchRoutes,
     modelSummary,
     omniBreakdown,
     providerColor,
@@ -56,7 +56,7 @@ export function ModelHeader({ row, run }: { row: LeaderboardRowWithIndex; run: E
                     {row.model_label}
                 </h1>
                 <Link
-                    href={`/benchmark/compare?models=${modelSlug(row.model_label)}`}
+                    href={benchRoutes.compare([row.model_label])}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/[0.06] px-3 py-1.5 text-[12px] font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/[0.12]"
                 >
                     <GitCompare className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -418,7 +418,7 @@ export function ModelNeighbours({
 function NeighbourLink({ row, caption }: { row: LeaderboardRowWithIndex; caption: string }) {
     return (
         <Link
-            href={`/benchmark/model/${modelSlug(row.model_label)}`}
+            href={benchRoutes.model(row.model_label)}
             className="min-w-0 flex-1 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3 transition-colors hover:border-[var(--accent)]/40"
         >
             <div className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">

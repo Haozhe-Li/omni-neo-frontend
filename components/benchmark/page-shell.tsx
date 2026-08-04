@@ -1,105 +1,29 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
+import { BenchmarkNav } from '@/components/benchmark/benchmark-nav'
 import { cn } from '@/lib/utils'
 
 /**
- * The frame every benchmark route renders inside: title, run-batch filter,
- * refresh, and a back link once you are below the overview.
+ * The frame every benchmark route renders inside.
  *
- * It lives in the layout rather than in each page so the header does not
- * unmount and remount as you move between routes — the filter keeps its value
- * and the refresh button keeps its spinner across navigation.
+ * It deliberately renders no title. An earlier version put "Benchmarks" and a
+ * description here, which meant the compare page showed two stacked headings
+ * and two descriptions before any data, and the model page pushed the model's
+ * own name to the third line. A shared frame can own navigation; it cannot own
+ * a heading, because only the page knows what it is about.
  */
 export function BenchmarkShell({ children }: { children: React.ReactNode }) {
-    const pathname = usePathname()
-    const { labels, label, setLabel, refresh, refreshing, note, error } = useBenchmarkData()
-    const isRoot = pathname === '/benchmark'
+    const { note, error } = useBenchmarkData()
 
     return (
-        <div className="min-h-screen">
-            {/* Refresh progress rail. Pinned to the viewport so it stays visible
-                when you refresh from halfway down a long page. */}
-            <div
-                className={cn(
-                    'fixed inset-x-0 top-0 z-50 h-0.5 transition-opacity duration-200',
-                    refreshing ? 'opacity-100' : 'pointer-events-none opacity-0'
+        <div className="omni-bench min-h-screen bg-[var(--background)]">
+            <BenchmarkNav />
+
+            <div className="mx-auto w-full max-w-[1280px] px-4 pb-20 pt-6 sm:px-6 sm:pt-8">
+                {note && (
+                    <p className="mb-3 text-right text-[11px] text-[var(--muted-foreground)]">{note}</p>
                 )}
-            >
-                <div className="animate-shimmer h-full w-full" />
-            </div>
-
-            <div className="mx-auto w-full max-w-[1280px] px-4 pb-20 sm:px-6">
-                <header className="pt-8 pb-5 sm:pt-10">
-                    {!isRoot && (
-                        <Link
-                            href="/benchmark"
-                            className="mb-3 inline-flex items-center gap-1.5 text-[12px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
-                        >
-                            <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            All models
-                        </Link>
-                    )}
-
-                    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-                        <div className="min-w-0">
-                            <Link
-                                href="/benchmark"
-                                className="text-[24px] font-semibold tracking-tight text-[var(--foreground)] sm:text-[28px]"
-                            >
-                                Benchmarks
-                            </Link>
-                            <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-[var(--muted-foreground)]">
-                                How each model behaves in Omni&apos;s pro mode — skill triggering, output
-                                contracts, answer quality, and what it costs to get there.
-                            </p>
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                            {labels.length > 0 && (
-                                <select
-                                    value={label}
-                                    onChange={(e) => setLabel(e.target.value)}
-                                    aria-label="Run batch"
-                                    className="max-w-[46vw] cursor-pointer truncate rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-2.5 py-1.5 text-[12px] text-[var(--foreground)] outline-none transition-colors focus:border-[var(--accent)]"
-                                >
-                                    <option value="">All run batches</option>
-                                    {labels.map((l) => (
-                                        <option key={l} value={l}>
-                                            {l}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
-                            <button
-                                onClick={refresh}
-                                disabled={refreshing}
-                                title="Clear the server cache and reload from the database"
-                                className={cn(
-                                    'inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-2.5 py-1.5 text-[12px] transition-colors',
-                                    refreshing
-                                        ? 'cursor-wait text-[var(--muted-foreground)]'
-                                        : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                                )}
-                            >
-                                <RefreshCw
-                                    className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')}
-                                    strokeWidth={1.5}
-                                />
-                                <span className="hidden sm:inline">
-                                    {refreshing ? 'Refreshing…' : 'Refresh'}
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {note && (
-                        <p className="mt-2 text-right text-[11px] text-[var(--muted-foreground)]">{note}</p>
-                    )}
-                </header>
 
                 {error ? (
                     <div className="rounded-xl border border-[var(--warning)]/30 bg-[var(--warning)]/[0.06] px-4 py-3">
@@ -114,6 +38,69 @@ export function BenchmarkShell({ children }: { children: React.ReactNode }) {
                 )}
             </div>
         </div>
+    )
+}
+
+/**
+ * A page's own heading.
+ *
+ * Each route renders exactly one of these, which is what stops the section
+ * repeating itself. `aside` is where a page-level control goes — the run-batch
+ * filter is one, and it belongs to the page rather than the nav bar: it is used
+ * rarely, it only affects what the page below it shows, and on a phone it is
+ * the one thing that would not fit in the bar.
+ */
+export function PageHeading({
+    title,
+    description,
+    aside,
+}: {
+    title: string
+    description?: string
+    aside?: React.ReactNode
+}) {
+    return (
+        <header className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+            <div className="min-w-0">
+                <h1 className="text-[24px] font-semibold tracking-tight text-[var(--foreground)] sm:text-[28px]">
+                    {title}
+                </h1>
+                {description && (
+                    <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-[var(--muted-foreground)]">
+                        {description}
+                    </p>
+                )}
+            </div>
+            {aside && <div className="shrink-0">{aside}</div>}
+        </header>
+    )
+}
+
+/** The run-batch filter, rendered by whichever page wants it. */
+export function BatchFilter() {
+    const { labels, label, setLabel } = useBenchmarkData()
+    if (labels.length === 0) return null
+
+    return (
+        <label className="flex items-center gap-2">
+            <span className="text-[11px] text-[var(--muted-foreground)]">Batch</span>
+            <select
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className={cn(
+                    'max-w-[52vw] cursor-pointer truncate rounded-lg border border-[var(--border-subtle)]',
+                    'bg-[var(--card)] px-2.5 py-1.5 text-[12px] text-[var(--foreground)]',
+                    'outline-none transition-colors focus:border-[var(--accent)]'
+                )}
+            >
+                <option value="">All run batches</option>
+                {labels.map((l) => (
+                    <option key={l} value={l}>
+                        {l}
+                    </option>
+                ))}
+            </select>
+        </label>
     )
 }
 
