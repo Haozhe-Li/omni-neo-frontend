@@ -221,8 +221,24 @@ export function MetricBarCard({
 
                         {/* Angled labels, anchored under each bar's centre. The
                             row mirrors the bar row so columns line up at any
-                            width without hard-coding a bar width. */}
-                        <div className="flex gap-1.5 pt-1.5" style={{ height: 92 }}>
+                            width without hard-coding a bar width.
+
+                            The container height below is not a round number —
+                            it's sized to the actual geometry of a rotated
+                            label. A -45° label of width W and line-height H,
+                            rotated around its own top-right corner, reaches
+                            0.707·(W+H) below its anchor. At the label's own
+                            max-width (104px) that's ~97px, plus the anchor's
+                            14px drop from the row's top edge; the height here
+                            gives that a real margin instead of the label tip
+                            landing right at (or past) the card's edge. Get
+                            this wrong and it doesn't fail the same way for
+                            every card — cards with names close to the
+                            truncation width clip further than cards with
+                            short names, so the deck reads as "inconsistently
+                            sized" when the actual bug is one row overflowing
+                            by a different amount than its neighbours. */}
+                        <div className="flex gap-1.5 pt-1.5" style={{ height: 116 }}>
                             {visible.map((entry) => (
                                 <div key={entry.row.model_label} className="relative min-w-0 flex-1">
                                     <span
