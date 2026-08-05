@@ -8,16 +8,17 @@ import {
 } from '@/lib/benchmark'
 
 /**
- * The whole benchmark, as plain text, for a model to read.
+ * The whole benchmark, as Markdown, for a model to read.
  *
  * Every other page in this section is built for a human looking at a chart —
- * this one exists so a language model (or anything else scraping for facts
- * rather than rendering pixels) can get the complete, current numbers in one
- * request without parsing HTML or driving a browser. Same data as the
- * dashboard, no chart in the way.
+ * this is the machine-readable counterpart: the complete, current numbers for
+ * every model, as one document, meant to be fetched directly rather than
+ * rendered. Follows the llms.txt convention (a plain-text URL whose body is
+ * Markdown), which is why the response is typed `text/markdown` despite the
+ * `.txt` path.
  *
  * Regenerated on every request rather than built once: eval runs land
- * continuously, and a stale llm.txt would be actively misleading to whatever
+ * continuously, and a stale llms.txt would be actively misleading to whatever
  * reads it, worse than a slow one. `dynamic = 'force-dynamic'` stops Next from
  * freezing this at build time; the short edge cache below still absorbs a
  * crawler making several requests in a row.
@@ -40,21 +41,21 @@ export async function GET(request: NextRequest) {
         const body: { rows: LeaderboardRow[] } = await res.json()
         rows = body.rows
     } catch (error) {
-        console.error('[llm.txt]', error)
+        console.error('[llms.txt]', error)
         return new NextResponse(
-            'Omni Benchmarks — temporarily unavailable\n\n' +
+            '# Omni Benchmarks — temporarily unavailable\n\n' +
                 'The evaluation backend could not be reached while generating this file. ' +
                 'This is not a permanent state; retry the request.\n',
-            { status: 502, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+            { status: 502, headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }
         )
     }
 
     const models = dedupeLeaderboard(rows)
-    const body = renderLlmTxt(models, request.nextUrl.origin)
+    const body = renderLlmsTxt(models, request.nextUrl.origin)
 
     return new NextResponse(body, {
         headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
+            'Content-Type': 'text/markdown; charset=utf-8',
             // Short edge cache: long enough to absorb a crawler re-requesting
             // within the same minute, short enough that this never lags the
             // dashboard by more than that.
@@ -99,15 +100,15 @@ const COLUMNS: { key: string; get: (r: LeaderboardRowWithIndex, rank: number) =>
  * `provider`, and metrics that aren't headline cards, like `latency_ms_p95`).
  */
 const GLOSSARY: Record<string, string> = {
-    rank: 'Position in this file, 1 = best. Sorted by omni_index descending; unpriced models (see omni_index) fall to the bottom, ordered by score.',
-    model_label: 'The name this model is identified by everywhere else on the site — use it to cross-reference /benchmark/model/<slug>.',
+    rank: 'Position in this table, 1 = best. Sorted by omni_index descending; unpriced models fall to the bottom, ordered by score.',
+    model_label: 'The name this model is identified by everywhere else on the site — cross-reference at /benchmark/model/<slug>.',
     provider: 'Which API served the requests for this model’s eval run.',
     model_family: 'Exact model identifier at weights-and-pricing granularity (finer than model_label groups models for display).',
     reasoning_effort: 'Requested reasoning effort for this run, where the provider exposes that knob. null if not applicable.',
     multimodal: 'Whether this model accepts non-text input (images, etc). Hand-classified, not measured by the eval.',
     open_weights: 'Whether this model’s weights are publicly downloadable, as opposed to API-only. Hand-classified, not measured by the eval.',
     latency_ms_p95: '95th-percentile wall-clock time to finish one case, in milliseconds.',
-    ttft_answer_ms_p50: 'Median time to the first token of answer prose specifically (as opposed to ttft_ms_p50, which counts any output including reasoning or a tool call).',
+    ttft_answer_ms_p50: 'Median time to the first token of answer prose specifically (unlike ttft_ms_p50, which counts any output including reasoning or a tool call).',
     turns_mean: 'Mean number of LLM turns (model calls) per case.',
     input_tokens_mean: 'Mean input tokens consumed per case, across every turn.',
     reasoning_tokens_mean: 'Mean reasoning tokens per case. Billed by most providers but not shown to the end user.',
@@ -141,9 +142,9 @@ function num(v: unknown, digits: number): string {
 }
 
 /**
- * Best first. Unpriced models (no omni_index — see the field's own glossary
- * entry) sort after every priced one, by quality, so the order still means
- * something instead of being arbitrary for the tail of the list.
+ * Best first. Unpriced models (no omni_index) sort after every priced one, by
+ * quality, so the order still means something instead of being arbitrary for
+ * the tail of the list.
  */
 function sortByOmniIndex(rows: LeaderboardRowWithIndex[]): LeaderboardRowWithIndex[] {
     return [...rows].sort((a, b) => {
@@ -154,49 +155,46 @@ function sortByOmniIndex(rows: LeaderboardRowWithIndex[]): LeaderboardRowWithInd
     })
 }
 
-function renderLlmTxt(models: LeaderboardRowWithIndex[], origin: string): string {
+/**
+ * A lean Markdown document: what the benchmark page itself says, not a spec
+ * for how to parse this file. An earlier version spent several lines on
+ * file-format ground rules ("here is how to read this file") before getting
+ * to any actual content — cut to one line folded into the intro, so the
+ * column glossary and the table (the parts that are actually the benchmark)
+ * aren't buried under scaffolding about the file they're in.
+ */
+function renderLlmsTxt(models: LeaderboardRowWithIndex[], origin: string): string {
     const generatedAt = new Date().toISOString()
     const omniCard = METRIC_CARDS.find((c) => c.key === 'omni_index')
 
     const lines: string[] = []
-    lines.push('# Omni Benchmarks — raw model scores')
+    lines.push('# Omni Benchmarks')
     lines.push('')
     lines.push(
-        'This file is generated for language models and other automated readers. ' +
-            'It is the complete, current result of every model this project has evaluated, as one table — ' +
-            'no charts, no client-side rendering, nothing to infer.'
+        'How each model behaves in Omni’s pro mode — skill triggering, output contracts, answer quality, ' +
+            'and what it costs to get there. Machine-readable counterpart to the interactive dashboard at ' +
+            `${origin}/benchmark, generated fresh on every request.`
     )
     lines.push('')
-    lines.push(`Generated: ${generatedAt}`)
-    lines.push(`Models: ${models.length}`)
-    lines.push(`Interactive version, per-model detail, and methodology: ${origin}/benchmark`)
+    lines.push(`Generated: ${generatedAt} · Models: ${models.length}`)
+    lines.push('')
+    lines.push(
+        'All rates are fractions from 0 to 1, not percentages; `*_ms_*` fields are milliseconds and `cost_*` ' +
+            'fields are US dollars; `null` means never measured, not zero — an unpriced model is left out of ' +
+            'cost and Omni Index comparisons rather than scored as free.'
+    )
     lines.push('')
 
     if (omniCard) {
-        lines.push('## What is the Omni Index?')
+        lines.push('## Omni Index')
         lines.push('')
         lines.push(omniCard.doc.what)
+        lines.push('')
         lines.push(omniCard.doc.how)
         lines.push('')
     }
 
-    lines.push('## How to read this file')
-    lines.push('')
-    lines.push(
-        '- One row per model. Where a model has been evaluated more than once, only the most recent run is shown.'
-    )
-    lines.push(
-        '- `null` means the value was never measured or does not apply — never assume it means zero. ' +
-            'This matters most for cost: an unpriced model is left out of cost and Omni Index comparisons entirely, ' +
-            'not scored as free.'
-    )
-    lines.push('- All rates (score, pass_rate, error_rate) are fractions from 0 to 1, not percentages.')
-    lines.push('- All *_ms_* fields are milliseconds. All cost_* fields are US dollars.')
-    lines.push('- Lower is better for: error_rate, latency_ms_p50, latency_ms_p95, ttft_ms_p50, ttft_answer_ms_p50, cost_usd_per_case, cost_usd_total.')
-    lines.push('- Higher is better for every other numeric column.')
-    lines.push('')
-
-    lines.push('## Column glossary')
+    lines.push('## Columns')
     lines.push('')
     for (const col of COLUMNS) {
         const doc = GLOSSARY[col.key]
@@ -223,10 +221,7 @@ function renderLlmTxt(models: LeaderboardRowWithIndex[], origin: string): string
     lines.push('')
 
     lines.push('---')
-    lines.push(
-        `Machine-readable source, kept in sync with the dashboard: ${origin}/benchmark. ` +
-            'Regenerate this file by requesting this URL again — it always reflects the latest recorded runs.'
-    )
+    lines.push(`Source: ${origin}/benchmark — request this URL again for the latest recorded runs.`)
 
     return lines.join('\n')
 }

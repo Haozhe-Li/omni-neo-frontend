@@ -863,9 +863,15 @@ export const benchRoutes = {
         labels.length === 0
             ? `${BENCH_BASE}/compare`
             : `${BENCH_BASE}/compare?models=${labels.map(modelSlug).join(',')}`,
-    /** The plain-text dump of every model's raw scores, meant for LLM readers. */
-    llmTxt: () => `${BENCH_BASE}/llm.txt`,
+    /** The Markdown dump of every model's raw scores, meant for LLM readers. */
+    llmsTxt: () => `${BENCH_BASE}/llms.txt`,
 }
+
+/** Where "Open in Omni" sends a reader to ask questions about the benchmark. */
+export const OMNI_CHAT_URL = 'https://omniknows.xyz'
+/** Where an LLM chat should fetch the raw data from — always production, even
+ *  when the benchmark itself is being previewed on localhost or staging. */
+export const LLMS_TXT_URL = 'https://omniknows.xyz/benchmark/llms.txt'
 
 // ── model slugs ─────────────────────────────────────────────────────────────
 /**

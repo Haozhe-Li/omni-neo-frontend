@@ -178,7 +178,7 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
 
     // See dedupeLeaderboard: collapses the raw response to one row per model
     // (runs accumulate forever) and computes omni_index once, shared with the
-    // llm.txt route so the two never arrive at a different number.
+    // llms.txt route so the two never arrive at a different number.
     const models = useMemo(() => dedupeLeaderboard(leaderboard ?? []), [leaderboard])
 
     const runByModel = useMemo(() => {

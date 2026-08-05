@@ -1,10 +1,13 @@
 'use client'
 
+import { useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, Bot, GitCompare, RefreshCw } from 'lucide-react'
+import { BarChart3, GitCompare, Menu, RefreshCw } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
+import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
+import { CopyPageButton, LlmsTxtActionRow, useLlmsTxtActions } from '@/components/benchmark/llms-txt-menu'
 import { BENCH_BASE, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
 
@@ -18,10 +21,11 @@ import { cn } from '@/lib/utils'
  * navigation itself, which is exactly what would have to be torn out on that
  * day. A flat bar survives the move by swapping one component.
  *
- * Structurally it holds more than it currently shows: methodology and a
- * changelog are the obvious next sections for a standalone benchmark site, and
- * an actions slot sits ready on the right. Only what exists is rendered — the
- * layout just does not have to be rebuilt to admit the rest.
+ * Below `sm` the tabs and actions fold into a single hamburger menu rather
+ * than trying to fit "Models · Compare · Copy Page ▾ · Refresh" on one line —
+ * both halves are rendered always and toggled with Tailwind's `sm:` prefix, so
+ * there is no JS media-query state and no hydration mismatch, the same
+ * approach the metric bar charts use for their own desktop/phone split.
  *
  * Visually this is the same bar the blog already uses (`markdown-blog-view`):
  * sticky, h-14, translucent with a blur, one hairline rule. Reusing that means
@@ -59,15 +63,38 @@ const SECTIONS = [
     { href: `${BENCH_BASE}/compare`, label: 'Compare', icon: GitCompare },
 ]
 
+/** Hairline between groups of rows inside the mobile menu sheet. */
+function MenuDivider() {
+    return <div className="my-1 h-px bg-[var(--border-subtle)]" aria-hidden />
+}
+
 export function BenchmarkNav() {
     const pathname = usePathname()
     const { refresh, refreshing } = useBenchmarkData()
+    const llmsTxtActions = useLlmsTxtActions()
+    const menu = useAnchoredPanel('right')
 
     // A model page is a leaf of Models, not a section of its own, so it keeps
     // that tab lit rather than leaving nothing selected.
     const activeHref = pathname.startsWith(`${BENCH_BASE}/compare`)
         ? `${BENCH_BASE}/compare`
         : benchRoutes.overview()
+
+    // Safety net for the one scenario `useAnchoredPanel` wasn't built for: its
+    // trigger here is CSS-hidden above `sm` rather than always visible, so
+    // resizing past that width while the sheet is open would leave it trying
+    // to anchor to a trigger that is no longer on screen. Closing it on the
+    // crossing is simpler than teaching the shared hook about a trigger that
+    // can disappear.
+    useEffect(() => {
+        if (!menu.open) return
+        const mq = window.matchMedia('(min-width: 640px)')
+        const onChange = () => {
+            if (mq.matches) menu.setOpen(false)
+        }
+        mq.addEventListener('change', onChange)
+        return () => mq.removeEventListener('change', onChange)
+    }, [menu.open, menu.setOpen])
 
     return (
         <header className="sticky top-0 z-40 border-b border-[var(--border-subtle)] bg-[var(--background)]/85 backdrop-blur-xl">
@@ -89,68 +116,118 @@ export function BenchmarkNav() {
                     className="hidden h-4 w-px shrink-0 bg-[var(--border)] sm:block"
                 />
 
-                <nav className="flex min-w-0 flex-1 items-center gap-0.5">
-                    {SECTIONS.map(({ href, label, icon: Icon }) => {
-                        const active = href === activeHref
-                        return (
-                            <Link
-                                key={href}
-                                href={href}
-                                aria-current={active ? 'page' : undefined}
-                                className={cn(
-                                    'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3',
-                                    active
-                                        ? 'bg-[var(--muted)] font-medium text-[var(--foreground)]'
-                                        : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                                )}
-                            >
-                                <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
-                                {label}
-                            </Link>
-                        )
-                    })}
+                {/* ── sm and up: tabs on the left half, actions on the right ── */}
+                <div className="hidden min-w-0 flex-1 items-center justify-between gap-3 sm:flex">
+                    <nav className="flex min-w-0 items-center gap-0.5">
+                        {SECTIONS.map(({ href, label, icon: Icon }) => {
+                            const active = href === activeHref
+                            return (
+                                <Link
+                                    key={href}
+                                    href={href}
+                                    aria-current={active ? 'page' : undefined}
+                                    className={cn(
+                                        'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors sm:px-3',
+                                        active
+                                            ? 'bg-[var(--muted)] font-medium text-[var(--foreground)]'
+                                            : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+                                    )}
+                                >
+                                    <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                                    {label}
+                                </Link>
+                            )
+                        })}
+                    </nav>
 
-                    {/* Not a section of the app — a plain-text resource, not a
-                        page with a layout — so this is a bare `<a>` rather than
-                        a `Link`. It opens in a new tab for the same reason the
-                        sidebar's Benchmarks entry does: following it leaves the
-                        interactive site behind entirely, which should not cost
-                        the tab you were already on. */}
-                    <a
-                        href={benchRoutes.llmTxt()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Every model's raw scores as plain text, written for LLMs to read"
-                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)] sm:px-3"
-                    >
-                        <Bot className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        LLM.txt
-                    </a>
-                </nav>
+                    {/* Refresh is deliberately the quietest thing in the bar: an
+                        icon with no label, no border, no background — reachable
+                        from anywhere in the section (the whole reason it lives in
+                        the header and not on each page) without competing with
+                        Copy Page for attention. */}
+                    <div className="flex shrink-0 items-center gap-1">
+                        <CopyPageButton actions={llmsTxtActions} />
+                        <button
+                            onClick={refresh}
+                            disabled={refreshing}
+                            title="Clear the server cache and reload from the database"
+                            aria-label="Refresh benchmark data"
+                            className={cn(
+                                'inline-flex items-center rounded-lg p-1.5 transition-colors',
+                                refreshing
+                                    ? 'cursor-wait text-[var(--muted-foreground)]'
+                                    : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+                            )}
+                        >
+                            <RefreshCw
+                                className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')}
+                                strokeWidth={1.5}
+                            />
+                        </button>
+                    </div>
+                </div>
 
-                {/* Actions. Currently one button; the slot is where a standalone
-                    site's account or upgrade affordance would live. */}
-                <div className="flex shrink-0 items-center gap-2">
+                {/* ── below sm: everything folds into one menu ── */}
+                <div className="ml-auto flex items-center sm:hidden">
                     <button
-                        onClick={refresh}
-                        disabled={refreshing}
-                        title="Clear the server cache and reload from the database"
-                        aria-label="Refresh benchmark data"
-                        className={cn(
-                            'inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-2 py-1.5 text-[12px] transition-colors sm:px-2.5',
-                            refreshing
-                                ? 'cursor-wait text-[var(--muted-foreground)]'
-                                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                        )}
+                        ref={menu.triggerRef}
+                        type="button"
+                        onClick={() => menu.setOpen(!menu.open)}
+                        aria-haspopup="menu"
+                        aria-expanded={menu.open}
+                        aria-label="Menu"
+                        className="inline-flex items-center rounded-lg p-2 text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]"
                     >
-                        <RefreshCw
-                            className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')}
-                            strokeWidth={1.5}
-                        />
-                        <span className="hidden sm:inline">
-                            {refreshing ? 'Refreshing…' : 'Refresh'}
-                        </span>
+                        <Menu className="h-5 w-5" strokeWidth={1.5} />
                     </button>
+
+                    <AnchoredPanel state={menu} ariaLabel="Benchmark menu" role="menu">
+                        {SECTIONS.map(({ href, label, icon: Icon }) => {
+                            const active = href === activeHref
+                            return (
+                                <Link
+                                    key={href}
+                                    href={href}
+                                    aria-current={active ? 'page' : undefined}
+                                    onClick={() => menu.setOpen(false)}
+                                    className={cn(
+                                        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors',
+                                        active
+                                            ? 'bg-[var(--muted)] font-medium text-[var(--foreground)]'
+                                            : 'text-[var(--foreground)] hover:bg-[var(--muted)]'
+                                    )}
+                                >
+                                    <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" strokeWidth={1.5} />
+                                    {label}
+                                </Link>
+                            )
+                        })}
+
+                        <MenuDivider />
+
+                        {llmsTxtActions.map((action) => (
+                            <LlmsTxtActionRow
+                                key={action.key}
+                                action={action}
+                                onNavigate={() => menu.setOpen(false)}
+                            />
+                        ))}
+
+                        <MenuDivider />
+
+                        <button
+                            type="button"
+                            onClick={refresh}
+                            disabled={refreshing}
+                            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[var(--foreground)] transition-colors hover:bg-[var(--muted)] disabled:cursor-wait"
+                        >
+                            <RefreshCw
+                                className={cn('h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]', refreshing && 'animate-spin')}
+                                strokeWidth={1.5}
+                            />
+                            {refreshing ? 'Refreshing…' : 'Refresh data'}
+                        </button>
+                    </AnchoredPanel>
                 </div>
             </div>
         </header>
