@@ -22,7 +22,9 @@ import { isMemoryEnabled } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
 import { parseQuestion } from '@/lib/question-parser'
+import { parseTextBlocks, type ParsedTextBlock } from '@/lib/textblock-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
+import { TextBlockCard } from '@/components/text-block-card'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -35,6 +37,10 @@ import {
 import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
 import { canHighlightExcerpt } from '@/lib/highlight'
+
+// A message's displayed content, in source order: narration text, inline
+// <report> cards, and inline <textblock> cards (drafts/polish/email).
+type RenderSegment = ParsedSegment | { type: 'textblock'; block: ParsedTextBlock }
 
 interface ChatViewProps {
   query: string
@@ -794,25 +800,31 @@ export function ChatView({
   }, [messages])
 
   // Reports stream inline as <report> blocks; questions appear as <question>
-  // blocks. Both are stripped from the displayed text and rendered separately.
+  // blocks; finished drafts (polish/translate/email) appear as <textblock>
+  // blocks. All three are stripped from the displayed text and rendered separately.
   const parsedByIndex = useMemo(
     () =>
       messages.map((m, i) => {
         if (m.role !== 'assistant')
-          return { text: m.content || '', reports: [] as ParsedReport[], question: null, segments: [] as ParsedSegment[] }
+          return { text: m.content || '', reports: [] as ParsedReport[], question: null, segments: [] as RenderSegment[] }
         const withReports = parseReports(m.content || '', `m${i}`)
-        const { text, question: textQuestion, questionPending: tqp } = parseQuestion(withReports.text)
-        // <question> only ever appears in narration text, never inside a
-        // report, so strip it out of whichever text segment holds it.
+        const { text: questionStripped, question: textQuestion, questionPending: tqp } = parseQuestion(withReports.text)
+        // <question> and <textblock> only ever appear in narration text,
+        // never inside a report, so strip them out of whichever text
+        // segment holds them.
         let question = textQuestion
         let questionPending = tqp
-        const segments: ParsedSegment[] = withReports.segments
-          .map((seg) => {
-            if (seg.type !== 'text') return seg
+        // `text` (used for the copy/share footer) needs every tag stripped too,
+        // not just the segments used for inline rendering.
+        const text = parseTextBlocks(questionStripped, `m${i}`).text
+        const segments: RenderSegment[] = withReports.segments
+          .flatMap((seg, si): RenderSegment[] => {
+            if (seg.type !== 'text') return [seg]
             const pq = parseQuestion(seg.content)
             if (pq.question) question = pq.question
             if (pq.questionPending) questionPending = true
-            return { type: 'text' as const, content: pq.text }
+            const { segments: tbSegs } = parseTextBlocks(pq.text, `m${i}-s${si}`)
+            return tbSegs
           })
           .filter((seg) => seg.type !== 'text' || seg.content.trim())
         // A report's `[n]` citations can reach any source fetched so far in the
@@ -2069,7 +2081,7 @@ export function ChatView({
                   </>
                 ) : (
                   (() => {
-                    const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[], segments: [] as ParsedSegment[] }
+                    const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[], segments: [] as RenderSegment[] }
                     const reportDrafting = parsed.reports.some((r) => !r.complete)
                     return (
                       <div className="w-full" data-selection-scope="assistant-message">
@@ -2102,28 +2114,42 @@ export function ChatView({
                             const { segments: blockSeg } = parseReports(block.content, `m${i}-b${bi}`)
                             return (
                               <Fragment key={`block-${i}-${bi}`}>
-                                {blockSeg.map((seg, si) =>
-                                  seg.type === 'text' ? (
-                                    parseQuestion(seg.content).text ? (
-                                      <StreamingText
-                                        key={`text-${i}-${bi}-${si}`}
-                                        content={parseQuestion(seg.content).text}
-                                        animate={isCurrentlyStreaming && isLastBlock}
-                                        sources={mergedSources}
-                                        // `msg.verifiedClaims`' offsets are computed against the
-                                        // full `msg.content` — only safe to splice into a segment
-                                        // that IS the full content verbatim (no report/question
-                                        // block stripped it down), otherwise offsets wouldn't line up.
-                                        verifiedClaims={parseQuestion(seg.content).text === msg.content ? msg.verifiedClaims : undefined}
-                                        onVerifiedClaimClick={parseQuestion(seg.content).text === msg.content ? verifiedClaimClickHandlers[i] : undefined}
-                                      />
-                                    ) : null
-                                  ) : (
-                                    <div key={`report-wrap-${i}-${bi}-${si}`} className="my-3 w-full">
-                                      {renderReportCard(seg.report)}
-                                    </div>
+                                {blockSeg.map((seg, si) => {
+                                  if (seg.type !== 'text') {
+                                    return (
+                                      <div key={`report-wrap-${i}-${bi}-${si}`} className="my-3 w-full">
+                                        {renderReportCard(seg.report)}
+                                      </div>
+                                    )
+                                  }
+                                  const qText = parseQuestion(seg.content).text
+                                  if (!qText) return null
+                                  const { segments: tbSeg } = parseTextBlocks(qText, `m${i}-b${bi}-${si}`)
+                                  return (
+                                    <Fragment key={`text-${i}-${bi}-${si}`}>
+                                      {tbSeg.map((tseg, ti) =>
+                                        tseg.type === 'text' ? (
+                                          <StreamingText
+                                            key={`text-${i}-${bi}-${si}-${ti}`}
+                                            content={tseg.content}
+                                            animate={isCurrentlyStreaming && isLastBlock}
+                                            sources={mergedSources}
+                                            // `msg.verifiedClaims`' offsets are computed against the
+                                            // full `msg.content` — only safe to splice into a segment
+                                            // that IS the full content verbatim (no report/question/
+                                            // textblock stripped it down), otherwise offsets wouldn't line up.
+                                            verifiedClaims={qText === msg.content ? msg.verifiedClaims : undefined}
+                                            onVerifiedClaimClick={qText === msg.content ? verifiedClaimClickHandlers[i] : undefined}
+                                          />
+                                        ) : (
+                                          <div key={`textblock-wrap-${i}-${bi}-${si}-${ti}`} className="my-3 w-full">
+                                            <TextBlockCard block={tseg.block} />
+                                          </div>
+                                        )
+                                      )}
+                                    </Fragment>
                                   )
-                                )}
+                                })}
                               </Fragment>
                             )
                           })
@@ -2137,7 +2163,7 @@ export function ChatView({
                               idPrefix={`m${i}`}
                               onOpenScript={openPanel}
                             />
-                            {/* answer text and inline report cards, in source order */}
+                            {/* answer text and inline report/textblock cards, in source order */}
                             {parsed.segments.map((seg, si) =>
                               seg.type === 'text' ? (
                                 <StreamingText
@@ -2148,9 +2174,13 @@ export function ChatView({
                                   verifiedClaims={seg.content === msg.content ? msg.verifiedClaims : undefined}
                                   onVerifiedClaimClick={seg.content === msg.content ? verifiedClaimClickHandlers[i] : undefined}
                                 />
-                              ) : (
+                              ) : seg.type === 'report' ? (
                                 <div key={`report-wrap-${i}-${si}`} className="my-3 w-full">
                                   {renderReportCard(seg.report)}
+                                </div>
+                              ) : (
+                                <div key={`textblock-wrap-${i}-${si}`} className="my-3 w-full">
+                                  <TextBlockCard block={seg.block} />
                                 </div>
                               )
                             )}
