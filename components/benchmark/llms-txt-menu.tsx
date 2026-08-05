@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useState, type ComponentType } from 'react'
-import { ArrowUpRight, Bot, Check, ChevronDown, Copy, FileText } from 'lucide-react'
+import { useCallback, useState, type ReactNode } from 'react'
+import Image from 'next/image'
+import { ArrowUpRight, Check, ChevronDown, Copy, FileText } from 'lucide-react'
 import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
 import { LLMS_TXT_URL, OMNI_CHAT_URL, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
@@ -11,7 +12,15 @@ export interface LlmsTxtAction {
     label: string
     /** Second line under the label — what the click actually does. */
     hint: string
-    icon: ComponentType<{ className?: string; strokeWidth?: number }>
+    /**
+     * A fully-built element, not a component reference — one of these four is
+     * a raster image (Omni's own mark), which takes `src`/`width`/`height`
+     * rather than a Lucide icon's `className`/`strokeWidth`, so there is no
+     * single prop shape a shared renderer could pass through uniformly. Each
+     * action builds its own icon at its own size and color; the row that
+     * displays it only handles layout (see `LlmsTxtActionRow`).
+     */
+    icon: ReactNode
     onClick?: () => void
     href?: string
     external?: boolean
@@ -59,27 +68,47 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
         `${OMNI_CHAT_URL}/?fill=` +
         encodeURIComponent(`Read from ${LLMS_TXT_URL} so I can ask questions about it.`)
 
+    const iconClass = 'h-3.5 w-3.5 text-[var(--muted-foreground)]'
+
     return [
         {
             key: 'copy',
             label: copied ? 'Copied' : 'Copy Page',
             hint: 'Markdown, copied to your clipboard',
-            icon: copied ? Check : Copy,
+            icon: copied ? (
+                <Check className={iconClass} strokeWidth={1.5} />
+            ) : (
+                <Copy className={iconClass} strokeWidth={1.5} />
+            ),
             onClick: copy,
         },
         {
             key: 'view',
             label: 'llms.txt',
             hint: 'The raw file, opened in a new tab',
-            icon: FileText,
+            icon: <FileText className={iconClass} strokeWidth={1.5} />,
             href: benchRoutes.llmsTxt(),
             external: true,
         },
         {
             key: 'omni',
-            label: 'Open in Omni',
+            label: 'Ask Omni',
             hint: 'Starts a chat with this data ready to ask about',
-            icon: Bot,
+            // Omni's own mark, not a generic bot icon — this is the one action
+            // that hands off to a different product entirely, and the brand
+            // mark is what makes that legible at a glance rather than reading
+            // as a fourth abstract icon among the others. Same asset the nav's
+            // own BrandMark uses, so the two don't disagree on what "Omni"
+            // looks like within one page.
+            icon: (
+                <Image
+                    src="/android-chrome-512x512.png"
+                    alt=""
+                    width={14}
+                    height={14}
+                    className="rounded-[3px]"
+                />
+            ),
             href: omniHref,
             external: true,
         },
@@ -100,10 +129,12 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
  * only confirmation the click did anything.
  */
 export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction; onNavigate?: () => void }) {
-    const Icon = action.icon
     const content = (
         <>
-            <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" strokeWidth={1.5} />
+            {/* Alignment is the row's job, not the icon's — see the note on
+                `LlmsTxtAction.icon` for why each action builds its own icon
+                rather than handing this a component to size uniformly. */}
+            <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center">{action.icon}</span>
             <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1">
                     <span className="truncate text-[12px] text-[var(--foreground)]">{action.label}</span>
@@ -168,7 +199,6 @@ export function CopyPageButton({ actions }: { actions: LlmsTxtAction[] }) {
     const panel = useAnchoredPanel('right')
     const { open, setOpen, triggerRef } = panel
     const primary = actions[0]
-    const Icon = primary.icon
 
     const segmentClass =
         'inline-flex items-center transition-colors hover:bg-[var(--muted)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]'
@@ -181,7 +211,7 @@ export function CopyPageButton({ actions }: { actions: LlmsTxtAction[] }) {
                 title="Copy every model's raw scores as Markdown"
                 className={cn(segmentClass, 'gap-1.5 px-2.5 py-1.5 text-[12px] text-[var(--foreground)]')}
             >
-                <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
+                {primary.icon}
                 {primary.label}
             </button>
 

@@ -13,9 +13,20 @@ import {
  * Every other page in this section is built for a human looking at a chart —
  * this is the machine-readable counterpart: the complete, current numbers for
  * every model, as one document, meant to be fetched directly rather than
- * rendered. Follows the llms.txt convention (a plain-text URL whose body is
- * Markdown), which is why the response is typed `text/markdown` despite the
- * `.txt` path.
+ * rendered.
+ *
+ * The body is Markdown; the wire type is `text/plain`, not `text/markdown` —
+ * those are deliberately different questions. `text/markdown` is a real,
+ * RFC 7763-registered type, but most URL-fetching tools (ChatGPT's browsing
+ * tool among them) check Content-Type against a narrow allowlist before
+ * ingesting anything, and that type is rare enough to usually be missing from
+ * it — the request gets rejected outright, not misparsed. `text/plain` is
+ * close to universally accepted, and matches what virtually every host
+ * (nginx, Vercel, Cloudflare, S3, GitHub Pages) already serves a `.txt` path
+ * as by default. Every widely-used llms.txt in the wild follows this same
+ * split — Markdown syntax in the body, `text/plain` on the wire — for exactly
+ * this reason: the syntax is for the reader, the header is for whatever
+ * fetched the URL to get out of its way.
  *
  * Regenerated on every request rather than built once: eval runs land
  * continuously, and a stale llms.txt would be actively misleading to whatever
@@ -46,7 +57,7 @@ export async function GET(request: NextRequest) {
             '# Omni Benchmarks — temporarily unavailable\n\n' +
                 'The evaluation backend could not be reached while generating this file. ' +
                 'This is not a permanent state; retry the request.\n',
-            { status: 502, headers: { 'Content-Type': 'text/markdown; charset=utf-8' } }
+            { status: 502, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
         )
     }
 
@@ -55,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(body, {
         headers: {
-            'Content-Type': 'text/markdown; charset=utf-8',
+            'Content-Type': 'text/plain; charset=utf-8',
             // Short edge cache: long enough to absorb a crawler re-requesting
             // within the same minute, short enough that this never lags the
             // dashboard by more than that.
