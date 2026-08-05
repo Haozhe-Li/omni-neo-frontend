@@ -33,6 +33,17 @@ const COLLAPSE_RANGE: [number, number] = [16, 220]
  * transition rides alongside it: a transition would make the bar lag behind
  * the finger instead of tracking it 1:1, which is the wrong feel for
  * something meant to read as physically tied to the page moving.
+ *
+ * Pinned to 0 below `sm`. The whole docking choreography — narrowing,
+ * lifting off the top edge, hiding the wordmark — is a wide-screen effect;
+ * on a phone the bar is already the plainest thing it gets (a flat glass
+ * strip that opens a hamburger sheet), and there is no "compact" state left
+ * to collapse into. Checked with `matchMedia` rather than reading a fixed
+ * width once, matching the guard this file already has for the mobile
+ * menu's own trigger: resizing across the boundary — rotating a tablet,
+ * dragging a desktop window narrow — should snap the bar back to flush
+ * immediately rather than leaving it stuck mid-dock on a layout that no
+ * longer has room for it.
  */
 function useCollapseProgress(): number {
     const [progress, setProgress] = useState(0)
@@ -40,8 +51,13 @@ function useCollapseProgress(): number {
 
     useEffect(() => {
         const [start, end] = COLLAPSE_RANGE
+        const mq = window.matchMedia('(min-width: 640px)')
         const measure = () => {
             rafRef.current = 0
+            if (!mq.matches) {
+                setProgress(0)
+                return
+            }
             const raw = clamp01((window.scrollY - start) / (end - start))
             // Ease-out: the bar moves fastest right as it leaves the top and
             // settles into its floating state, rather than a linear crawl
@@ -54,8 +70,10 @@ function useCollapseProgress(): number {
         }
         measure()
         window.addEventListener('scroll', onScroll, { passive: true })
+        mq.addEventListener('change', measure)
         return () => {
             window.removeEventListener('scroll', onScroll)
+            mq.removeEventListener('change', measure)
             if (rafRef.current) cancelAnimationFrame(rafRef.current)
         }
     }, [])
@@ -170,25 +188,38 @@ export function BenchmarkNav() {
     const docked = collapseProgress > 0.02
 
     return (
-        <header className="sticky top-0 z-40">
+        <header
+            className="sticky top-0 z-40"
+            style={{
+                // The gap above the docked pill lives here, as padding on
+                // the sticky element itself, not as margin-top on the bar
+                // inside it. Margin on a first child collapses through its
+                // parent's top edge — with the child's margin hoisted onto
+                // the header, the "gap" only exists for the one scroll frame
+                // before the header re-pins to `top: 0`, so the moment it's
+                // actually stuck the bar reads as flush again regardless of
+                // how large the margin is. Padding never collapses, so the
+                // gap survives being pinned.
+                paddingTop: lerp(0, 12, collapseProgress),
+            }}
+        >
             {/* The bar that's actually seen — full-bleed and square at the top
-                of the page, then margin, radius, width, and shadow all ease
-                toward a floating pill as `collapseProgress` climbs. Every one
-                of those is a direct function of that single number: no CSS
-                transition rides along, so the bar tracks the scroll position
-                itself rather than a smoothed copy of it that would visibly
-                lag a fast flick. `overflow-hidden` clips the refresh rail
-                below to whatever radius is currently in effect — safe to add
-                because the dropdowns anchored off buttons inside this bar
-                render into a `document.body` portal, not this element, so
-                they were never going to be clipped by it. */}
+                of the page, then radius, width, and shadow all ease toward a
+                floating pill as `collapseProgress` climbs. Every one of those
+                is a direct function of that single number: no CSS transition
+                rides along, so the bar tracks the scroll position itself
+                rather than a smoothed copy of it that would visibly lag a
+                fast flick. `overflow-hidden` clips the refresh rail below to
+                whatever radius is currently in effect — safe to add because
+                the dropdowns anchored off buttons inside this bar render
+                into a `document.body` portal, not this element, so they were
+                never going to be clipped by it. */}
             <div
                 className={cn(
                     'relative mx-auto w-full bg-[var(--background)]/85 backdrop-blur-2xl overflow-hidden border-[var(--border-subtle)]',
                     docked ? 'border' : 'border-b'
                 )}
                 style={{
-                    marginTop: lerp(0, 12, collapseProgress),
                     borderRadius: lerp(0, 28, collapseProgress),
                     maxWidth: collapseProgress > 0.001 ? lerp(1800, 620, collapseProgress) : undefined,
                     boxShadow: `0 ${lerp(0, 16, collapseProgress)}px ${lerp(0, 40, collapseProgress)}px -${lerp(
