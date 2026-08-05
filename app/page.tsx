@@ -29,6 +29,12 @@ export default function Home() {
   const [initialMode, setInitialMode] = useState<AgentMode>('fast')
   const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
   const [pendingSkill, setPendingSkill] = useState<string | null>(null)
+  // Seeded from `?fill=` — typed into the home screen's input box for the
+  // visitor to review or edit, never auto-submitted. Distinct from `?q=`
+  // below, which skips the input box entirely and starts the chat outright;
+  // this exists for links that want to hand someone a starting point without
+  // speaking on their behalf.
+  const [deepLinkFill, setDeepLinkFill] = useState('')
 
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
@@ -126,13 +132,25 @@ export default function Home() {
     [router]
   )
 
-  // Initial query from URL (?q=...)
+  // Initial query from URL — `?q=` runs it immediately, `?fill=` only types
+  // it into the home screen's box. Checked in the same effect so only one of
+  // the two ever wins if a link somehow carried both.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const urlParams = new URLSearchParams(window.location.search)
     const q = urlParams.get('q')
-    if (!q) return
+    const fill = urlParams.get('fill')
+    if (!q && !fill) return
     window.history.replaceState({}, '', '/')
+
+    if (!q) {
+      // Prefill only: stay on the home screen (view is already 'home' at this
+      // point — nothing here has switched it to 'chat') and hand the text to
+      // SearchHome, which types it into the box itself via its existing
+      // Tab-to-autocomplete animation rather than a plain, instant setValue.
+      setDeepLinkFill(fill!)
+      return
+    }
 
     const initFromUrl = async () => {
       let newThreadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
@@ -191,6 +209,7 @@ export default function Home() {
             model={model}
             onModelChange={handleModelChange}
             locked={showLocked}
+            deepLinkFill={deepLinkFill}
           />
         )}
       </main>
