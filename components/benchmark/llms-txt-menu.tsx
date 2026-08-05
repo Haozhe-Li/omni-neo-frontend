@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useState, type ComponentType } from 'react'
-import { ArrowUpRight, Bot, Check, ChevronDown, Copy, FileText } from 'lucide-react'
+import { useCallback, useState, type ReactNode } from 'react'
+import Image from 'next/image'
+import { ArrowUpRight, Check, ChevronDown, Copy, FileText } from 'lucide-react'
 import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
 import { LLMS_TXT_URL, OMNI_CHAT_URL, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
@@ -9,7 +10,17 @@ import { cn } from '@/lib/utils'
 export interface LlmsTxtAction {
     key: string
     label: string
-    icon: ComponentType<{ className?: string; strokeWidth?: number }>
+    /** Second line under the label — what the click actually does. */
+    hint: string
+    /**
+     * A fully-built element, not a component reference — one of these four is
+     * a raster image (Omni's own mark), which takes `src`/`width`/`height`
+     * rather than a Lucide icon's `className`/`strokeWidth`, so there is no
+     * single prop shape a shared renderer could pass through uniformly. Each
+     * action builds its own icon at its own size and color; the row that
+     * displays it only handles layout (see `LlmsTxtActionRow`).
+     */
+    icon: ReactNode
     onClick?: () => void
     href?: string
     external?: boolean
@@ -48,37 +59,98 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
         }
     }, [pending])
 
+    // `fill`, not `q`: this hands the reader a starting point, it doesn't
+    // speak for them. `q` on the Omni home page runs a message immediately;
+    // `fill` only types it into the box so they can edit or add to it before
+    // sending — the right default for "here's a document, go ask about it,"
+    // where the exact first question is still theirs to shape.
     const omniHref =
-        `${OMNI_CHAT_URL}/?q=` +
+        `${OMNI_CHAT_URL}/?fill=` +
         encodeURIComponent(`Read from ${LLMS_TXT_URL} so I can ask questions about it.`)
 
+    const iconClass = 'h-3.5 w-3.5 text-[var(--muted-foreground)]'
+
     return [
-        { key: 'copy', label: copied ? 'Copied' : 'Copy Page', icon: copied ? Check : Copy, onClick: copy },
-        { key: 'view', label: 'llms.txt', icon: FileText, href: benchRoutes.llmsTxt(), external: true },
-        { key: 'omni', label: 'Open in Omni', icon: Bot, href: omniHref, external: true },
+        {
+            key: 'copy',
+            label: copied ? 'Copied' : 'Copy Page',
+            hint: 'Markdown, copied to your clipboard',
+            icon: copied ? (
+                <Check className={iconClass} strokeWidth={1.5} />
+            ) : (
+                <Copy className={iconClass} strokeWidth={1.5} />
+            ),
+            onClick: copy,
+        },
+        {
+            key: 'view',
+            label: 'llms.txt',
+            hint: 'The raw file, opened in a new tab',
+            icon: <FileText className={iconClass} strokeWidth={1.5} />,
+            href: benchRoutes.llmsTxt(),
+            external: true,
+        },
+        {
+            key: 'omni',
+            label: 'Ask Omni',
+            hint: 'Starts a chat with this data ready to ask about',
+            // Omni's own mark, not a generic bot icon — this is the one action
+            // that hands off to a different product entirely, and the brand
+            // mark is what makes that legible at a glance rather than reading
+            // as a fourth abstract icon among the others. Same asset the nav's
+            // own BrandMark uses, so the two don't disagree on what "Omni"
+            // looks like within one page.
+            icon: (
+                <Image
+                    src="/android-chrome-512x512.png"
+                    alt=""
+                    width={14}
+                    height={14}
+                    className="rounded-[3px]"
+                />
+            ),
+            href: omniHref,
+            external: true,
+        },
     ]
 }
 
 /**
  * One row, usable both inside the desktop dropdown and inline in the mobile
- * sheet. An `href` action renders as a link and closes the menu on click,
- * since navigating away is the row doing its job; the copy action has no
- * `href` and stays open instead, because closing it would hide the checkmark
- * that is the only confirmation the click did anything.
+ * sheet. Deliberately the same anatomy as the option rows in `SelectMenu` and
+ * `ModelFilter` — icon, then a two-line label-over-hint block — because a
+ * reader who opens all three menus in this same header should feel one
+ * design, not three similar-but-different ones: same `gap-2.5`, same
+ * `hover:bg-[var(--muted)]`, same 12px label over 10px muted hint.
+ *
+ * An `href` action renders as a link and closes the menu on click, since
+ * navigating away is the row doing its job; the copy action has no `href` and
+ * stays open instead, because closing it would hide the checkmark that is the
+ * only confirmation the click did anything.
  */
 export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction; onNavigate?: () => void }) {
-    const Icon = action.icon
     const content = (
         <>
-            <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" strokeWidth={1.5} />
-            <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--foreground)]">{action.label}</span>
-            {action.external && (
-                <ArrowUpRight className="h-3 w-3 shrink-0 text-[var(--muted-foreground)]" strokeWidth={1.75} />
-            )}
+            {/* Alignment is the row's job, not the icon's — see the note on
+                `LlmsTxtAction.icon` for why each action builds its own icon
+                rather than handing this a component to size uniformly. */}
+            <span className="mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center">{action.icon}</span>
+            <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1">
+                    <span className="truncate text-[12px] text-[var(--foreground)]">{action.label}</span>
+                    {action.external && (
+                        <ArrowUpRight
+                            className="h-3 w-3 shrink-0 text-[var(--muted-foreground)]"
+                            strokeWidth={1.75}
+                        />
+                    )}
+                </span>
+                <span className="block truncate text-[10px] text-[var(--muted-foreground)]">{action.hint}</span>
+            </span>
         </>
     )
     const className =
-        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted)] sm:px-2.5 sm:py-2'
+        'flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--muted)] sm:px-2.5 sm:py-2'
 
     if (action.href) {
         return (
@@ -106,24 +178,44 @@ export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction
  * pattern docs sites use for exactly this job (copy / view raw / hand to an
  * assistant), reusing `useAnchoredPanel` so it gets the same portal-and-sheet
  * behaviour already proven on the axis dropdown and the trait filter.
+ *
+ * One outer `rounded-lg border` with `overflow-hidden`, not two buttons each
+ * carrying their own border and half a radius — the earlier version had a
+ * visible seam where those two borders doubled up. Clipping the square
+ * corners of two plain buttons to one rounded container reads as a single
+ * control with an internal division, which is what a split button actually
+ * is. Hover is a background fill rather than a border-colour change, matching
+ * Refresh right next to it in the same bar rather than inventing a second
+ * hover language for one button. `focus-visible:ring-inset` on both halves is
+ * load-bearing, not decorative: an ordinary outward ring would be clipped by
+ * this same `overflow-hidden`.
+ *
+ * Desktop-only — the parent only mounts this at `sm` and up, and the mobile
+ * menu renders these three actions as flat rows instead — so the label has no
+ * `hidden`/`sm:` toggle of its own; there is no narrower breakpoint where this
+ * component renders at all.
  */
 export function CopyPageButton({ actions }: { actions: LlmsTxtAction[] }) {
     const panel = useAnchoredPanel('right')
     const { open, setOpen, triggerRef } = panel
     const primary = actions[0]
-    const Icon = primary.icon
+
+    const segmentClass =
+        'inline-flex items-center transition-colors hover:bg-[var(--muted)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]'
 
     return (
-        <div className="flex shrink-0 items-stretch">
+        <div className="flex items-stretch overflow-hidden rounded-lg border border-[var(--border-subtle)]">
             <button
                 type="button"
                 onClick={primary.onClick}
                 title="Copy every model's raw scores as Markdown"
-                className="inline-flex items-center gap-1.5 rounded-l-lg border border-r-0 border-[var(--border-subtle)] bg-[var(--card)] px-2 py-1.5 text-[12px] text-[var(--foreground)] transition-colors hover:border-[var(--accent)]/40 sm:px-2.5"
+                className={cn(segmentClass, 'gap-1.5 px-2.5 py-1.5 text-[12px] text-[var(--foreground)]')}
             >
-                <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
-                <span className="hidden sm:inline">{primary.label}</span>
+                {primary.icon}
+                {primary.label}
             </button>
+
+            <span aria-hidden className="w-px shrink-0 self-stretch bg-[var(--border-subtle)]" />
 
             <button
                 ref={triggerRef}
@@ -132,10 +224,7 @@ export function CopyPageButton({ actions }: { actions: LlmsTxtAction[] }) {
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-label="More ways to get this data"
-                className={cn(
-                    'inline-flex items-center rounded-r-lg border border-[var(--border-subtle)] bg-[var(--card)] px-1.5 py-1.5 transition-colors hover:border-[var(--accent)]/40',
-                    open && 'border-[var(--accent)]'
-                )}
+                className={cn(segmentClass, 'px-1.5 py-1.5', open && 'bg-[var(--muted)]')}
             >
                 <ChevronDown
                     className={cn(

@@ -72,9 +72,16 @@ interface SearchHomeProps {
   onModelChange?: (model: 'fast' | 'pro') => void
   /** Usage exhausted (guest-only) — locks both modes uniformly, no per-mode breakdown. */
   locked?: boolean
+  /**
+   * Typed into the box once (via the same fill animation Tab-to-autocomplete
+   * uses), never submitted — the visitor reviews or edits it and sends it
+   * themselves. For a deep link that wants to suggest a starting point
+   * without speaking on the visitor's behalf.
+   */
+  deepLinkFill?: string
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, locked = false }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, locked = false, deepLinkFill }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -477,6 +484,18 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       fillRafRef.current = requestAnimationFrame(tick)
     })
   }, [handleFillEnd])
+
+  // Runs the same fill animation a deep link's `?fill=` value that a real
+  // suggestion click would — typed into the box, focused, left unsent. The
+  // ref guards against firing twice for one incoming value: the parent's own
+  // effect that produced `deepLinkFill` only runs once, but this component
+  // can still re-render for unrelated reasons while that prop stays set.
+  const consumedFillRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!deepLinkFill || consumedFillRef.current === deepLinkFill) return
+    consumedFillRef.current = deepLinkFill
+    triggerFillAnimation(deepLinkFill, false)
+  }, [deepLinkFill, triggerFillAnimation])
 
   const getActiveSuggestion = () => {
     const arr = activeSkill ? SKILL_PLACEHOLDERS[activeSkill] : SUGGESTED_QUERIES
