@@ -68,6 +68,16 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
         `${OMNI_CHAT_URL}/?fill=` +
         encodeURIComponent(`Read from ${LLMS_TXT_URL} so I can ask questions about it.`)
 
+    // Kicks off a fresh render of llms.txt into the Redis mirror the agent
+    // actually reads (see lib/llms-txt.ts) — fire-and-forget, must not delay
+    // or block the navigation this click is really for. By the time the
+    // reader lands on Omni's chat, reviews the pre-filled prompt and hits
+    // send, this has almost always already landed; worst case the agent
+    // reads a copy up to AGENT_LLMS_TXT_TTL_SECONDS old.
+    const triggerAgentCacheRefresh = useCallback(() => {
+        fetch('/api/benchmark/llms-txt/refresh', { method: 'POST' }).catch(() => {})
+    }, [])
+
     const iconClass = 'h-3.5 w-3.5 text-[var(--muted-foreground)]'
 
     return [
@@ -109,6 +119,7 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
                     className="rounded-[3px]"
                 />
             ),
+            onClick: triggerAgentCacheRefresh,
             href: omniHref,
             external: true,
         },
@@ -158,7 +169,14 @@ export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction
                 href={action.href}
                 target={action.external ? '_blank' : undefined}
                 rel={action.external ? 'noopener noreferrer' : undefined}
-                onClick={onNavigate}
+                onClick={() => {
+                    // Both fire: the row's own side effect (e.g. the "Ask
+                    // Omni" cache-refresh trigger), then the menu-close
+                    // handler. Neither calls preventDefault, so the browser's
+                    // own navigation to `href` proceeds unaffected.
+                    action.onClick?.()
+                    onNavigate?.()
+                }}
                 className={className}
             >
                 {content}

@@ -158,12 +158,20 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
      * the proxy, so refetching alone hands back what is already on screen —
      * which matters most in exactly the case someone reaches for this button,
      * right after a run finished.
+     *
+     * Also re-renders the agent-facing llms.txt mirror in Redis (see
+     * lib/llms-txt.ts) in parallel — best-effort, its own failure must never
+     * turn this button into an error for the eval-data refresh it actually
+     * promises.
      */
     const refresh = useCallback(async () => {
         setRefreshing(true)
         setNote(null)
         try {
-            const { refreshed, retryAfter } = await forceRefresh()
+            const [{ refreshed, retryAfter }] = await Promise.all([
+                forceRefresh(),
+                fetch('/api/benchmark/llms-txt/refresh', { method: 'POST' }).catch(() => {}),
+            ])
             if (!refreshed) {
                 // Not a failure: the cooldown means someone refreshed seconds
                 // ago, so what loads now is already current. Say that instead

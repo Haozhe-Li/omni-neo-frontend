@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import {
   ArrowLeft,
   Check,
@@ -28,6 +29,12 @@ function domainOf(url: string) {
     return url
   }
 }
+
+// Always production, even when this page is being previewed on localhost or
+// staging — Omni's chat has to be able to fetch the URL it's handed, and the
+// backend's load_web_page shortcut for /pages/{id} (see
+// core/tools/web_page_reader.py) only recognizes the omniknows.xyz host.
+const SITE_URL = 'https://omniknows.xyz'
 
 interface PagesDetailViewProps {
   id: string
@@ -65,6 +72,13 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
 
   const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
   const fullText = `# ${title}\n\n${markdown}`
+
+  // `fill`, not `q` — same reasoning as the benchmark page's own "Ask Omni"
+  // link (components/benchmark/llms-txt-menu.tsx): hand the reader a
+  // starting point, not a message sent on their behalf.
+  const omniHref =
+    `${SITE_URL}/?fill=` +
+    encodeURIComponent(`Read from ${SITE_URL}/pages/${id} so I can ask questions about it.`)
 
   const handleCopy = async () => {
     try {
@@ -447,6 +461,24 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
               </div>
             )}
           </div>
+
+          {/* Ask Omni — hands this page's own URL to Omni's chat. The
+              backend reads it straight out of Redis instead of fetching the
+              page (see the /pages/{id} shortcut in
+              core/tools/web_page_reader.py) — publishing already writes this
+              page's markdown to the exact key that shortcut reads, so there
+              is nothing to keep in sync here, unlike the benchmark page's
+              llms.txt mirror. */}
+          <a
+            href={omniHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Starts a chat with this page ready to ask about"
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all"
+          >
+            <Image src="/android-chrome-512x512.png" alt="" width={14} height={14} priority className="rounded-[3px]" />
+            Ask Omni
+          </a>
         </div>
       </div>
 
