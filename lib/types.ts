@@ -196,6 +196,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   attachedFiles?: { id: string; name: string; type: string }[]
+  /** Whitelisted URLs the agent was asked to prioritize reading this turn. */
+  sourceUrls?: string[]
   follow_up_content?: string
   sources?: Source[]
   steps?: TimelineStep[]

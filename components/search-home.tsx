@@ -11,6 +11,7 @@ import { FileUploadArea } from '@/components/file-upload-area'
 import { useSourceUrls } from '@/hooks/useSourceUrls'
 import { SourceUrlArea } from '@/components/source-url-area'
 import { AddUrlPopover } from '@/components/add-url-popover'
+import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 
 import { toast } from 'sonner'
 
@@ -883,18 +884,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           toast.error(`${file.name} is too large. Maximum size is 20MB.`)
           return
         }
-        const allowedTypes = [
-          'application/pdf', 'text/plain', 'text/markdown', 'text/html', 'application/json',
-          'application/xml', 'text/xml', 'application/yaml', 'application/x-yaml', 'text/yaml',
-          'image/jpeg', 'image/png'
-        ]
-        const allowedExtensions = ['.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.json', '.xml', '.yaml', '.yml', '.java', '.c', '.cpp', '.h', '.hpp', '.sh', '.jpg', '.jpeg', '.png']
-
-        const fileExt = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
-        const isAllowedType = allowedTypes.includes(file.type)
-        const isAllowedExt = allowedExtensions.includes(fileExt)
-
-        if (!isAllowedType && !isAllowedExt) {
+        if (!isAllowedUploadFile(file)) {
           toast.error(`${file.name} is not a supported file type.`)
           return
         }
@@ -954,7 +944,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         ref={fileInputRef}
         onChange={handleFileSelect}
         className="hidden"
-        accept=".pdf,.txt,.md,.py,.js,.jsx,.ts,.tsx,.html,.json,.xml,.yaml,.yml,.java,.c,.cpp,.h,.hpp,.sh,.jpg,.jpeg,.png,application/pdf,text/plain,text/markdown,text/html,application/json,application/xml,application/yaml,image/jpeg,image/png"
+        accept={UPLOAD_ACCEPT_ATTR}
       />
 
       {/* Mobile Header */}
@@ -1190,88 +1180,123 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       <Plus className="h-4 w-4" />
                     </button>
 
-                    {/* Dropdown expands downward on desktop (input sits near the top of the page) and
-                        upward on mobile (input is pinned to the bottom of the viewport). */}
-                    {plusMenuOpen && (
-                      <div className={`absolute inset-x-0 bottom-full mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 md:slide-in-from-top-1 duration-100 ${addUrlOpen ? '' : 'py-2'}`}>
-                      {addUrlOpen ? (
+                    {/* Desktop: dropdown spans the full composer width (anchored to the
+                        `relative` composer box below via inset-x-0 — no fixed width, so it
+                        can't shrink to a narrow floating card the way a hardcoded w-[280px]
+                        used to). Mobile: full-width bottom sheet, same pattern as "Select Mode". */}
+                    {plusMenuOpen && (() => {
+                      const menuItems = addUrlOpen ? (
                         <AddUrlPopover
                           existingCount={sourceUrls.length}
                           onAdd={addUrls}
                           onClose={() => { setAddUrlOpen(false); setPlusMenuOpen(false) }}
                         />
                       ) : (
-                      <>
-                        {/* Add photos & files */}
-                        <button
-                          type="button"
-                          onClick={() => { onUploadClick(); setPlusMenuOpen(false) }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
-                        >
-                          <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
-                            <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
-                          </span>
-                        </button>
+                        <>
+                          {/* Add photos & files */}
+                          <button
+                            type="button"
+                            onClick={() => { onUploadClick(); setPlusMenuOpen(false) }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                          >
+                            <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
+                              <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
+                            </span>
+                          </button>
 
-                        {/* Add URL */}
-                        <button
-                          type="button"
-                          onClick={() => setAddUrlOpen(true)}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
-                        >
-                          <Link2 className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-[var(--foreground)]">Add URL</span>
-                            <span className="block text-xs text-[var(--muted-foreground)]">Pages Omni should prioritize reading</span>
-                          </span>
-                        </button>
+                          {/* Add URL */}
+                          <button
+                            type="button"
+                            onClick={() => setAddUrlOpen(true)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                          >
+                            <Link2 className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-[var(--foreground)]">Add URL</span>
+                              <span className="block text-xs text-[var(--muted-foreground)]">Pages Omni should prioritize reading</span>
+                            </span>
+                          </button>
 
-                        {/* Divider */}
-                        <div className="mx-3 my-1 border-t border-[var(--border)]" />
+                          {/* Divider */}
+                          <div className="mx-3 my-1 border-t border-[var(--border)]" />
 
-                        {/* Skills — Pro only */}
-                        {SKILLS.map((skill) => {
-                          const isActive = activeSkill === skill.id
-                          if (model !== 'pro') {
+                          {/* Skills — Pro only */}
+                          {SKILLS.map((skill) => {
+                            const isActive = activeSkill === skill.id
+                            if (model !== 'pro') {
+                              return (
+                                <button
+                                  key={skill.id}
+                                  type="button"
+                                  title="Only available in Pro mode"
+                                  onClick={() => toast('Switch to Pro mode to use skills')}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
+                                >
+                                  <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
+                                    <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
+                                  </span>
+                                  <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
+                                </button>
+                              )
+                            }
                             return (
                               <button
                                 key={skill.id}
                                 type="button"
-                                title="Only available in Pro mode"
-                                onClick={() => toast('Switch to Pro mode to use skills')}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
+                                onClick={() => { setActiveSkill(isActive ? null : skill.id); setPlusMenuOpen(false) }}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors rounded-lg ${isActive ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--secondary)]/60'}`}
                               >
-                                <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                                <skill.Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'}`} />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
-                                  <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
+                                  <span className={`block text-sm font-medium ${isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>{skill.label}</span>
+                                  <span className="block text-xs text-[var(--muted-foreground)]">{skill.desc}</span>
                                 </span>
-                                <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
+                                {isActive && <Check className="h-4 w-4 text-[var(--accent)] shrink-0" />}
                               </button>
                             )
-                          }
-                          return (
-                            <button
-                              key={skill.id}
-                              type="button"
-                              onClick={() => { setActiveSkill(isActive ? null : skill.id); setPlusMenuOpen(false) }}
-                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors rounded-lg ${isActive ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--secondary)]/60'}`}
-                            >
-                              <skill.Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'}`} />
-                              <span className="min-w-0 flex-1">
-                                <span className={`block text-sm font-medium ${isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>{skill.label}</span>
-                                <span className="block text-xs text-[var(--muted-foreground)]">{skill.desc}</span>
-                              </span>
-                              {isActive && <Check className="h-4 w-4 text-[var(--accent)] shrink-0" />}
-                            </button>
-                          )
-                        })}
-                      </>
-                      )}
-                      </div>
-                    )}
+                          })}
+                        </>
+                      )
+
+                      return (
+                        <>
+                          {/* Desktop dropdown */}
+                          <div className={`hidden md:block absolute inset-x-0 top-full mt-2 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-1 duration-100 ${addUrlOpen ? '' : 'py-2'}`}>
+                            {menuItems}
+                          </div>
+
+                          {/* Mobile bottom sheet */}
+                          <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                            <div
+                              className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+                              onClick={() => { setPlusMenuOpen(false); setAddUrlOpen(false) }}
+                            />
+                            <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
+                              <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--border)]" />
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-base font-semibold text-[var(--foreground)]">
+                                  {addUrlOpen ? '' : 'Add to your message'}
+                                </h3>
+                                <button
+                                  type="button"
+                                  onClick={() => { setPlusMenuOpen(false); setAddUrlOpen(false) }}
+                                  className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                {menuItems}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )
+                    })()}
                   </div>
 
                   {/* Active skill pill */}
