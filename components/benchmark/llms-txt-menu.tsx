@@ -2,9 +2,10 @@
 
 import { useCallback, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { ArrowUpRight, Check, Copy, FileText } from 'lucide-react'
+import { ArrowUpRight, Check, ChevronDown, Copy, FileText } from 'lucide-react'
 import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
 import { LLMS_TXT_URL, OMNI_CHAT_URL, benchRoutes } from '@/lib/benchmark'
+import { cn } from '@/lib/utils'
 
 export interface LlmsTxtAction {
     key: string
@@ -192,42 +193,70 @@ export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction
 }
 
 /**
- * The desktop control: a single solid pill that opens a dropdown of all three
- * actions (copy / view raw / hand to an assistant) — deliberately matching
- * the Pages detail view's "Share" button (components/pages-detail-view.tsx)
- * 1:1 (same `rounded-[8px]` solid-fill pill, same click-opens-a-menu model,
- * no default/quick action on the trigger itself) so the two read as the same
- * control language rather than two different button styles for the same job
- * ("here's this content, do something with it"). Reuses `useAnchoredPanel`
- * for the same portal-and-sheet behaviour already proven on the axis dropdown
- * and the trait filter.
+ * The desktop control: a split button whose primary half is "Ask Omni" and
+ * whose chevron opens the rest (Copy Page, raw llms.txt).
+ *
+ * Ask Omni leads because it is the one action here that is a destination
+ * rather than a utility — it hands the whole benchmark to the product this
+ * site is for, where Copy Page and llms.txt are plumbing for a reader who
+ * already knows they want the raw numbers. Splitting rather than stacking
+ * keeps that hierarchy in one control instead of two competing pills.
+ *
+ * Same solid `--foreground` fill and `rounded-[8px]` as the Pages detail
+ * view's own Ask Omni button (components/pages-detail-view.tsx), so the
+ * action looks identical wherever it appears; the secondary menus on both
+ * surfaces are correspondingly subdued. Hover tint is derived from
+ * `--background` rather than a fixed white/black overlay, which would be
+ * invisible in one of the two themes. `focus-visible:ring-inset` is
+ * load-bearing, not decorative: an outward ring would be clipped by this
+ * container's own `overflow-hidden`.
  *
  * Desktop-only — the parent only mounts this at `sm` and up, and the mobile
- * menu renders these three actions as flat rows instead — so the label has no
- * `hidden`/`sm:` toggle of its own; there is no narrower breakpoint where this
- * component renders at all.
+ * menu renders all three actions as flat rows instead.
  */
-export function CopyPageButton({ actions }: { actions: LlmsTxtAction[] }) {
+export function AskOmniButton({ actions }: { actions: LlmsTxtAction[] }) {
     const panel = useAnchoredPanel('right')
     const { open, setOpen, triggerRef } = panel
+    const omni = actions.find((a) => a.key === 'omni')
+    const secondary = actions.filter((a) => a.key !== 'omni')
+    if (!omni) return null
+
+    const segment =
+        'inline-flex items-center transition-colors hover:bg-[var(--background)]/15 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]'
 
     return (
-        <div>
+        <div className="flex items-stretch overflow-hidden rounded-[8px] bg-[var(--foreground)] text-[var(--background)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+            <a
+                href={omni.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={omni.onClick}
+                title={omni.hint}
+                className={cn(segment, 'gap-1.5 px-3 py-1.5 text-[12px] font-medium')}
+            >
+                {omni.icon}
+                {omni.label}
+            </a>
+
+            <span aria-hidden className="w-px shrink-0 self-stretch bg-[var(--background)]/25" />
+
             <button
                 ref={triggerRef}
                 type="button"
                 onClick={() => setOpen(!open)}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                title="Get this benchmark's data"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-[var(--background)] bg-[var(--foreground)] hover:opacity-90 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+                aria-label="More ways to get this data"
+                className={cn(segment, 'px-1.5', open && 'bg-[var(--background)]/15')}
             >
-                <Copy size={12} strokeWidth={2} />
-                Copy Page
+                <ChevronDown
+                    className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')}
+                    strokeWidth={2}
+                />
             </button>
 
             <AnchoredPanel state={panel} ariaLabel="Get this benchmark's data" role="menu">
-                {actions.map((action) => (
+                {secondary.map((action) => (
                     <LlmsTxtActionRow key={action.key} action={action} onNavigate={() => setOpen(false)} />
                 ))}
             </AnchoredPanel>

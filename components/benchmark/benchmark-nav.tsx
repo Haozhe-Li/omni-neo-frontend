@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import { BarChart3, GitCompare, Menu, RefreshCw } from 'lucide-react'
 import { useBenchmarkData } from '@/components/benchmark/benchmark-provider'
 import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
-import { CopyPageButton, LlmsTxtActionRow, useLlmsTxtActions } from '@/components/benchmark/llms-txt-menu'
+import { AskOmniButton, LlmsTxtActionRow, useLlmsTxtActions } from '@/components/benchmark/llms-txt-menu'
 import { BENCH_BASE, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
 
@@ -275,9 +275,9 @@ export function BenchmarkNav() {
                             icon with no label, no border, no background — reachable
                             from anywhere in the section (the whole reason it lives in
                             the header and not on each page) without competing with
-                            Copy Page for attention. */}
+                            Ask Omni for attention. */}
                         <div className="flex shrink-0 items-center gap-1">
-                            <CopyPageButton actions={llmsTxtActions} />
+                            <AskOmniButton actions={llmsTxtActions} />
                             <button
                                 onClick={refresh}
                                 disabled={refreshing}
