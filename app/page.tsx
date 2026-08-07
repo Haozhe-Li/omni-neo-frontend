@@ -29,12 +29,17 @@ export default function Home() {
   const [initialMode, setInitialMode] = useState<AgentMode>('fast')
   const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
   const [pendingSkill, setPendingSkill] = useState<string | null>(null)
+  const [pendingSourceUrls, setPendingSourceUrls] = useState<string[]>([])
   // Seeded from `?fill=` — typed into the home screen's input box for the
   // visitor to review or edit, never auto-submitted. Distinct from `?q=`
   // below, which skips the input box entirely and starts the chat outright;
   // this exists for links that want to hand someone a starting point without
   // speaking on their behalf.
   const [deepLinkFill, setDeepLinkFill] = useState('')
+  // Seeded from `?source_url=` (repeatable) — same one-shot, never-auto-sent
+  // treatment as `deepLinkFill`, just for the URL picker instead of the text
+  // box. Used by the benchmark/pages "Ask Omni" links.
+  const [deepLinkSourceUrls, setDeepLinkSourceUrls] = useState<string[]>([])
 
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
@@ -94,13 +99,15 @@ export default function Home() {
       threadId: string,
       _attachedFileIds?: string[],
       attachedFileMeta?: { id: string; name: string; type: string }[],
-      skill?: string | null
+      skill?: string | null,
+      sourceUrls?: string[]
     ) => {
       if (blockIfOverLimit()) return
       setCurrentQuery(query)
       setCurrentThreadId(threadId)
       setPendingAttachmentMeta(attachedFileMeta && attachedFileMeta.length > 0 ? attachedFileMeta : [])
       setPendingSkill(skill || null)
+      setPendingSourceUrls(sourceUrls && sourceUrls.length > 0 ? sourceUrls : [])
       setInitialMode(model)
       setView('chat')
       setShareableUrl(threadId)
@@ -134,13 +141,17 @@ export default function Home() {
 
   // Initial query from URL — `?q=` runs it immediately, `?fill=` only types
   // it into the home screen's box. Checked in the same effect so only one of
-  // the two ever wins if a link somehow carried both.
+  // the two ever wins if a link somehow carried both. `?source_url=` (repeatable)
+  // rides along with either — the benchmark/pages "Ask Omni" links use it with
+  // `?fill=` (see llms-txt-menu.tsx / pages-detail-view.tsx) so the linked
+  // page is queued in the URL picker without being auto-submitted.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const urlParams = new URLSearchParams(window.location.search)
     const q = urlParams.get('q')
     const fill = urlParams.get('fill')
-    if (!q && !fill) return
+    const sourceUrls = urlParams.getAll('source_url').filter(Boolean)
+    if (!q && !fill && sourceUrls.length === 0) return
     window.history.replaceState({}, '', '/')
 
     if (!q) {
@@ -148,7 +159,8 @@ export default function Home() {
       // point — nothing here has switched it to 'chat') and hand the text to
       // SearchHome, which types it into the box itself via its existing
       // Tab-to-autocomplete animation rather than a plain, instant setValue.
-      setDeepLinkFill(fill!)
+      if (fill) setDeepLinkFill(fill)
+      if (sourceUrls.length > 0) setDeepLinkSourceUrls(sourceUrls)
       return
     }
 
@@ -165,6 +177,7 @@ export default function Home() {
       } catch {}
       setCurrentThreadId(newThreadId)
       setCurrentQuery(q)
+      setPendingSourceUrls(sourceUrls)
       setInitialMode(model)
       setView('chat')
       setShareableUrl(newThreadId)
@@ -196,6 +209,7 @@ export default function Home() {
             isMobile={isMobile}
             initialMode={initialMode}
             initialAttachedFileMeta={pendingAttachmentMeta}
+            initialSourceUrls={pendingSourceUrls}
             initialSkill={pendingSkill as any}
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}
@@ -210,6 +224,7 @@ export default function Home() {
             onModelChange={handleModelChange}
             locked={showLocked}
             deepLinkFill={deepLinkFill}
+            deepLinkSourceUrls={deepLinkSourceUrls}
           />
         )}
       </main>

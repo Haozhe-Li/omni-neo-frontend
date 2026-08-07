@@ -64,9 +64,15 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
     // `fill` only types it into the box so they can edit or add to it before
     // sending — the right default for "here's a document, go ask about it,"
     // where the exact first question is still theirs to shape.
+    // `source_url` rides alongside it — queues LLMS_TXT_URL in the URL picker
+    // (see hooks/useSourceUrls.ts) so the backend actually reads it via
+    // first_party_redis_shortcut instead of relying on the model to decide
+    // to fetch it, while `fill`'s prose still gives the reader something to
+    // land on and edit before sending.
     const omniHref =
         `${OMNI_CHAT_URL}/?fill=` +
-        encodeURIComponent(`Read from ${LLMS_TXT_URL} so I can ask questions about it.`)
+        encodeURIComponent(`Read from ${LLMS_TXT_URL} so I can ask questions about it.`) +
+        `&source_url=${encodeURIComponent(LLMS_TXT_URL)}`
 
     // Kicks off a fresh render of llms.txt into the Redis mirror the agent
     // actually reads (see lib/llms-txt.ts) — fire-and-forget, must not delay

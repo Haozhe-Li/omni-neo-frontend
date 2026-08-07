@@ -75,10 +75,14 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
 
   // `fill`, not `q` — same reasoning as the benchmark page's own "Ask Omni"
   // link (components/benchmark/llms-txt-menu.tsx): hand the reader a
-  // starting point, not a message sent on their behalf.
+  // starting point, not a message sent on their behalf. `source_url` queues
+  // this page in the URL picker so the backend actually reads it via
+  // first_party_redis_shortcut rather than relying on the model to fetch it.
+  const pageUrl = `${SITE_URL}/pages/${id}`
   const omniHref =
     `${SITE_URL}/?fill=` +
-    encodeURIComponent(`Read from ${SITE_URL}/pages/${id} so I can ask questions about it.`)
+    encodeURIComponent(`Read from ${pageUrl} so I can ask questions about it.`) +
+    `&source_url=${encodeURIComponent(pageUrl)}`
 
   const handleCopy = async () => {
     try {
