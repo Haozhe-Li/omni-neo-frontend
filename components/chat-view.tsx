@@ -1,12 +1,15 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
+import { useSourceUrls } from '@/hooks/useSourceUrls'
+import { SourceUrlArea } from '@/components/source-url-area'
+import { AddUrlPopover } from '@/components/add-url-popover'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesPanel } from '@/components/sources-panel'
@@ -50,6 +53,7 @@ interface ChatViewProps {
   isMobile?: boolean
   initialMode?: AgentMode
   initialAttachedFileMeta?: { id: string; name: string; type: string }[]
+  initialSourceUrls?: string[]
   initialSkill?: SkillId | null
   sidebarOpen?: boolean
   setSidebarOpen?: (v: boolean) => void
@@ -440,6 +444,7 @@ export function ChatView({
   isMobile = false,
   initialMode = 'fast',
   initialAttachedFileMeta,
+  initialSourceUrls,
   initialSkill = null,
   sidebarOpen,
   setSidebarOpen,
@@ -449,6 +454,7 @@ export function ChatView({
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
+  const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
 
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     preloadedThread?.messages?.length
@@ -481,6 +487,7 @@ export function ChatView({
   const [isDragging, setIsDragging] = useState(false)
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [addUrlOpen, setAddUrlOpen] = useState(false)
   const [activeSkill, setActiveSkill] = useState<SkillId | null>(initialSkill)
   const [awaitingSkill, setAwaitingSkill] = useState(false)
   const plusMenuRef = useRef<HTMLDivElement>(null)
@@ -590,6 +597,7 @@ export function ChatView({
     const handler = (e: MouseEvent) => {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuOpen(false)
+        setAddUrlOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -1397,7 +1405,7 @@ export function ChatView({
 
   // ── send a turn ────────────────────────────────────────────────────────
   const runQuery = useCallback(
-    async (queryText: string, baseHistory: ChatMessage[], fileIds?: Record<string, string>[], followUpContent?: string) => {
+    async (queryText: string, baseHistory: ChatMessage[], fileIds?: Record<string, string>[], followUpContent?: string, sourceUrls?: string[]) => {
       setIsLoading(true)
       // The assistant reply will be appended right after baseHistory.
       setStreamingIndex(baseHistory.length)
@@ -1425,6 +1433,7 @@ export function ChatView({
         if (fileIds && fileIds.length) payload.attached_file_ids = fileIds
         if (activeSkill) payload.skill = activeSkill
         if (followUpContent) payload.follow_up_content = followUpContent
+        if (sourceUrls && sourceUrls.length) payload.source_url = sourceUrls
 
         const res = await fetchWithAuth(`${BACKEND_URL}/chat`, {
           method: 'POST',
@@ -1538,7 +1547,7 @@ export function ChatView({
       }
       setAttachedFiles([])
       requestPin() // pin the first query to the top
-      await runQuery(query, [userMsg], fileIds)
+      await runQuery(query, [userMsg], fileIds, undefined, initialSourceUrls?.length ? initialSourceUrls : undefined)
     }
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1814,9 +1823,11 @@ export function ChatView({
     }
     const baseHistory = [...messages, userMsg]
     const queryText = input
+    const sourceUrlsAtSend = sourceUrls.map((e) => e.url)
     setInput('')
     setAttachedFiles([])
     setFollowUpText('')
+    clearUrls()
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
     }
@@ -1826,7 +1837,7 @@ export function ChatView({
     setStreamingIndex(baseHistory.length)
     requestPin() // pin this new query to the top
     const fileIds = activeFiles.map((f) => ({ [f.id]: f.name }))
-    await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined, followUpAtSend || undefined)
+    await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined, followUpAtSend || undefined, sourceUrlsAtSend.length ? sourceUrlsAtSend : undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -2312,9 +2323,10 @@ export function ChatView({
                 ${isDragging ? 'ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--background)]' : ''}
               `}
             >
-              {attachedFiles.length > 0 && (
-                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
+              {(attachedFiles.length > 0 || sourceUrls.length > 0) && (
+                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200 space-y-2">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
+                  <SourceUrlArea urls={sourceUrls} onRemove={removeUrl} />
                 </div>
               )}
               {followUpText && (
@@ -2397,7 +2409,15 @@ export function ChatView({
 
                     {/* The composer sits at the bottom of the viewport, so the menu always expands upward. */}
                     {plusMenuOpen && (
-                      <div className="absolute inset-x-0 bottom-full mb-2 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 py-2">
+                      <div className={`absolute inset-x-0 bottom-full mb-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 ${addUrlOpen ? '' : 'py-2'}`}>
+                      {addUrlOpen ? (
+                        <AddUrlPopover
+                          existingCount={sourceUrls.length}
+                          onAdd={addUrls}
+                          onClose={() => { setAddUrlOpen(false); setPlusMenuOpen(false) }}
+                        />
+                      ) : (
+                      <>
                         {/* Add photos & files */}
                         <button
                           type="button"
@@ -2412,6 +2432,19 @@ export function ChatView({
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
                             <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
+                          </span>
+                        </button>
+
+                        {/* Add URL */}
+                        <button
+                          type="button"
+                          onClick={() => setAddUrlOpen(true)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                        >
+                          <Link2 className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-[var(--foreground)]">Add URL</span>
+                            <span className="block text-xs text-[var(--muted-foreground)]">Pages Omni should prioritize reading</span>
                           </span>
                         </button>
 
@@ -2455,6 +2488,8 @@ export function ChatView({
                             </button>
                           )
                         })}
+                      </>
+                      )}
                       </div>
                     )}
                   </div>

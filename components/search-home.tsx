@@ -1,13 +1,16 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Telescope, Plane, GraduationCap } from 'lucide-react'
+import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Link2, Telescope, Plane, GraduationCap } from 'lucide-react'
 import Image from 'next/image'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
+import { useSourceUrls } from '@/hooks/useSourceUrls'
+import { SourceUrlArea } from '@/components/source-url-area'
+import { AddUrlPopover } from '@/components/add-url-popover'
 
 import { toast } from 'sonner'
 
@@ -64,7 +67,7 @@ const SUGGESTED_QUERIES = [
 ]
 
 interface SearchHomeProps {
-  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[], skill?: SkillId | null) => void
+  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[], skill?: SkillId | null, sourceUrls?: string[]) => void
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   isMobile?: boolean
@@ -79,9 +82,15 @@ interface SearchHomeProps {
    * without speaking on the visitor's behalf.
    */
   deepLinkFill?: string
+  /**
+   * Seeds the URL picker once (e.g. the benchmark/pages "Ask Omni" links —
+   * see llms-txt-menu.tsx / pages-detail-view.tsx). Consumed the same
+   * one-shot way as `deepLinkFill`: shown as chips, never auto-submitted.
+   */
+  deepLinkSourceUrls?: string[]
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, locked = false, deepLinkFill }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, locked = false, deepLinkFill, deepLinkSourceUrls }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -146,9 +155,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const skillPickerRef = useRef<HTMLDivElement>(null)
 
   const { attachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
+  const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
 
   const [activeSkill, setActiveSkill] = useState<SkillId | null>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [addUrlOpen, setAddUrlOpen] = useState(false)
   const [awaitingSkill, setAwaitingSkill] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -191,6 +202,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     const handler = (e: MouseEvent) => {
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) {
         setPlusMenuOpen(false)
+        setAddUrlOpen(false)
         setAwaitingSkill(false)
       }
     }
@@ -497,6 +509,15 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     triggerFillAnimation(deepLinkFill, false)
   }, [deepLinkFill, triggerFillAnimation])
 
+  // Same one-shot guard as `deepLinkFill` above, so re-renders while the prop
+  // stays set don't re-add the same URLs.
+  const consumedSourceUrlsRef = useRef<string[] | null>(null)
+  useEffect(() => {
+    if (!deepLinkSourceUrls?.length || consumedSourceUrlsRef.current === deepLinkSourceUrls) return
+    consumedSourceUrlsRef.current = deepLinkSourceUrls
+    addUrls(deepLinkSourceUrls)
+  }, [deepLinkSourceUrls, addUrls])
+
   const getActiveSuggestion = () => {
     const arr = activeSkill ? SKILL_PLACEHOLDERS[activeSkill] : SUGGESTED_QUERIES
     return arr[suggestionIndex % arr.length]
@@ -514,7 +535,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     const showingSuggestion = !query && !isRecording && !sstPrompt
 
     // Trigger fill animation for suggestion submit; handleFillEnd will do the actual search
-    if (showingSuggestion && attachedFiles.length === 0) {
+    if (showingSuggestion && attachedFiles.length === 0 && sourceUrls.length === 0) {
       triggerFillAnimation(getActiveSuggestion(), true)
       return
     }
@@ -528,14 +549,22 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     // Filter out files that are not ready
     const readyFileIds = attachedFiles.filter((f) => f.status === 'ready').map((f) => f.id)
     const readyFileMeta = attachedFiles.filter((f) => f.status === 'ready').map((f) => ({ id: f.id, name: f.name, type: f.type }))
-    const effectiveQuery = query.trim() || (readyFileMeta.length > 1 ? 'Please read these files' : readyFileMeta.length === 1 ? 'Please read this file' : '')
+    const effectiveQuery = query.trim() || (
+      readyFileMeta.length > 1 ? 'Please read these files'
+      : readyFileMeta.length === 1 ? 'Please read this file'
+      : sourceUrls.length > 1 ? 'Please read these sources'
+      : sourceUrls.length === 1 ? 'Please read this source'
+      : ''
+    )
 
-    if (effectiveQuery || attachedFiles.length > 0) {
+    if (effectiveQuery || attachedFiles.length > 0 || sourceUrls.length > 0) {
       if (readyFileIds.length > 0) {
         console.log('[SearchHome] handleSubmit — attached_file_ids:', readyFileIds)
       }
-      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined, activeSkill || undefined)
+      const submittedSourceUrls = sourceUrls.map((e) => e.url)
+      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined, activeSkill || undefined, submittedSourceUrls.length > 0 ? submittedSourceUrls : undefined)
       clearFiles()
+      clearUrls()
       setActiveSkill(null)
       setQuery('')
       if (inputRef.current) {
@@ -1033,9 +1062,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 ${isDragging ? 'ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--background)]' : ''}
               `}
             >
-              {attachedFiles.length > 0 && (
-                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
+              {(attachedFiles.length > 0 || sourceUrls.length > 0) && (
+                <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200 space-y-2">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
+                  <SourceUrlArea urls={sourceUrls} onRemove={removeUrl} />
                 </div>
               )}
               <div className="relative">
@@ -1103,13 +1133,16 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       {fillAnim.text}
                     </div>
                   </div>
-                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt && attachedFiles.length > 0 ? (
+                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt && (attachedFiles.length > 0 || sourceUrls.length > 0) ? (
                   <div
                     className="absolute inset-0 pointer-events-none px-6 pt-3 pb-2 text-base leading-relaxed overflow-hidden"
                     aria-hidden="true"
                   >
                     <span className="text-[var(--muted-foreground)]/50">
-                      {attachedFiles.length > 1 ? 'Please read these files' : 'Please read this file'}
+                      {attachedFiles.length > 1 ? 'Please read these files'
+                        : attachedFiles.length === 1 ? 'Please read this file'
+                        : sourceUrls.length > 1 ? 'Please read these sources'
+                        : 'Please read this source'}
                     </span>
                   </div>
                 ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt ? (() => {
@@ -1160,7 +1193,15 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                     {/* Dropdown expands downward on desktop (input sits near the top of the page) and
                         upward on mobile (input is pinned to the bottom of the viewport). */}
                     {plusMenuOpen && (
-                      <div className="absolute inset-x-0 bottom-full mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 md:slide-in-from-top-1 duration-100 py-2">
+                      <div className={`absolute inset-x-0 bottom-full mb-2 md:bottom-auto md:top-full md:mb-0 md:mt-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 md:slide-in-from-top-1 duration-100 ${addUrlOpen ? '' : 'py-2'}`}>
+                      {addUrlOpen ? (
+                        <AddUrlPopover
+                          existingCount={sourceUrls.length}
+                          onAdd={addUrls}
+                          onClose={() => { setAddUrlOpen(false); setPlusMenuOpen(false) }}
+                        />
+                      ) : (
+                      <>
                         {/* Add photos & files */}
                         <button
                           type="button"
@@ -1171,6 +1212,19 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                           <span className="min-w-0">
                             <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
                             <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
+                          </span>
+                        </button>
+
+                        {/* Add URL */}
+                        <button
+                          type="button"
+                          onClick={() => setAddUrlOpen(true)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                        >
+                          <Link2 className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-[var(--foreground)]">Add URL</span>
+                            <span className="block text-xs text-[var(--muted-foreground)]">Pages Omni should prioritize reading</span>
                           </span>
                         </button>
 
@@ -1214,6 +1268,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                             </button>
                           )
                         })}
+                      </>
+                      )}
                       </div>
                     )}
                   </div>
