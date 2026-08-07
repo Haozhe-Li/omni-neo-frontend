@@ -409,6 +409,21 @@ function activityPreview(items: Item[], drafting?: 'report' | 'chart' | null): s
   return truncatePreview(chipText ? `${label} ${chipText}` : label)
 }
 
+// The bullet icon for the live row: the live item's own icon, picked exactly
+// the way its timeline row would pick it, so the row doesn't change shape when
+// the body opens around it. `null` means a plain dot — nothing concrete is
+// happening yet ("Thinking"), or an artifact is being drafted.
+function liveIcon(items: Item[], drafting?: 'report' | 'chart' | null): LucideIcon | null {
+  if (drafting) return null
+  const idx = activeActionIndex(items)
+  if (idx < 0) return null
+  const item = items[idx]
+  if (item.kind === 'reasoning') return null
+  if (item.kind === 'skill') return Blocks
+  if (typeof item.step.args?.code === 'string') return Terminal
+  return singleStepInfo(item.step.tool, item.step.args).Icon
+}
+
 // The header's animated text. A plain re-render swapped labels instantly,
 // which read as a hard cut; this runs each change as a short sequence
 // instead — the old label fades out and drifts up, the text is replaced
@@ -552,57 +567,111 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
   )
 }
 
-// One line of the header. At most one of them carries the chevron — always the
-// topmost — and that one is the button that opens the body; a chevron-less row
-// is inert text, not a dead-looking button.
-function HeaderRow({
+// Sits a comfortable distance from the label rather than tucked against it, so
+// the header reads as "a sentence, then an affordance" instead of one dense
+// widget, and stays a shade lighter than the text it belongs to.
+function Chevron({ open }: { open?: boolean }) {
+  return <ChevronRight size={14} className={`shrink-0 opacity-70 transition-transform ${open ? 'rotate-90' : ''}`} />
+}
+
+// The summary line: everything that has already finished, collapsed to a
+// count. It owns the chevron whenever it is present, because the chevron
+// always rides the topmost row.
+function HeaderRow({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      className="flex max-w-full items-center gap-2.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+    >
+      <HeaderLabel text={label} shimmer={false} />
+      <Chevron open={open} />
+    </button>
+  )
+}
+
+// The step running right now — a TIMELINE ROW, not a second header: same
+// bullet gutter and `pl-[22px]` indent as every row inside the body, so it
+// sits one level below the summary line above it and, when the body opens, it
+// reads as the last row of one continuous list. The completed steps grow in
+// ABOVE it (see `ToolActivity`), which is why it isn't also rendered inside
+// the body: standalone or expanded, it is the same single row in the same
+// place, never a duplicate of anything.
+//
+// It only carries the chevron before the first step has finished, the one
+// phase where no summary line exists and this row IS the header.
+function LiveRow({
   label,
-  shimmer,
+  Icon,
   chevron,
   open,
   onToggle,
 }: {
   label: string
-  shimmer: boolean
+  Icon: LucideIcon | null
   chevron: boolean
-  open?: boolean
-  onToggle?: () => void
+  open: boolean
+  onToggle: () => void
 }) {
-  const inner = (
-    <>
-      <HeaderLabel text={label} shimmer={shimmer} />
-      {chevron && <ChevronRight size={14} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />}
-    </>
+  const body = (
+    <span className="flex min-w-0 max-w-full items-center gap-2.5">
+      <HeaderLabel text={label} shimmer />
+      {chevron && <Chevron open={open} />}
+    </span>
   )
-  if (!chevron) {
-    return <div className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)]">{inner}</div>
-  }
   return (
-    <button
-      onClick={onToggle}
-      className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-    >
-      {inner}
-    </button>
+    <div className="omni-step-in relative pl-[22px] text-[13px] text-[var(--muted-foreground)]">
+      <Bullet Icon={Icon} live />
+      {chevron ? (
+        <button onClick={onToggle} className="flex max-w-full hover:text-[var(--foreground)] transition-colors">
+          {body}
+        </button>
+      ) : (
+        body
+      )}
+    </div>
   )
 }
 
 // The bullet that sits on top of the connecting line: an icon for tool/skill
-// rows, a plain dot for reasoning, shared by every row on the timeline
-// (including the trailing skeleton/done rows) so they all line up.
-function Bullet({ Icon, active, done, accent }: { Icon?: LucideIcon | null; active?: boolean; done?: boolean; accent?: boolean }) {
+// rows, a plain dot for reasoning, shared by every row on the timeline — the
+// live row and the trailing Done row included — so they all line up in one
+// gutter.
+function Bullet({
+  Icon,
+  active,
+  done,
+  live,
+}: {
+  Icon?: LucideIcon | null
+  active?: boolean
+  done?: boolean
+  /** The always-visible live row's bullet: accent-coloured and breathing. It
+   *  is the one thing on the collapsed header that moves, so it carries the
+   *  "still working" signal the shimmer used to carry alone. */
+  live?: boolean
+}) {
   return (
     <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
       {Icon ? (
         <Icon
-          size={done ? 14 : 12}
+          size={done ? 14 : live ? 13 : 12}
           strokeWidth={1.75}
-          className={done ? 'text-[var(--muted-foreground)]' : active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)]'}
+          className={
+            live
+              ? 'text-[var(--accent)] omni-live-pulse'
+              : done || !active
+                ? 'text-[var(--muted-foreground)]'
+                : 'text-[var(--foreground)]'
+          }
         />
       ) : (
         <div
           className={`h-2 w-2 rounded-full ${
-            accent ? 'bg-[var(--accent)] animate-pulse' : active ? 'bg-[var(--foreground)] animate-pulse' : 'bg-[var(--border-subtle)]'
+            live
+              ? 'bg-[var(--accent)] omni-live-pulse'
+              : active
+                ? 'bg-[var(--foreground)] animate-pulse'
+                : 'bg-[var(--border-subtle)]'
           }`}
         />
       )}
@@ -659,24 +728,8 @@ function TimelineRow({
   )
 }
 
-// Trailing placeholder shown at the end of the timeline while more steps are
-// still expected — a couple of shimmering skeleton bars rather than a text
-// label, so it reads as "loading" without competing with real step text.
-function SkeletonTailRow() {
-  return (
-    <div className="omni-step-in relative pl-[22px]">
-      <Bullet active />
-      <div className="flex flex-col gap-1.5 py-[3px]">
-        <div className="h-[9px] w-[65%] max-w-[200px] rounded-full bg-[var(--secondary)] animate-pulse" />
-        <div className="h-[9px] w-[35%] max-w-[110px] rounded-full bg-[var(--secondary)] animate-pulse" style={{ animationDelay: '0.15s' }} />
-      </div>
-    </div>
-  )
-}
-
-// Trailing row shown briefly the moment thinking ends, right before the whole
-// timeline auto-collapses — a quiet "done" beat instead of the skeleton just
-// vanishing outright.
+// Capstone row at the end of a finished timeline — the quiet "done" beat that
+// takes the live row's place in the gutter once there is nothing left running.
 function DoneTailRow() {
   return (
     <div className="omni-step-in relative pl-[22px]">
@@ -734,11 +787,12 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // one-for-one when the body is expanded.
   const actionCount = items.reduce((n, it) => (it.kind === 'reasoning' ? n : n + 1), 0)
 
-  // The step the live row is showing — excluded from the completed count until
-  // a newer action replaces it, so the two rows never describe the same step
-  // at once. Nothing is live while drafting (the live row describes the draft
-  // itself), so everything already on the timeline counts as finished there.
-  const liveIdx = drafting ? -1 : activeActionIndex(items)
+  // The step the live row is showing. It is excluded from the summary count
+  // (it hasn't finished) AND from the body (the live row IS its row, kept
+  // outside the collapsing box so it stays visible) — one step, one row,
+  // always. Nothing is live once the turn ends, or while drafting, where the
+  // live row describes the draft itself rather than a step.
+  const liveIdx = thinking && !drafting ? activeActionIndex(items) : -1
   const completedCount = items.reduce(
     (n, it, i) => (it.kind === 'reasoning' || i === liveIdx ? n : n + 1),
     0
@@ -749,16 +803,30 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // actually did instead — which is also the honest answer for a greeting, the
   // usual case here: the agent thought about it and replied, no tools involved.
   const hasReasoning = items.some((it) => it.kind === 'reasoning')
-  const stepsLabel = (n: number) => `Completed · ${n} step${n === 1 ? '' : 's'}`
   const doneLabel =
-    actionCount > 0 ? stepsLabel(actionCount) : hasReasoning ? 'Thought about it' : 'Completed'
+    actionCount > 0
+      ? `Completed · ${actionCount} step${actionCount === 1 ? '' : 's'}`
+      : hasReasoning
+        ? 'Thought about it'
+        : 'Completed'
+  // Present tense while the turn is still running, and the count demoted to a
+  // subordinate clause: this line describes the state of the WHOLE turn, the
+  // live row below it being one detail of that state. Leading with "Completed"
+  // mid-run instead put a finished-tense claim directly above an unfinished
+  // one, which is the tense clash that made the two rows read as a sequence
+  // rather than as a summary and its detail.
+  const workingLabel = `Working · ${completedCount} step${completedCount === 1 ? '' : 's'} completed`
   const liveLabel = activityPreview(items, drafting)
-  // Mid-run, a completed row only earns its place once a countable action has
-  // actually finished. The reasoning that precedes the first tool call is not
-  // a step, so it doesn't get a row of its own ("Completed · 0 steps" / a bare
-  // "Thought about it" above the very first search would both be noise) — it's
-  // still there in the body, under the live row's chevron.
-  const showCompletedRow = !thinking || completedCount > 0
+  // Drafting keeps the live row alive past the end of thinking: an artifact is
+  // still being written, and that row is now the only place that says so (it
+  // used to be a row inside the collapsed body, where nobody saw it).
+  const showLiveRow = thinking || !!drafting
+  // While a live row is showing, a summary line above it only earns its place
+  // once a countable action has actually finished. The reasoning that precedes
+  // the first tool call is not a step, so it doesn't get a row of its own
+  // ("Working · 0 steps completed" above the very first search would be noise)
+  // — it's still there in the body, under the live row's chevron.
+  const showCompletedRow = !showLiveRow || completedCount > 0
 
   // ── expand/collapse ────────────────────────────────────────────────────
   // Always starts collapsed, live turn or history alike — the header preview
@@ -792,12 +860,16 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
 
   if (!thinking && !hasContent) return null
 
-  // Nothing has streamed in yet: just the bare, non-interactive label — no
-  // chevron, no expandable body, no placeholder row underneath it.
+  // Nothing has streamed in yet: the live row on its own, with nothing to
+  // expand and so no chevron. Rendered through the same `LiveRow` as every
+  // other phase rather than as a bare label, so when the first step arrives
+  // the text doesn't jump sideways into a gutter that suddenly exists.
   if (thinking && items.length === 0 && !drafting) {
     return (
-      <div className="mb-3">
-        <span className="omni-shimmer-text-accent text-[13px] font-medium">{liveLabel}</span>
+      // `pt-2` matches the gap the live row carries in every other phase, so
+      // the row doesn't shift up or down when the first step lands.
+      <div className="mb-3 pt-2">
+        <LiveRow label={liveLabel} Icon={null} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
       </div>
     )
   }
@@ -805,49 +877,38 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // Done is a permanent capstone on the completed timeline, not a one-time
   // animation beat — it must still be there if the user re-expands a turn
   // that already auto-collapsed, or reopens a completed one from history.
-  const showSkeletonTail = thinking && !drafting
+  //
+  // There is no skeleton tail any more: it existed to say "more is coming" at
+  // the bottom of the body, and the live row now says that in the same place,
+  // permanently visible and with the actual step name on it.
   const showDoneTail = !thinking && !drafting && hasContent
-  const hasTail = showSkeletonTail || showDoneTail || !!drafting
+  // Whatever visually follows the body's last row, and therefore whether that
+  // row still needs a connecting line under it.
+  const hasTail = showLiveRow || showDoneTail
+  // The body is the timeline minus the live step, in order. Original indices
+  // are carried through because "is this the item currently streaming" is a
+  // question about position in `items` (it drives the reasoning typewriter),
+  // not about position in this filtered list.
+  const bodyItems = items.map((item, i) => ({ item, i })).filter(({ i }) => i !== liveIdx)
 
   return (
-    <div className="mb-3 space-y-2">
-      {/* Stable keys, not positional ones: when the completed row appears for
-          the first time it is INSERTED ABOVE the live row, and without a key
-          React would reconcile by position — reusing the live row's instance
-          for the completed label (so it'd fade "Searching x" → "Completed · 1
-          step" in place) and mounting a fresh one below (killing the live
-          row's own fade). Keyed, the live row simply stays put and the new row
-          slides in above it. */}
-      <div className="space-y-1">
-        {showCompletedRow && (
-          // Animated only on a live turn: a completed row appearing mid-run is
-          // an event worth a beat, whereas on a history reload the row is just
-          // there from the first paint and shouldn't fade in.
-          <div key="completed" className={thinking ? 'omni-step-in' : undefined}>
-            <HeaderRow
-              label={thinking ? stepsLabel(completedCount) : doneLabel}
-              shimmer={false}
-              chevron
-              open={open}
-              onToggle={() => setOpen((v) => !v)}
-            />
-          </div>
-        )}
-        {thinking && (
-          <div key="live" className="omni-step-in">
-            <HeaderRow
-              label={liveLabel}
-              shimmer
-              // The chevron always rides the topmost row, so the live row only
-              // owns it before the first step has finished — the phase where
-              // it IS the header.
-              chevron={!showCompletedRow}
-              open={open}
-              onToggle={() => setOpen((v) => !v)}
-            />
-          </div>
-        )}
-      </div>
+    // Three stacked pieces, in this order and for this reason: the summary
+    // line, then the collapsing body, then the live row. The body opening
+    // BETWEEN the other two is what makes expansion feel like the list growing
+    // out of the header rather than a second panel appearing — the live row
+    // never moves relative to the steps above it, it just gets more of them.
+    <div className="mb-3">
+      {showCompletedRow && (
+        // Animated only on a live turn: a summary line appearing mid-run is an
+        // event worth a beat, whereas on a history reload the row is just
+        // there from the first paint and shouldn't fade in.
+        <div className={thinking ? 'omni-step-in' : undefined}>
+          {/* Present tense for exactly as long as a live row sits below it —
+              including while an artifact is still being drafted, where the
+              turn's steps are done but the turn plainly isn't. */}
+          <HeaderRow label={showLiveRow ? workingLabel : doneLabel} open={open} onToggle={() => setOpen((v) => !v)} />
+        </div>
+      )}
 
       <div
         ref={bodyRef}
@@ -877,21 +938,24 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
         }}
         className="overflow-hidden"
       >
-        <div className="space-y-4 ml-1.5 mt-2 py-1">
-          {items.map((item, i) => {
+        {/* Padding lives INSIDE the collapsing box so it collapses with it:
+            closed, the live row sits one tight gap under the header; open, the
+            8px here plus the live row's own 8px add up to the same 16px that
+            separates every other pair of rows. */}
+        <div className="space-y-4 py-2">
+          {bodyItems.map(({ item, i }, pos) => {
             // Two different questions, kept separate on purpose: "is this the
             // item currently streaming" (drives the typewriter/pulsing dot,
-            // must depend only on array position) vs "does a line need to
-            // connect this row to the next" (must also account for the
-            // skeleton/Done/drafting tail that visually follows it). Folding
-            // both into one `!hasTail`-gated value used to mean isActive was
-            // permanently false for every row whenever a tail was showing —
-            // i.e. the entire time a turn was thinking — which made
-            // useSmoothReveal treat every reasoning step as already-historical
-            // right from its first render and never actually type it in.
-            const isLastByPosition = i === items.length - 1
-            const isActive = thinking && isLastByPosition
-            const drawsLine = isLastByPosition && !hasTail
+            // must depend only on position in `items`) vs "does a line need to
+            // connect this row to whatever follows" (must also account for the
+            // live/Done tail below the box). Folding both into one
+            // `!hasTail`-gated value used to mean isActive was permanently
+            // false for every row whenever a tail was showing — i.e. the
+            // entire time a turn was thinking — which made useSmoothReveal
+            // treat every reasoning step as already-historical right from its
+            // first render and never actually type it in.
+            const isActive = thinking && i === items.length - 1
+            const drawsLine = pos === bodyItems.length - 1 && !hasTail
             return (
               <TimelineRow
                 key={i}
@@ -904,18 +968,26 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
             )
           })}
 
-          {showDoneTail ? <DoneTailRow /> : showSkeletonTail ? <SkeletonTailRow /> : null}
-
-          {drafting && (
-            <div className="omni-step-in relative pl-[22px]">
-              <Bullet accent />
-              <span className="omni-shimmer-text-accent font-medium text-[13px]">
-                {drafting === 'report' ? 'Drafting report…' : 'Creating chart…'}
-              </span>
-            </div>
-          )}
+          {showDoneTail && <DoneTailRow />}
         </div>
       </div>
+
+      {showLiveRow && (
+        <div className="pt-2">
+          <LiveRow
+            label={liveLabel}
+            Icon={liveIcon(items, drafting)}
+            // The chevron always rides the topmost row, so the live row only
+            // owns it before the first step has finished — the phase where it
+            // IS the header. And only if the body has something in it: a first
+            // tool call that arrived with no reasoning ahead of it would
+            // otherwise offer a chevron that opens an empty box.
+            chevron={!showCompletedRow && bodyItems.length > 0}
+            open={open}
+            onToggle={() => setOpen((v) => !v)}
+          />
+        </div>
+      )}
     </div>
   )
 }

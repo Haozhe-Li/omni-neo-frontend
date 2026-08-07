@@ -858,18 +858,45 @@
   animation: omni-shimmer 2.4s linear infinite;
 }
 
+/* The "happening right now" label. Both ends of the sweep are fully opaque and
+   only a shade off the peak, so the text stays solidly readable at every point
+   of the animation — the old 30%-alpha ends meant half the label was see-
+   through at any given moment, which read as "not finished rendering" rather
+   than "live". The pulse that signals aliveness is carried by the row's icon
+   (`.omni-live-pulse`); this gradient only brightens the label as it passes. */
 .omni-shimmer-text-accent {
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--foreground) 30%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 55%, var(--foreground)) 0%,
     var(--accent) 50%,
-    color-mix(in srgb, var(--foreground) 30%, transparent) 100%
+    color-mix(in srgb, var(--accent) 55%, var(--foreground)) 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   animation: omni-shimmer 2.4s linear infinite;
+}
+
+/* Breathing bullet on the live timeline row. Deliberately gentler than
+   Tailwind's `animate-pulse` (which bottoms out at opacity .5 and makes a
+   14px glyph flicker): this stays legible the whole way through and leans on
+   a slight scale instead, so the movement reads as a heartbeat. */
+@keyframes omni-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.omni-live-pulse {
+  animation: omni-live-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* ── Reasoning step markdown — compact aside, not full-answer styling ────
