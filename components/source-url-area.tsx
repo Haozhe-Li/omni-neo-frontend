@@ -23,10 +23,11 @@ export function hostAndPath(url: string): { host: string; path: string } {
  * remove button, same animate-in/fade-in) so a source-URL chip reads as the
  * same family of "thing attached to this turn" as an uploaded file. The one
  * deliberate divergence: a first-party (omniknows.xyz) URL swaps the generic
- * link icon for Omni's own brand mark and its label for "Following up on
- * this page" — signal that this is Omni re-reading its own content, not
- * fetching an external page, which is exactly the distinction a plain
- * file-style chip can't make.
+ * link icon for Omni's own brand mark and its label for the page's real
+ * title (resolved async — see hooks/useSourceUrls.ts) instead of its URL —
+ * signal that this is Omni re-reading its own content, not fetching an
+ * external page, which is exactly the distinction a plain file-style chip
+ * can't make.
  */
 export function SourceUrlArea({ urls, onRemove, className = '' }: SourceUrlAreaProps) {
     const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())
@@ -68,10 +69,10 @@ export function SourceUrlArea({ urls, onRemove, className = '' }: SourceUrlAreaP
 
                         <div className="flex flex-col min-w-0 max-w-[150px] sm:max-w-[200px]">
                             <span className="truncate font-medium text-[13px]">
-                                {entry.isFirstParty ? 'Following up on this page' : host}
+                                {entry.isFirstParty ? (entry.title || 'Following up on this page') : host}
                             </span>
                             <span className="truncate text-[11px] text-[var(--muted-foreground)]">
-                                {entry.isFirstParty ? path || host : (path || '/')}
+                                {entry.isFirstParty ? 'Omni page' : (path || '/')}
                             </span>
                         </div>
 

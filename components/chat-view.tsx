@@ -1,17 +1,17 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import Image from 'next/image'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
-import { useSourceUrls, isFirstPartyUrl } from '@/hooks/useSourceUrls'
+import { useSourceUrls, isFirstPartyUrl, MAX_SOURCE_URLS, extractUrls, lastCompletedUrlToken } from '@/hooks/useSourceUrls'
 import { SourceUrlArea, hostAndPath } from '@/components/source-url-area'
 import { AddUrlPopover } from '@/components/add-url-popover'
 import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
+import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party-title'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesPanel } from '@/components/sources-panel'
@@ -459,37 +459,64 @@ function MessageAttachments({ files }: { files: { id: string; name: string; type
 
 // External source URLs align with attached-file chips (same MessageChipGroup
 // look) — sent alongside the query, same "thing attached to this turn"
-// treatment. A first-party (omniknows.xyz) URL instead gets a static version
-// of the composer's own pill (Omni mark, "Following up on this page"): it's
-// not an external fetch, so it shouldn't look like one.
+// treatment. First-party (omniknows.xyz) URLs are NOT included here — they
+// get the full-width `ContinuedFromBanner` above the message instead (see
+// below), since a small chip can't carry "you're continuing a conversation
+// about this specific page" the way a banner can.
 function MessageSourceUrls({ urls }: { urls: string[] }) {
   const external = urls.filter((u) => !isFirstPartyUrl(u))
-  const firstParty = urls.filter(isFirstPartyUrl)
-
   return (
-    <>
-      <MessageChipGroup
-        icon={Link2}
-        items={external.map((u) => ({ id: u, label: hostAndPath(u).host }))}
-        noun="sources"
-      />
-      {firstParty.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {firstParty.map((u) => {
-            const { host, path } = hostAndPath(u)
-            return (
-              <div
-                key={u}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-2.5 py-1.5 text-[12px] text-[var(--foreground)]"
-              >
-                <Image src="/android-chrome-512x512.png" alt="" width={13} height={13} className="rounded-[3px] shrink-0" />
-                <span className="truncate min-w-0 max-w-[200px]">Following up on {path && path !== '/' ? path : host}</span>
-              </div>
-            )
-          })}
+    <MessageChipGroup
+      icon={Link2}
+      items={external.map((u) => ({ id: u, label: hostAndPath(u).host }))}
+      noun="sources"
+    />
+  )
+}
+
+// Perplexity-style "Continued from X" banner for a first-party source_url —
+// signals this turn is a follow-up on an existing Omni page rather than an
+// external fetch. Title resolution is lazy/render-time (not baked into
+// ChatMessage) so it works uniformly whether the URL came from the composer
+// (hooks/useSourceUrls.ts, title usually already cached by send time), a
+// benchmark/pages deep link, or a reloaded thread from history.
+function useResolvedTitle(url: string): string | null {
+  const [title, setTitle] = useState<string | null>(() => cachedFirstPartyTitle(url) ?? null)
+  useEffect(() => {
+    let cancelled = false
+    resolveFirstPartyTitle(url).then((resolved) => {
+      if (!cancelled && resolved) setTitle(resolved)
+    })
+    return () => { cancelled = true }
+  }, [url])
+  return title
+}
+
+function ContinuedFromCard({ url }: { url: string }) {
+  const { host, path } = hostAndPath(url)
+  const title = useResolvedTitle(url) ?? (path && path !== '/' ? path : host)
+  return (
+    <div className="flex items-center gap-2.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
+      <GitBranch className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" strokeWidth={1.75} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          Continued from
         </div>
-      )}
-    </>
+        <div className="truncate text-[15px] font-semibold text-[var(--foreground)]">{title}</div>
+      </div>
+    </div>
+  )
+}
+
+function ContinuedFromBanner({ urls }: { urls: string[] }) {
+  const firstParty = urls.filter(isFirstPartyUrl)
+  if (firstParty.length === 0) return null
+  return (
+    <div className="w-full mb-2 space-y-2">
+      {firstParty.map((u) => (
+        <ContinuedFromCard key={u} url={u} />
+      ))}
+    </div>
   )
 }
 
@@ -512,6 +539,23 @@ export function ChatView({
   const clerk = useClerk()
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
   const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
+  const sourceUrlsCountRef = useRef(0)
+  sourceUrlsCountRef.current = sourceUrls.length
+
+  // Auto-detect sweetener: a URL pasted or typed into the query box is queued
+  // into source_url on its own, text left untouched — see hooks/useSourceUrls.ts
+  // for the detection rules. Reads the live count via a ref (not the
+  // `sourceUrls` closure) so rapid paste+type in the same tick can't both
+  // read a stale pre-add count and blow past the cap.
+  const autoDetectUrls = useCallback((candidates: string[]) => {
+    if (candidates.length === 0) return
+    if (sourceUrlsCountRef.current >= MAX_SOURCE_URLS) {
+      toast.error(`You can only add up to ${MAX_SOURCE_URLS} sources per message.`)
+      return
+    }
+    sourceUrlsCountRef.current += candidates.length
+    addUrls(candidates)
+  }, [addUrls])
 
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     preloadedThread?.messages?.length
@@ -2005,9 +2049,13 @@ export function ChatView({
 
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.clipboardData?.files || [])
-    if (files.length === 0) return
-    e.preventDefault()
-    uploadFilesFromList(files)
+    if (files.length > 0) {
+      e.preventDefault()
+      uploadFilesFromList(files)
+      return
+    }
+    const text = e.clipboardData?.getData('text')
+    if (text) autoDetectUrls(extractUrls(text))
   }
 
   // ── render ───────────────────────────────────────────────────────────────
@@ -2093,6 +2141,7 @@ export function ChatView({
               <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? (editingIndex === i ? 'items-stretch' : 'items-end') : 'items-start'}`}>
                 {msg.role === 'user' ? (
                   <>
+                  {!!msg.sourceUrls?.length && <ContinuedFromBanner urls={msg.sourceUrls} />}
                   <div className={`group relative flex flex-row items-end gap-1 ${editingIndex === i ? 'w-full' : 'max-w-[85%]'}`}>
                     {/* Hover action row — left of bubble */}
                     {editingIndex !== i && (
@@ -2461,6 +2510,8 @@ export function ChatView({
                     }
                   }
                   setInput(val)
+                  const completedUrl = lastCompletedUrlToken(val)
+                  if (completedUrl) autoDetectUrls([completedUrl])
                   e.target.style.height = 'auto'
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 300)}px`
                 }}
