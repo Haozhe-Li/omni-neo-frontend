@@ -73,16 +73,15 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
   const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
   const fullText = `# ${title}\n\n${markdown}`
 
-  // `fill`, not `q` — same reasoning as the benchmark page's own "Ask Omni"
-  // link (components/benchmark/llms-txt-menu.tsx): hand the reader a
-  // starting point, not a message sent on their behalf. `source_url` queues
-  // this page in the URL picker so the backend actually reads it via
+  // `source_url` alone, no `q` and no `fill` — same reasoning as the
+  // benchmark page's own "Ask Omni" link (components/benchmark/llms-txt-menu.tsx):
+  // hand the reader a loaded starting point, not a message sent on their
+  // behalf, and let the URL chip say "this page is attached" instead of
+  // pre-typing a sentence about it into the box. `source_url` queues this
+  // page in the URL picker so the backend actually reads it via
   // first_party_redis_shortcut rather than relying on the model to fetch it.
   const pageUrl = `${SITE_URL}/pages/${id}`
-  const omniHref =
-    `${SITE_URL}/?fill=` +
-    encodeURIComponent(`Read from ${pageUrl} so I can ask questions about it.`) +
-    `&source_url=${encodeURIComponent(pageUrl)}`
+  const omniHref = `${SITE_URL}/?source_url=${encodeURIComponent(pageUrl)}`
 
   const handleCopy = async () => {
     try {
