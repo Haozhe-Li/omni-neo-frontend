@@ -472,15 +472,16 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
               core/tools/web_page_reader.py) — publishing already writes this
               page's markdown to the exact key that shortcut reads, so there
               is nothing to keep in sync here, unlike the benchmark page's
-              llms.txt mirror. */}
+              llms.txt mirror. Styled to match Share (same solid pill) since
+              the two sit side by side as equally-weighted toolbar actions. */}
           <a
             href={omniHref}
             target="_blank"
             rel="noopener noreferrer"
             title="Starts a chat with this page ready to ask about"
-            className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-[var(--background)] bg-[var(--foreground)] hover:opacity-90 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
           >
-            <Image src="/android-chrome-512x512.png" alt="" width={14} height={14} priority className="rounded-[3px]" />
+            <Image src="/android-chrome-512x512.png" alt="" width={13} height={13} priority className="rounded-[3px]" />
             Ask Omni
           </a>
         </div>

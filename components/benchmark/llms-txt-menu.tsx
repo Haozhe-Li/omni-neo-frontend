@@ -2,10 +2,9 @@
 
 import { useCallback, useState, type ReactNode } from 'react'
 import Image from 'next/image'
-import { ArrowUpRight, Check, ChevronDown, Copy, FileText } from 'lucide-react'
+import { ArrowUpRight, Check, Copy, FileText } from 'lucide-react'
 import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
 import { LLMS_TXT_URL, OMNI_CHAT_URL, benchRoutes } from '@/lib/benchmark'
-import { cn } from '@/lib/utils'
 
 export interface LlmsTxtAction {
     key: string
@@ -197,22 +196,15 @@ export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction
 }
 
 /**
- * The desktop control: a split button — the left half runs the default action
- * (copy), the right half opens the other two. Mirrors the "Copy page ▾"
- * pattern docs sites use for exactly this job (copy / view raw / hand to an
- * assistant), reusing `useAnchoredPanel` so it gets the same portal-and-sheet
- * behaviour already proven on the axis dropdown and the trait filter.
- *
- * One outer `rounded-lg border` with `overflow-hidden`, not two buttons each
- * carrying their own border and half a radius — the earlier version had a
- * visible seam where those two borders doubled up. Clipping the square
- * corners of two plain buttons to one rounded container reads as a single
- * control with an internal division, which is what a split button actually
- * is. Hover is a background fill rather than a border-colour change, matching
- * Refresh right next to it in the same bar rather than inventing a second
- * hover language for one button. `focus-visible:ring-inset` on both halves is
- * load-bearing, not decorative: an ordinary outward ring would be clipped by
- * this same `overflow-hidden`.
+ * The desktop control: a single solid pill that opens a dropdown of all three
+ * actions (copy / view raw / hand to an assistant) — deliberately matching
+ * the Pages detail view's "Share" button (components/pages-detail-view.tsx)
+ * 1:1 (same `rounded-[8px]` solid-fill pill, same click-opens-a-menu model,
+ * no default/quick action on the trigger itself) so the two read as the same
+ * control language rather than two different button styles for the same job
+ * ("here's this content, do something with it"). Reuses `useAnchoredPanel`
+ * for the same portal-and-sheet behaviour already proven on the axis dropdown
+ * and the trait filter.
  *
  * Desktop-only — the parent only mounts this at `sm` and up, and the mobile
  * menu renders these three actions as flat rows instead — so the label has no
@@ -222,41 +214,20 @@ export function LlmsTxtActionRow({ action, onNavigate }: { action: LlmsTxtAction
 export function CopyPageButton({ actions }: { actions: LlmsTxtAction[] }) {
     const panel = useAnchoredPanel('right')
     const { open, setOpen, triggerRef } = panel
-    const primary = actions[0]
-
-    const segmentClass =
-        'inline-flex items-center transition-colors hover:bg-[var(--muted)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]'
 
     return (
-        <div className="flex items-stretch overflow-hidden rounded-lg border border-[var(--border-subtle)]">
-            <button
-                type="button"
-                onClick={primary.onClick}
-                title="Copy every model's raw scores as Markdown"
-                className={cn(segmentClass, 'gap-1.5 px-2.5 py-1.5 text-[12px] text-[var(--foreground)]')}
-            >
-                {primary.icon}
-                {primary.label}
-            </button>
-
-            <span aria-hidden className="w-px shrink-0 self-stretch bg-[var(--border-subtle)]" />
-
+        <div>
             <button
                 ref={triggerRef}
                 type="button"
                 onClick={() => setOpen(!open)}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                aria-label="More ways to get this data"
-                className={cn(segmentClass, 'px-1.5 py-1.5', open && 'bg-[var(--muted)]')}
+                title="Get this benchmark's data"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-[var(--background)] bg-[var(--foreground)] hover:opacity-90 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
             >
-                <ChevronDown
-                    className={cn(
-                        'h-3.5 w-3.5 text-[var(--muted-foreground)] transition-transform',
-                        open && 'rotate-180'
-                    )}
-                    strokeWidth={1.5}
-                />
+                <Copy size={12} strokeWidth={2} />
+                Copy Page
             </button>
 
             <AnchoredPanel state={panel} ariaLabel="Get this benchmark's data" role="menu">
