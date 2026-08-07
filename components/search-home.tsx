@@ -8,7 +8,7 @@ import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
-import { useSourceUrls } from '@/hooks/useSourceUrls'
+import { useSourceUrls, MAX_SOURCE_URLS, extractUrls, lastCompletedUrlToken } from '@/hooks/useSourceUrls'
 import { SourceUrlArea } from '@/components/source-url-area'
 import { AddUrlPopover } from '@/components/add-url-popover'
 import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
@@ -157,6 +157,23 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   const { attachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
   const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
+  const sourceUrlsCountRef = useRef(0)
+  sourceUrlsCountRef.current = sourceUrls.length
+
+  // Auto-detect sweetener: a URL pasted or typed into the query box is queued
+  // into source_url on its own, text left untouched — see hooks/useSourceUrls.ts
+  // for the detection rules. Reads the live count via a ref (not the
+  // `sourceUrls` closure) so rapid paste+type in the same tick can't both
+  // read a stale pre-add count and blow past the cap.
+  const autoDetectUrls = useCallback((candidates: string[]) => {
+    if (candidates.length === 0) return
+    if (sourceUrlsCountRef.current >= MAX_SOURCE_URLS) {
+      toast.error(`You can only add up to ${MAX_SOURCE_URLS} sources per message.`)
+      return
+    }
+    sourceUrlsCountRef.current += candidates.length
+    addUrls(candidates)
+  }, [addUrls])
 
   const [activeSkill, setActiveSkill] = useState<SkillId | null>(null)
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
@@ -932,8 +949,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     if (files && files.length > 0) {
       e.preventDefault()
       uploadFilesFromList(files)
+      return
     }
-  }, [uploadFilesFromList])
+    const text = e.clipboardData?.getData('text')
+    if (text) autoDetectUrls(extractUrls(text))
+  }, [uploadFilesFromList, autoDetectUrls])
 
   return (
     <main className="relative h-full flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
@@ -1084,6 +1104,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       }
                     }
                     setQuery(val)
+                    const completedUrl = lastCompletedUrlToken(val)
+                    if (completedUrl) autoDetectUrls([completedUrl])
                     e.target.style.height = 'auto'
                     e.target.style.height = `${e.target.scrollHeight}px`
                   }}
