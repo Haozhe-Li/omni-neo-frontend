@@ -1,15 +1,17 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
-import { useSourceUrls } from '@/hooks/useSourceUrls'
-import { SourceUrlArea } from '@/components/source-url-area'
+import { useSourceUrls, isFirstPartyUrl } from '@/hooks/useSourceUrls'
+import { SourceUrlArea, hostAndPath } from '@/components/source-url-area'
 import { AddUrlPopover } from '@/components/add-url-popover'
+import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesPanel } from '@/components/sources-panel'
@@ -380,7 +382,20 @@ const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf
   }
 }
 
-function MessageAttachments({ files }: { files: { id: string; name: string; type: string }[] }) {
+// Shared "N things attached to this turn" chip — single item renders inline,
+// multiple collapse behind a count button. Used for both uploaded files and
+// external (non-omniknows.xyz) source URLs so a sent message reads as one
+// visual family of "things attached to this turn" rather than two competing
+// chip styles.
+function MessageChipGroup({
+  icon: Icon,
+  items,
+  noun,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  items: { id: string; label: string }[]
+  noun: string
+}) {
   const [expanded, setExpanded] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -398,11 +413,13 @@ function MessageAttachments({ files }: { files: { id: string; name: string; type
     }
   }, [expanded])
 
-  if (files.length === 1) {
+  if (items.length === 0) return null
+
+  if (items.length === 1) {
     return (
       <div className="mt-1.5 inline-flex max-w-[240px] items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-2.5 py-1.5 text-[12px] text-[var(--muted-foreground)]">
-        <Paperclip className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate min-w-0">{files[0].name}</span>
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate min-w-0">{items[0].label}</span>
       </div>
     )
   }
@@ -417,22 +434,62 @@ function MessageAttachments({ files }: { files: { id: string; name: string; type
           : 'border-[var(--border-subtle)] bg-[var(--secondary)]/40 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60'
           }`}
       >
-        <Paperclip className="h-3.5 w-3.5 shrink-0" />
-        {files.length} attachments
+        <Icon className="h-3.5 w-3.5 shrink-0" />
+        {items.length} {noun}
         <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
       </button>
 
       {expanded && (
         <div className="absolute right-0 top-full mt-1.5 w-[240px] rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-lg py-1.5 z-20 animate-in fade-in slide-in-from-top-1 duration-150">
-          {files.map((f) => (
-            <div key={f.id} className="flex items-center gap-2 px-3 py-2 text-[12px] text-[var(--foreground)]">
-              <Paperclip className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
-              <span className="truncate min-w-0">{f.name}</span>
+          {items.map((item) => (
+            <div key={item.id} className="flex items-center gap-2 px-3 py-2 text-[12px] text-[var(--foreground)]">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
+              <span className="truncate min-w-0">{item.label}</span>
             </div>
           ))}
         </div>
       )}
     </div>
+  )
+}
+
+function MessageAttachments({ files }: { files: { id: string; name: string; type: string }[] }) {
+  return <MessageChipGroup icon={Paperclip} items={files.map((f) => ({ id: f.id, label: f.name }))} noun="attachments" />
+}
+
+// External source URLs align with attached-file chips (same MessageChipGroup
+// look) — sent alongside the query, same "thing attached to this turn"
+// treatment. A first-party (omniknows.xyz) URL instead gets a static version
+// of the composer's own pill (Omni mark, "Following up on this page"): it's
+// not an external fetch, so it shouldn't look like one.
+function MessageSourceUrls({ urls }: { urls: string[] }) {
+  const external = urls.filter((u) => !isFirstPartyUrl(u))
+  const firstParty = urls.filter(isFirstPartyUrl)
+
+  return (
+    <>
+      <MessageChipGroup
+        icon={Link2}
+        items={external.map((u) => ({ id: u, label: hostAndPath(u).host }))}
+        noun="sources"
+      />
+      {firstParty.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {firstParty.map((u) => {
+            const { host, path } = hostAndPath(u)
+            return (
+              <div
+                key={u}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 px-2.5 py-1.5 text-[12px] text-[var(--foreground)]"
+              >
+                <Image src="/android-chrome-512x512.png" alt="" width={13} height={13} className="rounded-[3px] shrink-0" />
+                <span className="truncate min-w-0 max-w-[200px]">Following up on {path && path !== '/' ? path : host}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -460,7 +517,12 @@ export function ChatView({
     preloadedThread?.messages?.length
       ? preloadedThread.messages
       : [
-          { role: 'user', content: query, ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}) },
+          {
+            role: 'user',
+            content: query,
+            ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}),
+            ...(initialSourceUrls?.length ? { sourceUrls: initialSourceUrls } : {}),
+          },
           { role: 'assistant', content: '' },
         ]
   )
@@ -1544,6 +1606,7 @@ export function ChatView({
         role: 'user',
         content: query,
         ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}),
+        ...(initialSourceUrls?.length ? { sourceUrls: initialSourceUrls } : {}),
       }
       setAttachedFiles([])
       requestPin() // pin the first query to the top
@@ -1815,15 +1878,16 @@ export function ChatView({
     if (!input.trim() && readyFiles.length === 0) return
     const activeFiles = readyFiles.map((f) => ({ id: f.id!, name: f.name, type: f.type }))
     const followUpAtSend = followUpText.trim()
+    const sourceUrlsAtSend = sourceUrls.map((e) => e.url)
     const userMsg: ChatMessage = {
       role: 'user',
       content: input,
       ...(activeFiles.length ? { attachedFiles: activeFiles } : {}),
       ...(followUpAtSend ? { follow_up_content: followUpAtSend } : {}),
+      ...(sourceUrlsAtSend.length ? { sourceUrls: sourceUrlsAtSend } : {}),
     }
     const baseHistory = [...messages, userMsg]
     const queryText = input
-    const sourceUrlsAtSend = sourceUrls.map((e) => e.url)
     setInput('')
     setAttachedFiles([])
     setFollowUpText('')
@@ -1910,9 +1974,32 @@ export function ChatView({
 
   useEffect(() => () => recognitionRef.current?.stop?.(), [])
 
-  const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    for (const f of files) await uploadFile(f, threadId)
+  // Shared validation before handing files to uploadFile — mirrors
+  // search-home.tsx's uploadFilesFromList so a file rejected on the home
+  // screen isn't silently accepted here only to 400 from the backend.
+  const uploadFilesFromList = useCallback((fileList: FileList | File[]) => {
+    const files = Array.from(fileList)
+    if (files.length === 0) return
+    if (attachedFiles.length + files.length > 5) {
+      toast.error('You can only attach up to 5 files per message.')
+      return
+    }
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`${file.name} is too large. Maximum size is 20MB.`)
+        continue
+      }
+      if (!isAllowedUploadFile(file)) {
+        toast.error(`${file.name} is not a supported file type.`)
+        continue
+      }
+      uploadFile(file, threadId).catch((err) => console.error('Failed to upload file in UI', err))
+    }
+  }, [attachedFiles.length, uploadFile, threadId])
+
+  const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) uploadFilesFromList(files)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -1920,7 +2007,7 @@ export function ChatView({
     const files = Array.from(e.clipboardData?.files || [])
     if (files.length === 0) return
     e.preventDefault()
-    for (const f of files) uploadFile(f, threadId).catch((err) => console.error('Paste upload failed', err))
+    uploadFilesFromList(files)
   }
 
   // ── render ───────────────────────────────────────────────────────────────
@@ -2088,6 +2175,9 @@ export function ChatView({
                   </div>
                   {editingIndex !== i && !!msg.attachedFiles?.length && (
                     <MessageAttachments files={msg.attachedFiles} />
+                  )}
+                  {editingIndex !== i && !!msg.sourceUrls?.length && (
+                    <MessageSourceUrls urls={msg.sourceUrls} />
                   )}
                   </>
                 ) : (
@@ -2311,8 +2401,7 @@ export function ChatView({
               onDrop={(e) => {
                 e.preventDefault();
                 setIsDragging(false);
-                const files = Array.from(e.dataTransfer.files || []);
-                for (const f of files) uploadFile(f, threadId);
+                uploadFilesFromList(e.dataTransfer.files);
               }}
               className={`
                 relative rounded-2xl transition-all duration-300 flex flex-col
@@ -2407,93 +2496,128 @@ export function ChatView({
                       <Plus className="h-4 w-4" />
                     </button>
 
-                    {/* The composer sits at the bottom of the viewport, so the menu always expands upward. */}
-                    {plusMenuOpen && (
-                      <div className={`absolute inset-x-0 bottom-full mb-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 ${addUrlOpen ? '' : 'py-2'}`}>
-                      {addUrlOpen ? (
+                    {/* Desktop: dropdown spans the full composer width (no fixed width, so
+                        inset-x-0 stretches it to match the `relative` composer box above it).
+                        Mobile: full-width bottom sheet, same pattern as "Select Mode". */}
+                    {plusMenuOpen && (() => {
+                      const menuItems = addUrlOpen ? (
                         <AddUrlPopover
                           existingCount={sourceUrls.length}
                           onAdd={addUrls}
                           onClose={() => { setAddUrlOpen(false); setPlusMenuOpen(false) }}
                         />
                       ) : (
-                      <>
-                        {/* Add photos & files */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!isSignedIn) { clerk.openSignIn(); return }
-                            fileInputRef.current?.click()
-                            setPlusMenuOpen(false)
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
-                        >
-                          <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
-                            <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
-                          </span>
-                        </button>
+                        <>
+                          {/* Add photos & files */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!isSignedIn) { clerk.openSignIn(); return }
+                              fileInputRef.current?.click()
+                              setPlusMenuOpen(false)
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                          >
+                            <Paperclip className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-[var(--foreground)]">Add photos & files</span>
+                              <span className="block text-xs text-[var(--muted-foreground)]">Upload from computer</span>
+                            </span>
+                          </button>
 
-                        {/* Add URL */}
-                        <button
-                          type="button"
-                          onClick={() => setAddUrlOpen(true)}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
-                        >
-                          <Link2 className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-[var(--foreground)]">Add URL</span>
-                            <span className="block text-xs text-[var(--muted-foreground)]">Pages Omni should prioritize reading</span>
-                          </span>
-                        </button>
+                          {/* Add URL */}
+                          <button
+                            type="button"
+                            onClick={() => setAddUrlOpen(true)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors rounded-lg"
+                          >
+                            <Link2 className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-[var(--foreground)]">Add URL</span>
+                              <span className="block text-xs text-[var(--muted-foreground)]">Pages Omni should prioritize reading</span>
+                            </span>
+                          </button>
 
-                        {/* Divider */}
-                        <div className="mx-3 my-1 border-t border-[var(--border)]" />
+                          {/* Divider */}
+                          <div className="mx-3 my-1 border-t border-[var(--border)]" />
 
-                        {/* Skills — Pro only */}
-                        {SKILLS.map((skill) => {
-                          const isActive = activeSkill === skill.id
-                          if (mode !== 'pro') {
+                          {/* Skills — Pro only */}
+                          {SKILLS.map((skill) => {
+                            const isActive = activeSkill === skill.id
+                            if (mode !== 'pro') {
+                              return (
+                                <button
+                                  key={skill.id}
+                                  type="button"
+                                  title="Only available in Pro mode"
+                                  onClick={() => toast('Switch to Pro mode to use skills')}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
+                                >
+                                  <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
+                                    <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
+                                  </span>
+                                  <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
+                                </button>
+                              )
+                            }
                             return (
                               <button
                                 key={skill.id}
                                 type="button"
-                                title="Only available in Pro mode"
-                                onClick={() => toast('Switch to Pro mode to use skills')}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
+                                onClick={() => { setActiveSkill(isActive ? null : skill.id); setPlusMenuOpen(false) }}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors rounded-lg ${isActive ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--secondary)]/60'}`}
                               >
-                                <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
+                                <skill.Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'}`} />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
-                                  <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
+                                  <span className={`block text-sm font-medium ${isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>{skill.label}</span>
+                                  <span className="block text-xs text-[var(--muted-foreground)]">{skill.desc}</span>
                                 </span>
-                                <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
+                                {isActive && <Check className="h-4 w-4 text-[var(--accent)] shrink-0" />}
                               </button>
                             )
-                          }
-                          return (
-                            <button
-                              key={skill.id}
-                              type="button"
-                              onClick={() => { setActiveSkill(isActive ? null : skill.id); setPlusMenuOpen(false) }}
-                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors rounded-lg ${isActive ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--secondary)]/60'}`}
-                            >
-                              <skill.Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'}`} />
-                              <span className="min-w-0 flex-1">
-                                <span className={`block text-sm font-medium ${isActive ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>{skill.label}</span>
-                                <span className="block text-xs text-[var(--muted-foreground)]">{skill.desc}</span>
-                              </span>
-                              {isActive && <Check className="h-4 w-4 text-[var(--accent)] shrink-0" />}
-                            </button>
-                          )
-                        })}
-                      </>
-                      )}
-                      </div>
-                    )}
+                          })}
+                        </>
+                      )
+
+                      return (
+                        <>
+                          {/* Desktop dropdown — expands upward, composer is pinned to the bottom of the viewport */}
+                          <div className={`hidden md:block absolute inset-x-0 bottom-full mb-2 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-1 duration-100 ${addUrlOpen ? '' : 'py-2'}`}>
+                            {menuItems}
+                          </div>
+
+                          {/* Mobile bottom sheet */}
+                          <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
+                            <div
+                              className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+                              onClick={() => { setPlusMenuOpen(false); setAddUrlOpen(false) }}
+                            />
+                            <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
+                              <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--border)]" />
+                              <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-base font-semibold text-[var(--foreground)]">
+                                  {addUrlOpen ? '' : 'Add to your message'}
+                                </h3>
+                                <button
+                                  type="button"
+                                  onClick={() => { setPlusMenuOpen(false); setAddUrlOpen(false) }}
+                                  className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                {menuItems}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )
+                    })()}
                   </div>
-                  <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
+                  <input ref={fileInputRef} type="file" multiple hidden accept={UPLOAD_ACCEPT_ATTR} onChange={onPickFiles} />
 
                   {/* Active skill pill */}
                   {activeSkill && (() => {

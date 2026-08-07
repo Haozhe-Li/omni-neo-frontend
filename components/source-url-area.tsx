@@ -9,7 +9,7 @@ export interface SourceUrlAreaProps {
     className?: string
 }
 
-function hostAndPath(url: string): { host: string; path: string } {
+export function hostAndPath(url: string): { host: string; path: string } {
     try {
         const parsed = new URL(url)
         return { host: parsed.hostname, path: parsed.pathname + parsed.search }
