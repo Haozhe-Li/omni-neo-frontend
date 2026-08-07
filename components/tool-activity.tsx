@@ -351,10 +351,11 @@ function buildItems(steps: TimelineStep[]): Item[] {
 
 // ── header preview ──────────────────────────────────────────────────────────
 // The collapsed header shows what the agent is doing RIGHT NOW — a preview of
-// the newest timeline item — instead of an elapsed-time readout. It has to
-// survive being rendered next to a chevron on a narrow screen, so everything
-// below funnels through `truncatePreview`.
-const PREVIEW_MAX_CHARS = 60
+// the newest timeline item — instead of an elapsed-time readout. The live row
+// gets a line to itself (see `ToolActivity`'s two-row header), so this cap is
+// generous; genuine overflow on a narrow screen is ellipsised by CSS in
+// `HeaderLabel` rather than being cut here.
+const PREVIEW_MAX_CHARS = 120
 
 function truncatePreview(s: string, max = PREVIEW_MAX_CHARS): string {
   const flat = (s || '').replace(/\s+/g, ' ').trim()
@@ -366,7 +367,8 @@ function truncatePreview(s: string, max = PREVIEW_MAX_CHARS): string {
   return (sp > max * 0.6 ? cut.slice(0, sp) : cut).trimEnd() + '…'
 }
 
-// One short line describing the newest concrete action on the timeline.
+// Position of the item the live header row describes: the newest concrete
+// (non-reasoning) action. -1 when nothing has been done yet.
 //
 // Reasoning is skipped rather than described: its prose streams token by token
 // and belongs in the expandable body, not in a one-line header. Skipped means
@@ -374,25 +376,37 @@ function truncatePreview(s: string, max = PREVIEW_MAX_CHARS): string {
 // the last tool/skill and keeps showing it for as long as the agent is
 // thinking. Falling back to a generic "Thinking" instead made the header
 // bounce between the tool name and that word on every reasoning run, since a
-// turn alternates think → act → think → act throughout.
+// turn alternates think → act → think → act throughout, and with a fast model
+// the gap between two tool calls can be a few hundred milliseconds.
 //
 // "Thinking" therefore appears exactly once per turn: at the very start,
 // before any action has happened and there is genuinely nothing to report.
 //
-// Tool rows reuse the exact same label/chip pair their timeline row renders,
-// so the header and the row it describes never disagree.
+// This index is also what splits "done" from "happening now" for the header's
+// step count — see `ToolActivity`. There is no tool_result event on the wire
+// (chat-view's SSE loop only ever appends on `tool_call`/`reasoning`), so a
+// step is known to have finished only once a NEWER action shows up, which is
+// exactly what "everything before this index" means.
+function activeActionIndex(items: Item[]): number {
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].kind !== 'reasoning') return i
+  return -1
+}
+
+// One short line describing that newest action. Tool rows reuse the exact same
+// label/chip pair their timeline row renders, so the header and the row it
+// describes never disagree.
 function activityPreview(items: Item[], drafting?: 'report' | 'chart' | null): string {
   if (drafting) return drafting === 'report' ? 'Drafting report…' : 'Creating chart…'
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i]
-    if (item.kind === 'reasoning') continue
-    if (item.kind === 'skill') return truncatePreview(`Using ${item.name} skill`)
-    if (typeof item.step.args?.code === 'string') return 'Writing Python code'
-    const { label, chip } = singleStepInfo(item.step.tool, item.step.args)
-    const chipText = typeof chip === 'string' ? chip.trim() : ''
-    return truncatePreview(chipText ? `${label} ${chipText}` : label)
-  }
-  return 'Thinking'
+  const idx = activeActionIndex(items)
+  if (idx < 0) return 'Thinking'
+  const item = items[idx]
+  // `activeActionIndex` never points at reasoning; this is the type guard for it.
+  if (item.kind === 'reasoning') return 'Thinking'
+  if (item.kind === 'skill') return truncatePreview(`Using ${item.name} skill`)
+  if (typeof item.step.args?.code === 'string') return 'Writing Python code'
+  const { label, chip } = singleStepInfo(item.step.tool, item.step.args)
+  const chipText = typeof chip === 'string' ? chip.trim() : ''
+  return truncatePreview(chipText ? `${label} ${chipText}` : label)
 }
 
 // The header's animated text. A plain re-render swapped labels instantly,
@@ -452,12 +466,35 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
   // swaps in a longer label still carries the previous, narrower width, so a
   // post-paint useEffect would let one frame of clipped text ("Complet…")
   // through on every swap.
+  //
+  // `getBoundingClientRect().width` + ceil, not `offsetWidth`: offsetWidth is
+  // rounded to whole pixels and text is laid out at subpixel widths, so a
+  // label measuring 154.6px reported 155 — or 154, and a box one third of a
+  // pixel too narrow is enough for `truncate` on the visible span to ellipsise
+  // a label that fits ("Completed · 3 ste…").
   const ghostRef = useRef<HTMLSpanElement | null>(null)
   const [width, setWidth] = useState<number | null>(null)
-  useIsomorphicLayoutEffect(() => {
-    const w = ghostRef.current?.offsetWidth
-    if (w != null && w !== width) setWidth(w)
-  })
+  const measure = () => {
+    const el = ghostRef.current
+    if (!el) return
+    const w = Math.ceil(el.getBoundingClientRect().width)
+    setWidth((prev) => (prev === w ? prev : w))
+  }
+  useIsomorphicLayoutEffect(measure)
+
+  // Re-measure when the ghost itself changes size for a reason no render of
+  // ours caused — a webfont swapping in after hydration being the one that
+  // bites: the label is measured in the fallback face, the real face lands
+  // wider, nothing re-renders, and the now-too-narrow box permanently
+  // ellipsises a label that has never changed.
+  useEffect(() => {
+    const el = ghostRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => measure())
+    ro.observe(el)
+    return () => ro.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // `font-medium` has to be on the ghost whenever it's on the visible span:
   // the shimmer state renders at weight 500 and measuring weight 400 text
@@ -480,10 +517,17 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
       <span
         // `w-max` rather than a width inherited from the box above: the text
         // is sized by its own content, so it can never be ellipsised by a
-        // box that is momentarily the wrong size. Genuine overflow (a very
-        // long label on a narrow screen) is clipped by the parent instead —
-        // `activityPreview` already caps the text at PREVIEW_MAX_CHARS.
-        className={`block w-max whitespace-nowrap text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
+        // box that is momentarily the wrong size (that transient mismatch is
+        // the whole reason the outer box doesn't transition its width).
+        //
+        // `max-w-full truncate` handles the one case where clipping is real
+        // and not transient: the outer box carries `min-w-0` inside a flex
+        // row, so a label wider than the available space shrinks it below the
+        // measured width, and this span then caps at that smaller width and
+        // ellipsises instead of being cut mid-glyph. In the steady state the
+        // outer box IS the measured text width, so `max-w-full` is a no-op
+        // and nothing gets an ellipsis it didn't earn.
+        className={`block w-max max-w-full truncate text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
         style={{
           opacity: phase === 'idle' ? 1 : 0,
           transform: phase === 'out' ? 'translateY(-4px)' : phase === 'enter' ? 'translateY(4px)' : 'translateY(0)',
@@ -505,6 +549,41 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
         {shown}
       </span>
     </span>
+  )
+}
+
+// One line of the header. At most one of them carries the chevron — always the
+// topmost — and that one is the button that opens the body; a chevron-less row
+// is inert text, not a dead-looking button.
+function HeaderRow({
+  label,
+  shimmer,
+  chevron,
+  open,
+  onToggle,
+}: {
+  label: string
+  shimmer: boolean
+  chevron: boolean
+  open?: boolean
+  onToggle?: () => void
+}) {
+  const inner = (
+    <>
+      <HeaderLabel text={label} shimmer={shimmer} />
+      {chevron && <ChevronRight size={14} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />}
+    </>
+  )
+  if (!chevron) {
+    return <div className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)]">{inner}</div>
+  }
+  return (
+    <button
+      onClick={onToggle}
+      className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+    >
+      {inner}
+    </button>
   )
 }
 
@@ -637,30 +716,49 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   if (thinking) everThinkingRef.current = true
   const hasContent = items.length > 0 || !!drafting || everThinkingRef.current
 
-  // Header text: a live preview of the newest step while thinking, then a
-  // count of what actually happened once the turn is done.
+  // ── header ─────────────────────────────────────────────────────────────
+  // While thinking the header is up to two rows: finished work collapses into
+  // a "Completed · N steps" line, and the step running RIGHT NOW sits under it
+  // on its own shimmering line. Once the turn ends the live row goes away and
+  // the completed line is all that's left — which is why both are rendered
+  // from the same `HeaderRow`, and why the completed row's label uses the same
+  // wording in both phases: nothing about it moves when thinking stops.
   //
-  // Reasoning is left out of that count on purpose — same rule the live
-  // preview follows. A "reasoning run" is just whatever tokens landed
-  // between two tool calls, so the same amount of thinking can arrive as one
-  // run or five depending on how the stream chunked it; counting them would
-  // put a number on the header that moves for reasons the user can't see.
-  // Tool and skill rows are the real, countable actions. `items` has already
-  // had the internal `write_todos` bookkeeping filtered out, so this count
-  // matches the rows one-for-one when the body is expanded.
+  // Reasoning is left out of the count on purpose — same rule the live row
+  // follows. A "reasoning run" is just whatever tokens landed between two tool
+  // calls, so the same amount of thinking can arrive as one run or five
+  // depending on how the stream chunked it; counting them would put a number
+  // on the header that moves for reasons the user can't see. Tool and skill
+  // rows are the real, countable actions. `items` has already had the internal
+  // `write_todos` bookkeeping filtered out, so this count matches the rows
+  // one-for-one when the body is expanded.
   const actionCount = items.reduce((n, it) => (it.kind === 'reasoning' ? n : n + 1), 0)
+
+  // The step the live row is showing — excluded from the completed count until
+  // a newer action replaces it, so the two rows never describe the same step
+  // at once. Nothing is live while drafting (the live row describes the draft
+  // itself), so everything already on the timeline counts as finished there.
+  const liveIdx = drafting ? -1 : activeActionIndex(items)
+  const completedCount = items.reduce(
+    (n, it, i) => (it.kind === 'reasoning' || i === liveIdx ? n : n + 1),
+    0
+  )
+
   // A turn that only reasoned has nothing to count, and "Completed · 0 steps"
   // would be a worse way of saying so. It gets a plain description of what it
   // actually did instead — which is also the honest answer for a greeting, the
   // usual case here: the agent thought about it and replied, no tools involved.
   const hasReasoning = items.some((it) => it.kind === 'reasoning')
+  const stepsLabel = (n: number) => `Completed · ${n} step${n === 1 ? '' : 's'}`
   const doneLabel =
-    actionCount > 0
-      ? `Completed · ${actionCount} step${actionCount === 1 ? '' : 's'}`
-      : hasReasoning
-        ? 'Thought about it'
-        : 'Completed'
-  const headerLabel = thinking ? activityPreview(items, drafting) : doneLabel
+    actionCount > 0 ? stepsLabel(actionCount) : hasReasoning ? 'Thought about it' : 'Completed'
+  const liveLabel = activityPreview(items, drafting)
+  // Mid-run, a completed row only earns its place once a countable action has
+  // actually finished. The reasoning that precedes the first tool call is not
+  // a step, so it doesn't get a row of its own ("Completed · 0 steps" / a bare
+  // "Thought about it" above the very first search would both be noise) — it's
+  // still there in the body, under the live row's chevron.
+  const showCompletedRow = !thinking || completedCount > 0
 
   // ── expand/collapse ────────────────────────────────────────────────────
   // Always starts collapsed, live turn or history alike — the header preview
@@ -699,7 +797,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   if (thinking && items.length === 0 && !drafting) {
     return (
       <div className="mb-3">
-        <span className="omni-shimmer-text-accent text-[13px] font-medium">{headerLabel}</span>
+        <span className="omni-shimmer-text-accent text-[13px] font-medium">{liveLabel}</span>
       </div>
     )
   }
@@ -713,13 +811,43 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
 
   return (
     <div className="mb-3 space-y-2">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex max-w-full items-center gap-1.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-      >
-        <HeaderLabel text={headerLabel} shimmer={thinking} />
-        <ChevronRight size={14} className={`shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-      </button>
+      {/* Stable keys, not positional ones: when the completed row appears for
+          the first time it is INSERTED ABOVE the live row, and without a key
+          React would reconcile by position — reusing the live row's instance
+          for the completed label (so it'd fade "Searching x" → "Completed · 1
+          step" in place) and mounting a fresh one below (killing the live
+          row's own fade). Keyed, the live row simply stays put and the new row
+          slides in above it. */}
+      <div className="space-y-1">
+        {showCompletedRow && (
+          // Animated only on a live turn: a completed row appearing mid-run is
+          // an event worth a beat, whereas on a history reload the row is just
+          // there from the first paint and shouldn't fade in.
+          <div key="completed" className={thinking ? 'omni-step-in' : undefined}>
+            <HeaderRow
+              label={thinking ? stepsLabel(completedCount) : doneLabel}
+              shimmer={false}
+              chevron
+              open={open}
+              onToggle={() => setOpen((v) => !v)}
+            />
+          </div>
+        )}
+        {thinking && (
+          <div key="live" className="omni-step-in">
+            <HeaderRow
+              label={liveLabel}
+              shimmer
+              // The chevron always rides the topmost row, so the live row only
+              // owns it before the first step has finished — the phase where
+              // it IS the header.
+              chevron={!showCompletedRow}
+              open={open}
+              onToggle={() => setOpen((v) => !v)}
+            />
+          </div>
+        )}
+      </div>
 
       <div
         ref={bodyRef}
