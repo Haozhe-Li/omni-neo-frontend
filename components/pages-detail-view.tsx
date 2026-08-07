@@ -6,6 +6,7 @@ import Image from 'next/image'
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   Code2,
   Copy,
   Download,
@@ -73,16 +74,15 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
   const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
   const fullText = `# ${title}\n\n${markdown}`
 
-  // `fill`, not `q` — same reasoning as the benchmark page's own "Ask Omni"
-  // link (components/benchmark/llms-txt-menu.tsx): hand the reader a
-  // starting point, not a message sent on their behalf. `source_url` queues
-  // this page in the URL picker so the backend actually reads it via
+  // `source_url` alone, no `q` and no `fill` — same reasoning as the
+  // benchmark page's own "Ask Omni" link (components/benchmark/llms-txt-menu.tsx):
+  // hand the reader a loaded starting point, not a message sent on their
+  // behalf, and let the URL chip say "this page is attached" instead of
+  // pre-typing a sentence about it into the box. `source_url` queues this
+  // page in the URL picker so the backend actually reads it via
   // first_party_redis_shortcut rather than relying on the model to fetch it.
   const pageUrl = `${SITE_URL}/pages/${id}`
-  const omniHref =
-    `${SITE_URL}/?fill=` +
-    encodeURIComponent(`Read from ${pageUrl} so I can ask questions about it.`) +
-    `&source_url=${encodeURIComponent(pageUrl)}`
+  const omniHref = `${SITE_URL}/?source_url=${encodeURIComponent(pageUrl)}`
 
   const handleCopy = async () => {
     try {
@@ -412,15 +412,26 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
             </button>
           </div>
 
-          {/* Share */}
+          {/* Share — deliberately the subdued half of this pair. Its actions
+              are utilities for a reader who already has what they came for
+              (copy it, download it), where Ask Omni next to it is a
+              destination; two solid pills side by side gave them equal weight
+              and read as two competing primaries. Outlined rather than
+              ghosted so it still holds its own against the toolbar's other
+              borderless controls. */}
           <div className="relative">
             {shareOpen && <div className="fixed inset-0 z-40" onClick={() => setShareOpen(false)} />}
             <button
               onClick={() => setShareOpen(!shareOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-[var(--background)] bg-[var(--foreground)] hover:opacity-90 transition-all relative z-50 shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-[var(--foreground)] border border-[var(--border-subtle)] bg-[var(--card)] hover:bg-[var(--secondary)] transition-all relative z-50"
             >
               <Share size={12} strokeWidth={2} />
               Share
+              <ChevronDown
+                size={12}
+                strokeWidth={2}
+                className={`text-[var(--muted-foreground)] transition-transform ${shareOpen ? 'rotate-180' : ''}`}
+              />
             </button>
             {shareOpen && (
               <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] py-1.5 z-50 overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in-95">
@@ -472,8 +483,13 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
               core/tools/web_page_reader.py) — publishing already writes this
               page's markdown to the exact key that shortcut reads, so there
               is nothing to keep in sync here, unlike the benchmark page's
-              llms.txt mirror. Styled to match Share (same solid pill) since
-              the two sit side by side as equally-weighted toolbar actions. */}
+              llms.txt mirror.
+
+              The toolbar's one solid pill, and the same one the benchmark
+              nav leads with (components/benchmark/llms-txt-menu.tsx) — this
+              action looks identical wherever it appears, and everything
+              around it stays subdued so a page only ever offers one
+              primary. */}
           <a
             href={omniHref}
             target="_blank"

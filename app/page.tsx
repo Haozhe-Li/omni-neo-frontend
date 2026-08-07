@@ -123,6 +123,16 @@ export default function Home() {
     setView('home')
     setCurrentQuery('')
     setCurrentThreadId('')
+    // Everything staged for the turn that just ended. Without this, returning
+    // to the home screen remounts SearchHome with these props still set — and
+    // a remount resets its one-shot consume guards, so the previous turn's
+    // deep-linked fill text and URL chips get re-applied to what is supposed
+    // to be a blank new chat.
+    setPendingAttachmentMeta([])
+    setPendingSkill(null)
+    setPendingSourceUrls([])
+    setDeepLinkFill('')
+    setDeepLinkSourceUrls([])
     // Undo `setShareableUrl`'s replaceState: the address bar can be showing
     // `/thread/{id}` (faked, without an actual route change) from a prior
     // chat while still mounted on `/` — reset it back to `/` so it doesn't
@@ -141,10 +151,11 @@ export default function Home() {
 
   // Initial query from URL — `?q=` runs it immediately, `?fill=` only types
   // it into the home screen's box. Checked in the same effect so only one of
-  // the two ever wins if a link somehow carried both. `?source_url=` (repeatable)
-  // rides along with either — the benchmark/pages "Ask Omni" links use it with
-  // `?fill=` (see llms-txt-menu.tsx / pages-detail-view.tsx) so the linked
-  // page is queued in the URL picker without being auto-submitted.
+  // the two ever wins if a link somehow carried both. `?source_url=`
+  // (repeatable) can ride along with either, or stand alone: the
+  // benchmark/pages "Ask Omni" links send it by itself (see llms-txt-menu.tsx
+  // / pages-detail-view.tsx), landing the reader on an empty box with the
+  // linked page already queued in the URL picker, nothing auto-submitted.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const urlParams = new URLSearchParams(window.location.search)
