@@ -1,7 +1,17 @@
 import type { Credibility } from './credibility'
 
 // ── Wire protocol (mirrors backend core/stream.py) ─────────────────────────
-export type AgentMode = 'fast' | 'pro'
+
+/**
+ * Which model served a turn. The catalog lives in `lib/models.ts`; it is
+ * re-exported here because the persisted `ChatMessage` shape references it.
+ *
+ * Messages stored before the Fast/Pro removal carry 'fast' or 'pro' in `mode`,
+ * so anything reading it off a loaded thread must go through
+ * `normalizeModelId`.
+ */
+export type { ChatModelId } from './models'
+import type { ChatModelId } from './models'
 
 export type WidgetKind = 'weather' | 'stock' | 'currency' | 'entity'
 
@@ -214,9 +224,11 @@ export interface ChatMessage {
    * older builds and is ignored by the renderer.
    */
   reasoning?: string
-  mode?: AgentMode
+  /** Model that produced this message. Rows written before the Fast/Pro
+   *  removal hold 'fast' | 'pro' — read it through `normalizeModelId`. */
+  mode?: ChatModelId | 'fast' | 'pro'
   /** Set when this assistant message was produced by a rewind/regenerate. */
-  regeneratedWith?: AgentMode
+  regeneratedWith?: ChatModelId
   /** Set when the user manually stopped generation mid-stream. */
   stoppedByUser?: boolean
   /** Set when this turn ended via a backend `error` SSE event. See `ChatError`. */

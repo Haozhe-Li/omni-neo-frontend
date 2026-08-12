@@ -9,7 +9,7 @@ import { useUsage } from '@/hooks/useUsage'
 import { useAuth } from '@clerk/nextjs'
 import { useAppShell } from '@/hooks/useAppShell'
 import { useRouter } from 'next/navigation'
-import type { AgentMode } from '@/lib/types'
+import { DEFAULT_MODEL, isModelLocked, normalizeModelId, type ChatModelId } from '@/lib/models'
 
 // Swap the visible URL to /thread/{id} without triggering a Next.js navigation,
 // so an in-progress/streaming chat is never remounted. A hard reload or a
@@ -25,8 +25,8 @@ export default function Home() {
   const [view, setView] = useState<'home' | 'chat'>('home')
   const [currentQuery, setCurrentQuery] = useState('')
   const [currentThreadId, setCurrentThreadId] = useState('')
-  const [model, setModel] = useState<AgentMode>('fast')
-  const [initialMode, setInitialMode] = useState<AgentMode>('fast')
+  const [model, setModel] = useState<ChatModelId>(DEFAULT_MODEL)
+  const [initialMode, setInitialMode] = useState<ChatModelId>(DEFAULT_MODEL)
   const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
   const [pendingSkill, setPendingSkill] = useState<string | null>(null)
   const [pendingSourceUrls, setPendingSourceUrls] = useState<string[]>([])
@@ -80,15 +80,23 @@ export default function Home() {
   useEffect(() => {
     const loadModel = () => {
       if (typeof window === 'undefined') return
-      const saved = localStorage.getItem('omni_model_preference')
-      if (saved === 'fast' || saved === 'pro') setModel(saved)
+      // `normalizeModelId` also migrates the stored 'fast'/'pro' preference
+      // every returning visitor still has, so nothing has to be cleared.
+      setModel(normalizeModelId(localStorage.getItem('omni_model_preference')))
     }
     loadModel()
     window.addEventListener('storage', loadModel)
     return () => window.removeEventListener('storage', loadModel)
   }, [])
 
-  const handleModelChange = (newModel: AgentMode) => {
+  // A signed-in user who picked Luna and then signed out would otherwise sit on
+  // a model the backend answers with a 401. Drop back to the default instead of
+  // letting them send a turn that cannot succeed.
+  useEffect(() => {
+    if (isModelLocked(model, !!isSignedIn)) setModel(DEFAULT_MODEL)
+  }, [model, isSignedIn])
+
+  const handleModelChange = (newModel: ChatModelId) => {
     setModel(newModel)
     if (typeof window !== 'undefined') localStorage.setItem('omni_model_preference', newModel)
   }

@@ -10,6 +10,7 @@ import { ThreadStatusScreen } from '@/components/thread-status-screen'
 import { Spinner } from '@/components/ui/spinner'
 import { useApi } from '@/hooks/useApi'
 import { useAppShell } from '@/hooks/useAppShell'
+import { DEFAULT_MODEL } from '@/lib/models'
 import type { ChatMessage } from '@/lib/types'
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -164,7 +165,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
           onNewSearch={goHome}
           onToggleSidebar={toggleSidebar}
           isMobile={isMobile}
-          initialMode="fast"
+          initialMode={DEFAULT_MODEL}
           sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
           preloadedThread={preloadedThread}

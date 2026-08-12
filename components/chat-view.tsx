@@ -39,7 +39,9 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
-import type { AgentMode, ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
+import { ModelPicker } from '@/components/model-picker'
+import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, normalizeModelId, type ChatModelId } from '@/lib/models'
+import type { ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
 import { canHighlightExcerpt } from '@/lib/highlight'
 
@@ -53,7 +55,7 @@ interface ChatViewProps {
   onNewSearch: () => void
   onToggleSidebar?: () => void
   isMobile?: boolean
-  initialMode?: AgentMode
+  initialMode?: ChatModelId
   initialAttachedFileMeta?: { id: string; name: string; type: string }[]
   initialSourceUrls?: string[]
   initialSkill?: SkillId | null
@@ -526,7 +528,7 @@ export function ChatView({
   onNewSearch,
   onToggleSidebar,
   isMobile = false,
-  initialMode = 'fast',
+  initialMode = DEFAULT_MODEL,
   initialAttachedFileMeta,
   initialSourceUrls,
   initialSkill = null,
@@ -575,7 +577,13 @@ export function ChatView({
   // the composer and attached to the next outgoing message as `follow_up_content`.
   const [followUpText, setFollowUpText] = useState('')
   const [isLoading, setIsLoading] = useState(() => (preloadedThread ? !!preloadedThread.is_generating : true))
-  const [mode, setMode] = useState<AgentMode>(() => preloadedThread?.messages?.[0]?.mode ?? initialMode)
+  // A thread is not pinned to a model — every agent shares one checkpointer
+  // and one prompt, so continuing an old thread on a new model is fine. The
+  // stored value only seeds the picker, and needs normalizing because rows
+  // written before this change hold 'fast' | 'pro'.
+  const [mode, setMode] = useState<ChatModelId>(() =>
+    preloadedThread?.messages?.[0]?.mode ? normalizeModelId(preloadedThread.messages[0].mode) : initialMode
+  )
   // A user-set title (persisted backend-side) always wins over the raw first
   // query, so a rename survives a refresh / re-opening the /thread/{id} link.
   const [title, setTitle] = useState(() => preloadedThread?.title?.trim() || query)
@@ -609,7 +617,7 @@ export function ChatView({
   const [pendingRewind, setPendingRewind] = useState<{
     targetIndex: number
     newQuery?: string
-    rewindMode?: AgentMode
+    rewindMode?: ChatModelId
   } | null>(null)
 
   // Artifact side panel
@@ -1534,7 +1542,7 @@ export function ChatView({
         // exchange produces is stamped with it (see core/utils/citations.py),
         // so `/check_source` can later confine a claim to sources visible by
         // its turn.
-        const payload: any = { query: queryText, thread_id: threadId, mode, turn: baseHistory.length }
+        const payload: any = { query: queryText, thread_id: threadId, model: mode, turn: baseHistory.length }
         if (Object.keys(personalization).length) payload.personalization = personalization
         if (fileIds && fileIds.length) payload.attached_file_ids = fileIds
         if (activeSkill) payload.skill = activeSkill
@@ -1582,7 +1590,7 @@ export function ChatView({
       if (!Array.isArray(data?.messages) || data.messages.length === 0) return false
       const loadedMessages = data.messages as ChatMessage[]
       setMessages(loadedMessages)
-      if (loadedMessages[0]?.mode) setMode(loadedMessages[0].mode)
+      if (loadedMessages[0]?.mode) setMode(normalizeModelId(loadedMessages[0].mode))
       if (data.title?.trim()) setTitle(data.title.trim())
       setIsLocked(!!data.is_locked)
 
@@ -1833,7 +1841,7 @@ export function ChatView({
   // edit. Everything from that point onward is discarded and replaced, on
   // any message now, not just the last one.
   const performRewind = useCallback(
-    async (targetIndex: number, newQuery?: string, rewindMode?: AgentMode) => {
+    async (targetIndex: number, newQuery?: string, rewindMode?: ChatModelId) => {
       const effectiveMode = rewindMode ?? mode
 
       // Always close any open edit box first
@@ -1861,7 +1869,7 @@ export function ChatView({
         // rewind target from this (see core/routers/chat.py's
         // _find_rewind_target), so it works for any earlier turn, not just
         // the most recent one.
-        const payload: any = { mode: effectiveMode, turn: baseHistory.length }
+        const payload: any = { model: effectiveMode, turn: baseHistory.length }
         if (newQuery !== undefined) payload.new_query = newQuery
         if (Object.keys(personalization).length) payload.personalization = personalization
 
@@ -1895,7 +1903,7 @@ export function ChatView({
   )
 
   const handleRewind = useCallback(
-    (targetIndex: number, newQuery?: string, rewindMode?: AgentMode) => {
+    (targetIndex: number, newQuery?: string, rewindMode?: ChatModelId) => {
       if (isLocked) return
       // Redoing the very last turn (regenerate the latest answer, or edit the
       // message you just sent) is the common case — no prompt, matches prior
@@ -2037,9 +2045,16 @@ export function ChatView({
         toast.error(`${file.name} is not a supported file type.`)
         continue
       }
+      // Documents are fine on every model — only images are refused, and only
+      // by Omni SFT. Blocked before upload so the user finds out immediately;
+      // the backend rejects it again for clients that skip this.
+      if (!getModel(mode).acceptsImages && file.type.startsWith('image/')) {
+        toast.error(IMAGE_UNSUPPORTED_MESSAGE)
+        continue
+      }
       uploadFile(file, threadId).catch((err) => console.error('Failed to upload file in UI', err))
     }
-  }, [attachedFiles.length, uploadFile, threadId])
+  }, [attachedFiles.length, uploadFile, threadId, mode])
 
   const onPickFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -2428,6 +2443,7 @@ export function ChatView({
                             onOpenSources={openSources}
                             onRegenerate={isLocked ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
+                            isSignedIn={!!isSignedIn}
                           />
                         ) : null}
                       </div>
@@ -2491,7 +2507,7 @@ export function ChatView({
                 value={input}
                 onChange={(e) => {
                   const val = e.target.value
-                  if (!awaitingSkill && val === '/' && !isLoading && mode === 'pro' && !isMobile) {
+                  if (!awaitingSkill && val === '/' && !isLoading && !isMobile) {
                     setAwaitingSkill(true)
                     setInput('/')
                     e.target.style.height = 'auto'
@@ -2592,27 +2608,12 @@ export function ChatView({
                           {/* Divider */}
                           <div className="mx-3 my-1 border-t border-[var(--border)]" />
 
-                          {/* Skills — Pro only */}
+                          {/* Skills — available on every model. They used to be
+                              Pro-only because the Fast profile was built with a
+                              two-skill roster; there is one roster now and all
+                              nine skills ship with it. */}
                           {SKILLS.map((skill) => {
                             const isActive = activeSkill === skill.id
-                            if (mode !== 'pro') {
-                              return (
-                                <button
-                                  key={skill.id}
-                                  type="button"
-                                  title="Only available in Pro mode"
-                                  onClick={() => toast('Switch to Pro mode to use skills')}
-                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
-                                >
-                                  <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
-                                    <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
-                                  </span>
-                                  <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
-                                </button>
-                              )
-                            }
                             return (
                               <button
                                 key={skill.id}
@@ -2698,113 +2699,14 @@ export function ChatView({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Mode dropdown */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setModelDropdownOpen(prev => !prev)}
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
-                    >
-                      <span>{mode === 'pro' ? 'Pro' : 'Fast'}</span>
-                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {modelDropdownOpen && (
-                      <>
-                        {/* Desktop Dropdown */}
-                        <div className="hidden md:block absolute bottom-full right-0 mb-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                          {[
-                            { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
-                            { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
-                          ].map((opt) => {
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => {
-                                  setMode(opt.value)
-                                  setModelDropdownOpen(false)
-                                }}
-                                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--secondary)]/50 ${mode === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-[14px] font-semibold leading-none">
-                                      {opt.label}
-                                    </span>
-                                  </div>
-                                  <div className="text-[11px] text-[var(--muted-foreground)] leading-snug line-clamp-2">
-                                    {opt.desc}
-                                  </div>
-                                </div>
-                                <div className="shrink-0 flex items-center justify-center w-5">
-                                  {mode === opt.value && (
-                                    <Check className="h-4 w-4 text-[var(--accent)]" strokeWidth={2.5} />
-                                  )}
-                                </div>
-                              </button>
-                            )
-                          })}
-                        </div>
-
-                        {/* Mobile Modal/Drawer */}
-                        <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
-                          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
-                          <div className="relative bg-[var(--background)] rounded-t-3xl px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
-                            {/* grabber */}
-                            <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--border)]" />
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
-                              <button
-                                type="button"
-                                onClick={() => setModelDropdownOpen(false)}
-                                className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              {[
-                                { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
-                                { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
-                              ].map((opt) => {
-                                const selected = mode === opt.value
-                                return (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => {
-                                      setMode(opt.value)
-                                      setModelDropdownOpen(false)
-                                    }}
-                                    className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl text-left border transition-colors ${selected ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]' : 'border-[var(--border-subtle)] bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60'}`}
-                                  >
-                                    <div className="flex flex-col min-w-0">
-                                      <span className={`text-[15px] font-medium ${selected ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}>
-                                        {opt.label}
-                                      </span>
-                                      <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
-                                        {opt.desc}
-                                      </span>
-                                    </div>
-                                    <div className="ml-1 shrink-0">
-                                      {selected ? (
-                                        <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
-                                          <Check className="h-3.5 w-3.5" />
-                                        </div>
-                                      ) : (
-                                        <div className="h-5 w-5 rounded-full border-2 border-[var(--border)]" />
-                                      )}
-                                    </div>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <ModelPicker
+                    model={mode}
+                    onChange={setMode}
+                    open={modelDropdownOpen}
+                    setOpen={setModelDropdownOpen}
+                    isSignedIn={!!isSignedIn}
+                    placement="up"
+                  />
 
                   <button
                     type="button"

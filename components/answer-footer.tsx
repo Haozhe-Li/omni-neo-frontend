@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Check, FileText, Share2, ThumbsUp, ThumbsDown, RotateCcw, Zap, Sparkles } from 'lucide-react'
+import { Copy, Check, FileText, Share2, ThumbsUp, ThumbsDown, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
-import type { AgentMode, Source } from '@/lib/types'
+import type { Source } from '@/lib/types'
+import { CHAT_MODELS, getModel, type ChatModelId } from '@/lib/models'
 import { extractCitedNumbers, partitionSources } from '@/lib/markdown'
 
 function domainOf(url: string) {
@@ -44,11 +45,14 @@ interface AnswerFooterProps {
   /** This message's own fetched sources (not the thread-wide merged list) — the only valid fallback when the answer cites nothing. */
   ownSources?: Source[]
   onOpenSources?: (sources: Source[], citedNumbers: Set<number>) => void
-  onRegenerate?: (mode: AgentMode) => void
-  regeneratedWith?: AgentMode
+  onRegenerate?: (model: ChatModelId) => void
+  regeneratedWith?: ChatModelId
+  /** Guests can't regenerate on a signed-in-only model — those rows are hidden
+   *  rather than shown locked, since this menu is an action list, not a picker. */
+  isSignedIn?: boolean
 }
 
-export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRegenerate, regeneratedWith }: AnswerFooterProps) {
+export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRegenerate, regeneratedWith, isSignedIn = false }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
@@ -104,7 +108,7 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
     <div className="mt-4">
       {regeneratedWith && (
         <p className="mb-1.5 text-[11px] text-[var(--muted-foreground)]/60 select-none">
-          Regenerated with {regeneratedWith === 'pro' ? 'Pro' : 'Fast'} mode
+          Regenerated with {getModel(regeneratedWith).label}
         </p>
       )}
       <div className="flex items-center gap-1 pt-2">
@@ -128,19 +132,15 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
                 <p className="px-3 pt-1 pb-2 text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
                   Regenerate with
                 </p>
-                {([
-                  { value: 'fast' as AgentMode, label: 'Fast', desc: 'Quick · unlimited', Icon: Zap },
-                  { value: 'pro' as AgentMode, label: 'Pro', desc: 'Deep agent · charts & reports', Icon: Sparkles },
-                ] as const).map(({ value, label, desc, Icon }) => (
+                {CHAT_MODELS.filter((m) => isSignedIn || !m.requiresAuth).map((m) => (
                   <button
-                    key={value}
-                    onClick={() => { setRegenOpen(false); onRegenerate(value) }}
+                    key={m.id}
+                    onClick={() => { setRegenOpen(false); onRegenerate(m.id) }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors"
                   >
-                    <Icon size={15} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]" />
                     <div>
-                      <div className="text-[13px] font-medium text-[var(--foreground)] leading-none mb-0.5">{label}</div>
-                      <div className="text-[11px] text-[var(--muted-foreground)]">{desc}</div>
+                      <div className="text-[13px] font-medium text-[var(--foreground)] leading-none mb-0.5">{m.label}</div>
+                      <div className="text-[11px] text-[var(--muted-foreground)]">{m.desc}</div>
                     </div>
                   </button>
                 ))}

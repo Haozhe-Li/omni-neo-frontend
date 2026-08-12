@@ -12,6 +12,8 @@ import { useSourceUrls, MAX_SOURCE_URLS, extractUrls, lastCompletedUrlToken } fr
 import { SourceUrlArea } from '@/components/source-url-area'
 import { AddUrlPopover } from '@/components/add-url-popover'
 import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
+import { ModelPicker } from '@/components/model-picker'
+import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, type ChatModelId } from '@/lib/models'
 
 import { toast } from 'sonner'
 
@@ -72,9 +74,9 @@ interface SearchHomeProps {
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   isMobile?: boolean
-  model?: 'fast' | 'pro'
-  onModelChange?: (model: 'fast' | 'pro') => void
-  /** Usage exhausted (guest-only) — locks both modes uniformly, no per-mode breakdown. */
+  model?: ChatModelId
+  onModelChange?: (model: ChatModelId) => void
+  /** Usage exhausted (guest-only) — locks every model uniformly, no per-model breakdown. */
   locked?: boolean
   /**
    * Typed into the box once (via the same fill animation Tab-to-autocomplete
@@ -91,7 +93,7 @@ interface SearchHomeProps {
   deepLinkSourceUrls?: string[]
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = 'fast', onModelChange, locked = false, deepLinkFill, deepLinkSourceUrls }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = DEFAULT_MODEL, onModelChange, locked = false, deepLinkFill, deepLinkSourceUrls }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -613,8 +615,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     void handleSubmit(e as unknown as React.FormEvent)
   }
 
-  const selectedModelLabel = model === 'pro' ? 'Pro' : 'Fast'
-  const showSelectedLock = locked
+  // Image attachments are refused by Omni SFT (served text-only). Blocked at
+  // the picker below rather than at send time, so the user finds out before
+  // they have uploaded anything — the backend rejects it again regardless.
+  const acceptsImages = getModel(model).acceptsImages
 
   const VAD_RMS_THRESHOLD = 0.02
   const VAD_MIN_VOICED_FRAMES = 3
@@ -905,11 +909,18 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           toast.error(`${file.name} is not a supported file type.`)
           return
         }
+        // Documents are fine on every model — only images are refused, and only
+        // by Omni SFT. Checked here rather than at send time so nothing is
+        // uploaded that the chosen model could never read.
+        if (!acceptsImages && file.type.startsWith('image/')) {
+          toast.error(IMAGE_UNSUPPORTED_MESSAGE)
+          return
+        }
         uploadFile(file, activeThreadId).catch(err => console.error('Failed to upload file in UI', err))
       })
     }
     processFiles()
-  }, [isSignedIn, clerk, uploadFile, threadId, fetchThreadId, createLocalFallbackThreadId, attachedFiles.length])
+  }, [isSignedIn, clerk, uploadFile, threadId, fetchThreadId, createLocalFallbackThreadId, attachedFiles.length, acceptsImages])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -1085,7 +1096,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   value={query}
                   onChange={(e) => {
                     const val = e.target.value
-                    if (!awaitingSkill && val === '/' && model === 'pro' && !isMobile) {
+                    if (!awaitingSkill && val === '/' && !isMobile) {
                       setAwaitingSkill(true)
                       setQuery('/')
                       e.target.style.height = 'auto'
@@ -1244,27 +1255,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                           {/* Divider */}
                           <div className="mx-3 my-1 border-t border-[var(--border)]" />
 
-                          {/* Skills — Pro only */}
+                          {/* Skills — available on every model. They used to be
+                              Pro-only because the Fast profile was built with a
+                              two-skill roster; there is one roster now and all
+                              nine skills ship with it. */}
                           {SKILLS.map((skill) => {
                             const isActive = activeSkill === skill.id
-                            if (model !== 'pro') {
-                              return (
-                                <button
-                                  key={skill.id}
-                                  type="button"
-                                  title="Only available in Pro mode"
-                                  onClick={() => toast('Switch to Pro mode to use skills')}
-                                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left rounded-lg opacity-40 cursor-not-allowed"
-                                >
-                                  <skill.Icon className="h-5 w-5 text-[var(--muted-foreground)] shrink-0" />
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block text-sm font-medium text-[var(--foreground)]">{skill.label}</span>
-                                    <span className="block text-xs text-[var(--muted-foreground)]">Only available in Pro mode</span>
-                                  </span>
-                                  <Lock className="h-3.5 w-3.5 text-[var(--muted-foreground)] shrink-0" />
-                                </button>
-                              )
-                            }
                             return (
                               <button
                                 key={skill.id}
@@ -1349,124 +1345,15 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Mode dropdown */}
-                  <div className="relative" ref={dropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setModelDropdownOpen(prev => !prev)}
-                      className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
-                    >
-                      <span>{selectedModelLabel}</span>
-                      {showSelectedLock && (
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
-                          Sign in
-                        </span>
-                      )}
-                      {showSelectedLock && <Lock className="h-3 w-3" />}
-                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {modelDropdownOpen && (
-                      <>
-                        {/* Desktop Dropdown */}
-                        <div className="hidden md:block absolute top-full right-0 mt-2 w-[280px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                          {[
-                            { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
-                            { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
-                          ].map((opt) => {
-                            const isLocked = locked
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => {
-                                  onModelChange?.(opt.value)
-                                  setModelDropdownOpen(false)
-                                }}
-                                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--secondary)]/50 ${model === opt.value ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'}`}
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-[14px] font-semibold leading-none">
-                                      {opt.label}
-                                    </span>
-                                    {isLocked && <Lock className="h-3.5 w-3.5 opacity-60" />}
-                                  </div>
-                                  <div className="text-[11px] text-[var(--muted-foreground)] leading-snug line-clamp-2">
-                                    {isLocked
-                                      ? 'Usage limit reached — sign in for 10× more usage'
-                                      : opt.desc}
-                                  </div>
-                                </div>
-                                <div className="shrink-0 flex items-center justify-center w-5">
-                                  {model === opt.value && (
-                                    <Check className="h-4 w-4 text-[var(--accent)]" strokeWidth={2.5} />
-                                  )}
-                                </div>
-                              </button>
-                            )
-                          })}
-                        </div>
-
-                        {/* Mobile Modal/Drawer */}
-                        <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
-                          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setModelDropdownOpen(false)} />
-                          <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="text-base font-semibold text-[var(--foreground)]">Select Mode</h3>
-                              <button
-                                type="button"
-                                onClick={() => setModelDropdownOpen(false)}
-                                className="p-1.5 rounded-full bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
-                            <div className="flex flex-col gap-2.5">
-                              {[
-                                { value: 'fast' as const, label: 'Fast', desc: 'All-around answers' },
-                                { value: 'pro' as const, label: 'Pro', desc: 'In-depth analysis on complex topics' },
-                              ].map((opt) => {
-                                const isLocked = locked
-                                return (
-                                  <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => {
-                                      onModelChange?.(opt.value)
-                                      setModelDropdownOpen(false)
-                                    }}
-                                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${model === opt.value ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]' : 'border border-[var(--border-subtle)] text-[var(--foreground)]'}`}
-                                  >
-                                    <div className="flex flex-col min-w-0">
-                                      <span className="text-[15px] font-medium flex items-center gap-1.5">
-                                        {opt.label}
-                                        {isLocked && <Lock className="h-3.5 w-3.5" />}
-                                      </span>
-                                      <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
-                                        {isLocked
-                                          ? 'Usage limit reached — sign in for 10× more'
-                                          : opt.desc}
-                                      </span>
-                                    </div>
-                                    <div className="ml-3 shrink-0 flex items-center gap-2">
-                                      {model === opt.value ? (
-                                        <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
-                                          <Check className="h-3.5 w-3.5" />
-                                        </div>
-                                      ) : (
-                                        <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
-                                      )}
-                                    </div>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <ModelPicker
+                    model={model}
+                    onChange={(m) => onModelChange?.(m)}
+                    open={modelDropdownOpen}
+                    setOpen={setModelDropdownOpen}
+                    isSignedIn={!!isSignedIn}
+                    locked={locked}
+                    dropdownRef={dropdownRef}
+                  />
 
                   <button
                     type="button"
