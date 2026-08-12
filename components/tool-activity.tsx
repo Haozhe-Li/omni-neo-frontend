@@ -567,6 +567,74 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
   )
 }
 
+// The summary line's count is the one piece of it that changes on its own
+// cadence — every finished step bumps it while the rest of the sentence
+// ("Working · ", " steps completed") stays put. Cross-fading the whole
+// sentence on every bump (the original `HeaderLabel` behavior) read as the
+// entire line flickering once a second on a fast turn; only the number itself
+// needs the swap-while-invisible treatment now; prefix and suffix render as
+// plain, unanimated text around it.
+//
+// `suffix` is included in the delayed swap (not just `count`) because it
+// carries the singular/plural word ("step" vs "steps") and, for the done
+// label, nothing else — swapping it on the same tick as the number, at the
+// midpoint where both are invisible, keeps them from ever landing out of
+// sync (e.g. a stray "steps" next to a "1").
+function CountHeaderLabel({ prefix, count, suffix }: { prefix: string; count: number; suffix: string }) {
+  const [shownCount, setShownCount] = useState(count)
+  const [shownSuffix, setShownSuffix] = useState(suffix)
+  const [phase, setPhase] = useState<'idle' | 'out' | 'enter'>('idle')
+  const latestCount = useRef(count)
+  const latestSuffix = useRef(suffix)
+  latestCount.current = count
+  latestSuffix.current = suffix
+
+  useEffect(() => {
+    if (count === shownCount && suffix === shownSuffix) return
+    setPhase('out')
+    const t = setTimeout(() => {
+      // Read from the refs, not the closed-over values: several steps can
+      // land inside one fade, and only the newest should be what appears.
+      setShownCount(latestCount.current)
+      setShownSuffix(latestSuffix.current)
+      setPhase('enter')
+    }, LABEL_FADE_MS)
+    return () => clearTimeout(t)
+  }, [count, suffix, shownCount, shownSuffix])
+
+  useEffect(() => {
+    if (phase !== 'enter') return
+    let inner = 0
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setPhase('idle'))
+    })
+    return () => {
+      cancelAnimationFrame(outer)
+      cancelAnimationFrame(inner)
+    }
+  }, [phase])
+
+  return (
+    <span className="min-w-0 max-w-full truncate text-left">
+      {prefix}
+      <span
+        className="inline-block tabular-nums"
+        style={{
+          opacity: phase === 'idle' ? 1 : 0,
+          transform: phase === 'out' ? 'translateY(-4px)' : phase === 'enter' ? 'translateY(4px)' : 'translateY(0)',
+          transition:
+            phase === 'enter'
+              ? 'none'
+              : `opacity ${LABEL_FADE_MS}ms cubic-bezier(0.4,0,0.2,1), transform ${LABEL_FADE_MS}ms cubic-bezier(0.4,0,0.2,1)`,
+        }}
+      >
+        {shownCount}
+      </span>
+      {shownSuffix}
+    </span>
+  )
+}
+
 // Sits a comfortable distance from the label rather than tucked against it, so
 // the header reads as "a sentence, then an affordance" instead of one dense
 // widget, and stays a shade lighter than the text it belongs to.
@@ -574,16 +642,25 @@ function Chevron({ open }: { open?: boolean }) {
   return <ChevronRight size={14} className={`shrink-0 opacity-70 transition-transform ${open ? 'rotate-90' : ''}`} />
 }
 
+// Either a plain sentence with nothing to isolate ("Thought about it"), or a
+// sentence built around a count that changes on its own — see
+// `CountHeaderLabel` for why the two get different animation treatment.
+type HeaderLabelSpec = { text: string } | { prefix: string; count: number; suffix: string }
+
 // The summary line: everything that has already finished, collapsed to a
 // count. It owns the chevron whenever it is present, because the chevron
 // always rides the topmost row.
-function HeaderRow({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+function HeaderRow({ label, open, onToggle }: { label: HeaderLabelSpec; open: boolean; onToggle: () => void }) {
   return (
     <button
       onClick={onToggle}
       className="flex max-w-full items-center gap-2.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
     >
-      <HeaderLabel text={label} shimmer={false} />
+      {'text' in label ? (
+        <HeaderLabel text={label.text} shimmer={false} />
+      ) : (
+        <CountHeaderLabel prefix={label.prefix} count={label.count} suffix={label.suffix} />
+      )}
       <Chevron open={open} />
     </button>
   )
@@ -803,19 +880,21 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // actually did instead — which is also the honest answer for a greeting, the
   // usual case here: the agent thought about it and replied, no tools involved.
   const hasReasoning = items.some((it) => it.kind === 'reasoning')
-  const doneLabel =
+  const doneLabel: HeaderLabelSpec =
     actionCount > 0
-      ? `Completed · ${actionCount} step${actionCount === 1 ? '' : 's'}`
-      : hasReasoning
-        ? 'Thought about it'
-        : 'Completed'
+      ? { prefix: 'Completed · ', count: actionCount, suffix: ` step${actionCount === 1 ? '' : 's'}` }
+      : { text: hasReasoning ? 'Thought about it' : 'Completed' }
   // Present tense while the turn is still running, and the count demoted to a
   // subordinate clause: this line describes the state of the WHOLE turn, the
   // live row below it being one detail of that state. Leading with "Completed"
   // mid-run instead put a finished-tense claim directly above an unfinished
   // one, which is the tense clash that made the two rows read as a sequence
   // rather than as a summary and its detail.
-  const workingLabel = `Working · ${completedCount} step${completedCount === 1 ? '' : 's'} completed`
+  const workingLabel: HeaderLabelSpec = {
+    prefix: 'Working · ',
+    count: completedCount,
+    suffix: ` step${completedCount === 1 ? '' : 's'} completed`,
+  }
   const liveLabel = activityPreview(items, drafting)
   // Drafting keeps the live row alive past the end of thinking: an artifact is
   // still being written, and that row is now the only place that says so (it
