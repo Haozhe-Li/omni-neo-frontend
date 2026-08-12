@@ -47,7 +47,7 @@ interface ModelPickerProps {
 function NewChip() {
   return (
     <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--accent)]/12 text-[var(--accent)] leading-none">
-      New
+      Beta
     </span>
   )
 }
