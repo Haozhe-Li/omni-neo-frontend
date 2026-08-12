@@ -12,7 +12,6 @@ import remarkGfm from 'remark-gfm'
 import {
     User,
     Settings2,
-    Cpu,
     SlidersHorizontal,
     Database,
     Library,
@@ -60,14 +59,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { ScheduledResearchSection } from '@/components/scheduled-research-section'
-import { ModelPicker } from '@/components/model-picker'
-import { DEFAULT_MODEL, normalizeModelId, type ChatModelId } from '@/lib/models'
 
 const APP_VERSION = '0.2.0'
 const APP_NAME = 'Omni Knows'
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
-export type TabId = 'general' | 'model' | 'personalization' | 'data' | 'pages' | 'history' | 'scheduled' | 'usage' | 'about'
+export type TabId = 'general' | 'personalization' | 'data' | 'pages' | 'history' | 'scheduled' | 'usage' | 'about'
 
 // Bidirectional map between the internal TabId and the URL slug used under
 // /settings/<slug> (e.g. /settings/scheduled-research) — kept here, next to
@@ -75,7 +72,6 @@ export type TabId = 'general' | 'model' | 'personalization' | 'data' | 'pages' |
 // (parses the URL into a TabId) and by onTabChange below (writes it back).
 export const TAB_SLUGS: Record<TabId, string> = {
     general: 'general',
-    model: 'model',
     personalization: 'personalization',
     data: 'data-controls',
     pages: 'my-pages',
@@ -91,7 +87,6 @@ export const SLUG_TO_TAB: Record<string, TabId> = Object.fromEntries(
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; icon: React.ElementType }> = [
     { id: 'general', label: 'General', icon: Settings2 },
-    { id: 'model', label: 'Model', icon: Cpu },
     { id: 'personalization', label: 'Personalization', icon: SlidersHorizontal },
     { id: 'data', label: 'Data controls', icon: Database },
     { id: 'pages', label: 'My pages', icon: Library },
@@ -197,7 +192,6 @@ export function SettingsDialog({
                     <div className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
                         <div className="px-5 py-6 md:px-8 md:py-7">
                             {activeTab === 'general' && <GeneralSection />}
-                            {activeTab === 'model' && <ModelSection />}
                             {activeTab === 'personalization' && <PersonalizationSection />}
                             {activeTab === 'data' && <DataControlsSection />}
                             {activeTab === 'pages' && <PagesSection />}
@@ -474,68 +468,6 @@ function GeneralSection() {
                     </SignInButton>
                 </div>
             )}
-        </Section>
-    )
-}
-
-/* ════════════════════════════════════════════════════════════════
-   Model
-   ════════════════════════════════════════════════════════════════ */
-
-function ModelSection() {
-    const { isSignedIn } = useAuth()
-    const { exceeded } = useUsage()
-    const [model, setModel] = useState<ChatModelId>(DEFAULT_MODEL)
-    const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
-    const dropdownRef = useRef<HTMLDivElement>(null)
-
-    // Locking is guest-only: signed-in users get a generous budget and can
-    // check standing in the Usage tab instead of being nagged on every
-    // message. Once exhausted, every model locks the same way — there's no
-    // "N left" breakdown shown, just usage available or not.
-    const isGuest = !isSignedIn
-    const locked = isGuest && exceeded
-
-    // Same shared preference the home screen and chat composer read/write —
-    // `normalizeModelId` also migrates a leftover legacy `fast`/`pro` value.
-    useEffect(() => {
-        setModel(normalizeModelId(localStorage.getItem('omni_model_preference')))
-    }, [])
-
-    useEffect(() => {
-        if (!modelDropdownOpen) return
-        const handleClickOutside = (e: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-                setModelDropdownOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [modelDropdownOpen])
-
-    const handleModelChange = (newModel: ChatModelId) => {
-        setModel(newModel)
-        localStorage.setItem('omni_model_preference', newModel)
-    }
-
-    return (
-        <Section title="Model">
-            <Row
-                title="Default model"
-                description="Choose which model Omni uses in new conversations"
-                stacked
-            >
-                <ModelPicker
-                    model={model}
-                    onChange={handleModelChange}
-                    open={modelDropdownOpen}
-                    setOpen={setModelDropdownOpen}
-                    isSignedIn={!!isSignedIn}
-                    locked={locked}
-                    placement="down"
-                    dropdownRef={dropdownRef}
-                />
-            </Row>
         </Section>
     )
 }
