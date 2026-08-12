@@ -29,10 +29,7 @@ import {
     Copy,
     ExternalLink,
     Loader2,
-    Zap,
-    Telescope,
     Lock,
-    Check,
     Search,
     MessageSquare,
     CalendarClock,
@@ -63,8 +60,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { ScheduledResearchSection } from '@/components/scheduled-research-section'
-
-type ModelType = 'fast' | 'pro'
+import { ModelPicker } from '@/components/model-picker'
+import { DEFAULT_MODEL, normalizeModelId, type ChatModelId } from '@/lib/models'
 
 const APP_VERSION = '0.2.0'
 const APP_NAME = 'Omni Knows'
@@ -487,115 +484,59 @@ function GeneralSection() {
 
 function ModelSection() {
     const { isSignedIn } = useAuth()
-    const clerk = useClerk()
     const { exceeded } = useUsage()
-    const [chatModel, setChatModel] = useState<ModelType>('fast')
+    const [model, setModel] = useState<ChatModelId>(DEFAULT_MODEL)
+    const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+    const dropdownRef = useRef<HTMLDivElement>(null)
 
     // Locking is guest-only: signed-in users get a generous budget and can
     // check standing in the Usage tab instead of being nagged on every
-    // message. Once exhausted, both modes lock the same way — there's no
+    // message. Once exhausted, every model locks the same way — there's no
     // "N left" breakdown shown, just usage available or not.
     const isGuest = !isSignedIn
     const locked = isGuest && exceeded
 
+    // Same shared preference the home screen and chat composer read/write —
+    // `normalizeModelId` also migrates a leftover legacy `fast`/`pro` value.
     useEffect(() => {
-        const saved = localStorage.getItem('omni_model_preference')
-        if (saved === 'fast' || saved === 'pro') setChatModel(saved)
+        setModel(normalizeModelId(localStorage.getItem('omni_model_preference')))
     }, [])
 
-    const handleModelChange = (newModel: ModelType) => {
-        if (locked) {
-            clerk.openSignIn()
-            return
+    useEffect(() => {
+        if (!modelDropdownOpen) return
+        const handleClickOutside = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setModelDropdownOpen(false)
+            }
         }
-        setChatModel(newModel)
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [modelDropdownOpen])
+
+    const handleModelChange = (newModel: ChatModelId) => {
+        setModel(newModel)
         localStorage.setItem('omni_model_preference', newModel)
     }
 
     return (
         <Section title="Model">
             <Row
-                title="Default mode"
-                description="Choose how Omni thinks in new conversations"
+                title="Default model"
+                description="Choose which model Omni uses in new conversations"
                 stacked
             >
-                <div className="flex flex-col gap-2.5">
-                    <ModelOption
-                        title="Fast"
-                        description={locked
-                            ? 'Usage limit reached — sign in for 10× more usage.'
-                            : 'Quick, concise answers for everyday questions.'}
-                        icon={<Zap size={16} />}
-                        active={chatModel === 'fast'}
-                        onClick={() => handleModelChange('fast')}
-                        locked={locked}
-                    />
-                    <ModelOption
-                        title="Pro"
-                        description={locked
-                            ? 'Usage limit reached — sign in for 10× more usage.'
-                            : 'Deep agent with interactive charts, long-form reports, and multi-step reasoning.'}
-                        icon={<Telescope size={16} />}
-                        active={chatModel === 'pro'}
-                        onClick={() => handleModelChange('pro')}
-                        locked={locked}
-                    />
-                </div>
+                <ModelPicker
+                    model={model}
+                    onChange={handleModelChange}
+                    open={modelDropdownOpen}
+                    setOpen={setModelDropdownOpen}
+                    isSignedIn={!!isSignedIn}
+                    locked={locked}
+                    placement="down"
+                    dropdownRef={dropdownRef}
+                />
             </Row>
         </Section>
-    )
-}
-
-function ModelOption({
-    title,
-    description,
-    icon,
-    active,
-    onClick,
-    locked = false,
-}: {
-    title: string
-    description: string
-    icon: React.ReactNode
-    active: boolean
-    onClick: () => void
-    locked?: boolean
-}) {
-    return (
-        <button
-            onClick={onClick}
-            className={cn(
-                'group relative w-full flex items-center justify-between gap-3 p-4 rounded-xl border text-left transition-all duration-300',
-                active
-                    ? 'bg-[var(--card)] border-[var(--accent)] ring-1 ring-[var(--accent)]'
-                    : 'bg-transparent border-[var(--border-subtle)] hover:border-[var(--muted-foreground)]/30 hover:bg-[var(--secondary)]/30'
-            )}
-        >
-            <div className="flex items-start gap-3 min-w-0">
-                <div className={cn('mt-0.5 shrink-0 transition-colors duration-300', active ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]')}>
-                    {icon}
-                </div>
-                <div className="space-y-0.5 min-w-0">
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--foreground)]">
-                        {title}
-                        {locked && <Lock size={12} className="text-[var(--muted-foreground)]" />}
-                    </span>
-                    <span className="block text-[13px] text-[var(--muted-foreground)] leading-relaxed">
-                        {description}
-                    </span>
-                </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-                <div className={cn(
-                    'w-[18px] h-[18px] rounded-full border flex items-center justify-center transition-all duration-300',
-                    active
-                        ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                        : 'border-[var(--muted-foreground)]/40 bg-transparent'
-                )}>
-                    {active && <Check size={11} strokeWidth={3} />}
-                </div>
-            </div>
-        </button>
     )
 }
 
