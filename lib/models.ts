@@ -36,7 +36,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
   {
     id: 'best',
     label: 'Best',
-    desc: 'Automatically routes to the best model',
+    desc: 'Automatically routes to the best model for your prompt',
     credits: 1,
     requiresAuth: false,
     acceptsImages: true,
@@ -44,7 +44,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
   {
     id: 'rix',
     label: 'Rix',
-    desc: "Omni's experimental in-house model",
+    desc: "Omni's fast, experimental in-house model",
     credits: 1,
     requiresAuth: false,
     acceptsImages: false,
@@ -53,7 +53,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
   {
     id: 'gemma',
     label: 'Gemma 4',
-    desc: "Google's Latest open weights model",
+    desc: "Google's latest open-weight model",
     credits: 3,
     requiresAuth: true,
     acceptsImages: true,
@@ -61,7 +61,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
   {
     id: 'luna',
     label: 'GPT-5.6 Luna',
-    desc: "OpenAI's versatile fast model",
+    desc: "OpenAI's fast, well-rounded model",
     credits: 3,
     requiresAuth: true,
     acceptsImages: true,
@@ -69,7 +69,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
   {
     id: 'gemini',
     label: 'Gemini 3.6 Flash',
-    desc: "Google's Versatile model",
+    desc: "Google's quick, low-latency model",
     credits: 3,
     requiresAuth: true,
     acceptsImages: true,

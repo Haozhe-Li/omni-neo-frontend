@@ -238,14 +238,18 @@ export function ModelPicker({
             ))}
           </div>
 
-          {/* Mobile bottom sheet */}
+          {/* Mobile bottom sheet — full-height list styled after Perplexity's
+              model picker: flat rows (no per-row card/border), a single
+              divider separating the routed "Best" entry from the rest, and a
+              trailing lock/check glyph instead of a filled/empty circle. */}
           <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
             <div
               className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
               onClick={() => setOpen(false)}
             />
-            <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-full duration-300">
-              <div className="flex items-center justify-between mb-4">
+            <div className="relative flex flex-col max-h-[85vh] bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
+              <div className="mx-auto mt-3 mb-1 h-1.5 w-10 rounded-full bg-[var(--border)] shrink-0" />
+              <div className="flex items-center justify-between px-5 pt-2 pb-3 border-b border-[var(--border-subtle)] shrink-0">
                 <h3 className="text-base font-semibold text-[var(--foreground)]">Select model</h3>
                 <button
                   type="button"
@@ -255,49 +259,49 @@ export function ModelPicker({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              {/* Capped and scrollable: the list went from two entries to five,
-                  which is tall enough to run past the bottom of a short phone
-                  and clip the last row. */}
-              <div className="flex flex-col gap-2.5 max-h-[60vh] overflow-y-auto overscroll-contain">
-                {rows.map((m) => (
-                  <Row key={m.id} m={m}>
-                    <div
-                      className={`w-full flex items-start justify-between px-4 py-3.5 rounded-2xl text-left transition-colors bg-[var(--secondary)]/30 active:bg-[var(--secondary)]/60 ${
-                        model === m.id
-                          ? 'ring-[1.5px] ring-[var(--accent)] text-[var(--accent)]'
-                          : 'border border-[var(--border-subtle)] text-[var(--foreground)]'
-                      } ${m.authLocked ? 'opacity-60' : ''}`}
-                    >
-                      {/* `items-start`, not `items-center` — the description
-                          regularly wraps to two lines at this width, and
-                          centering the icon across that whole block floats it
-                          away from the label instead of sitting next to it.
-                          `mt-0.5` lines it (and the trailing indicator) up
-                          with the label's cap-height on the first line. */}
-                      <div className="flex items-start gap-3 min-w-0">
-                        <ModelIcon id={m.id} className="h-5 w-5 shrink-0 mt-0.5" />
-                        <div className="flex flex-col min-w-0">
-                          <span className="text-[15px] font-medium flex items-center gap-1.5">
-                            {m.label}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-1">
+                {rows.map((m, i) => (
+                  <div key={m.id}>
+                    <Row m={m}>
+                      <div
+                        className={cn(
+                          'w-full flex items-center gap-3 px-3 py-3.5 text-left transition-colors active:bg-[var(--secondary)]/50',
+                          m.authLocked && 'opacity-50',
+                        )}
+                      >
+                        <ModelIcon id={m.id} className="h-5 w-5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={cn(
+                                'text-[15px] font-medium truncate',
+                                model === m.id ? 'text-[var(--accent)]' : 'text-[var(--foreground)]',
+                              )}
+                            >
+                              {m.label}
+                            </span>
                             {m.isNew && <NewChip />}
-                            {(m.authLocked || locked) && <Lock className="h-3.5 w-3.5" />}
-                          </span>
-                          <span className="text-[13px] text-[var(--muted-foreground)] mt-0.5">
+                          </div>
+                          <div className="text-[12.5px] text-[var(--muted-foreground)] truncate mt-0.5">
                             {describe(m)}
-                          </span>
+                          </div>
+                        </div>
+                        <div className="shrink-0 flex items-center justify-center w-5">
+                          {model === m.id ? (
+                            <Check className="h-[18px] w-[18px] text-[var(--accent)]" strokeWidth={2.5} />
+                          ) : (
+                            (m.authLocked || locked) && (
+                              <Lock className="h-4 w-4 text-[var(--muted-foreground)]" />
+                            )
+                          )}
                         </div>
                       </div>
-                      <div className="ml-3 mt-0.5 shrink-0 flex items-center gap-2">
-                        {model === m.id ? (
-                          <div className="h-5 w-5 rounded-full bg-[var(--accent)] flex items-center justify-center text-white">
-                            <Check className="h-3.5 w-3.5" />
-                          </div>
-                        ) : (
-                          <div className="h-5 w-5 rounded-full border border-[var(--border)]" />
-                        )}
-                      </div>
-                    </div>
-                  </Row>
+                    </Row>
+                    {/* Divider after the routed "Best" entry — mirrors how
+                        Perplexity splits its top routed pick from the
+                        explicit-model list below it. */}
+                    {i === 0 && <div className="mx-3 my-1 border-t border-[var(--border-subtle)]" />}
+                  </div>
                 ))}
               </div>
             </div>
