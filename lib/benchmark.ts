@@ -269,10 +269,19 @@ export function seriesColor(index: number): string {
  * Note that `gpt-oss` is open weights despite the name it shares with the
  * closed gpt-5 line, which is why these match on the family group rather than
  * on a `gpt` prefix. Gemma is likewise open weights, unlike Gemini.
+ *
+ * Rix and Qwen don't fit the family-group scheme at all: Rix's `model_family`
+ * is an opaque training-run id that changes with every checkpoint Omni ships
+ * ("omni-pro-v3-0812-1157:v1"), and Qwen's is the full upstream repo name in
+ * its own casing ("Qwen3-30B-A3B-Instruct-2507") — neither collapses to a
+ * stable tag the way "gpt-oss-120b" collapses to "gpt-oss". `provider` and
+ * `model_label` are the stable signals for those two instead.
  */
 export interface ModelTraits {
     multimodal: boolean
     openWeights: boolean
+    /** Omni's own model, as opposed to a third party's — Rix only, for now. */
+    trainedByOmni: boolean
 }
 
 /** Families that take text only. Everything else is treated as multimodal. */
@@ -280,12 +289,24 @@ const TEXT_ONLY = ['gpt-oss', 'glm']
 /** Families whose weights are not published. Everything else is open. */
 const CLOSED_WEIGHTS = ['gpt-5', 'gemini']
 
-export function modelTraits(family: string | null | undefined, label?: string): ModelTraits {
+export function modelTraits(
+    family: string | null | undefined,
+    label?: string | null,
+    provider?: string | null,
+): ModelTraits {
     const group = modelFamilyGroup(family ?? label ?? '')
     const matches = (list: string[]) => list.some((f) => group === f || group.startsWith(`${f}-`))
+    // Every Rix checkpoint ships under this provider, whatever its run id —
+    // it's text-only and its weights are not published.
+    const isRix = provider === 'omni'
+    // Qwen's family field carries a version suffix and mixed case, so match
+    // the label's stable "qwen…" prefix instead.
+    const isQwen = (label ?? '').toLowerCase().startsWith('qwen')
+
     return {
-        multimodal: !matches(TEXT_ONLY),
-        openWeights: !matches(CLOSED_WEIGHTS),
+        multimodal: !matches(TEXT_ONLY) && !isRix && !isQwen,
+        openWeights: !matches(CLOSED_WEIGHTS) && !isRix,
+        trainedByOmni: isRix,
     }
 }
 

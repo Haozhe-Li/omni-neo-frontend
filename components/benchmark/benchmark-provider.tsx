@@ -205,7 +205,7 @@ export function BenchmarkProvider({ children }: { children: ReactNode }) {
     const visibleModels = useMemo(() => {
         if (!filters.multimodal && !filters.openWeights) return models
         return models.filter((row) => {
-            const traits = modelTraits(row.model_family, row.model_label)
+            const traits = modelTraits(row.model_family, row.model_label, row.provider)
             // Both ticked means both must hold — the ordinary reading of two
             // filters, and the only one that makes ticking the second do
             // anything.

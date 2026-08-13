@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { GitCompare, Images, Lock, Type, Unlock } from 'lucide-react'
+import { GitCompare, Images, Lock, Sparkles, Type, Unlock } from 'lucide-react'
 import {
     METRICS,
     RANK_TILES,
@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils'
 // ── header ──────────────────────────────────────────────────────────────────
 export function ModelHeader({ row, run }: { row: LeaderboardRowWithIndex; run: EvalRun | undefined }) {
     const color = providerColor(row.provider)
-    const traits = modelTraits(row.model_family, row.model_label)
+    const traits = modelTraits(row.model_family, row.model_label, row.provider)
     return (
         <header className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--muted-foreground)]">
@@ -81,6 +81,15 @@ export function ModelHeader({ row, run }: { row: LeaderboardRowWithIndex; run: E
                     offLabel="Proprietary"
                     icon={traits.openWeights ? Unlock : Lock}
                 />
+                {/* Unlike the two above, this one has no meaningful "off" state
+                    to show — "not trained by Omni" is true of nearly every
+                    row, so it would just be noise. Shown only when true. */}
+                {traits.trainedByOmni && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/[0.07] px-2.5 py-1 text-[11px] text-[var(--foreground)]">
+                        <Sparkles className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                        Trained by Omni
+                    </span>
+                )}
             </div>
 
             {run && (
