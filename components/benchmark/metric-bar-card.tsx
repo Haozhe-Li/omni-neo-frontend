@@ -110,7 +110,7 @@ export function MetricBarCard({
             }}
             aria-label={`${title} — see all models`}
             className={cn(
-                'group/card flex min-w-0 cursor-pointer flex-col rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-4 transition-colors sm:p-5',
+                'group/card flex h-full min-w-0 cursor-pointer flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-4 transition-colors sm:p-5',
                 'hover:border-[var(--accent)]/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
                 wide && 'sm:col-span-2 xl:col-span-3'
             )}
@@ -146,8 +146,20 @@ export function MetricBarCard({
                     {/* ── vertical bars (sm and up) ───────────────────────────
                         Both orientations are rendered and toggled with CSS
                         rather than a width hook: no hydration mismatch, no
-                        flash of the wrong layout on first paint. */}
-                    <div className="mt-5 hidden sm:block">
+                        flash of the wrong layout on first paint.
+
+                        `pl-10` reserves room the first column doesn't
+                        otherwise have: every rotated label's tail swings
+                        down-and-left of its anchor (see the label comment
+                        below), borrowing space from the column to its left —
+                        the leftmost bar has no such neighbour, so without
+                        this its label's first few characters get clipped by
+                        the card's `overflow-hidden` instead of just being
+                        unreadable. Sized to the longest label actually in the
+                        catalog today (`gpt-oss-120b-low-groq`, ~80px wide at
+                        its rotated max-width) plus a margin, not to the
+                        shorter common case. */}
+                    <div className="mt-5 hidden pl-10 sm:block">
                         <div
                             className={cn(
                                 'flex items-end gap-1.5',
