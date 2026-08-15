@@ -69,6 +69,57 @@ function fixEmphasisFlanking(text: string): string {
     })
 }
 
+// The mirror image of the same flanking rule, on the *closing* marker: a `**`
+// preceded by punctuation only closes when the character right after it is
+// whitespace or punctuation. Chinese prose breaks this constantly, because a
+// bolded label keeps its colon inside the bold and the sentence runs straight
+// on afterwards with no space:
+//
+//   `- **主题：**建筑秘道、湖滨小径。`
+//
+// The closing `**` is preceded by `：` and followed by `建`, so it never closes;
+// the whole run renders as literal asterisks (exactly the bug report), and the
+// unpaired delimiters can then mis-pair with a later `**` further down. The
+// same thing happens in ASCII (`**Theme:**text`) — it's spec behaviour, not a
+// CJK-only quirk — but only CJK text hits it routinely, since English writing
+// naturally puts a space after the colon.
+//
+// Fix: peel the trailing punctuation out of the bold — `**主题：**建筑` ->
+// `**主题**：建筑` — which parses and reads identically. Only runs that are
+// actually broken get rewritten: when the character after the closing `**` is
+// whitespace, punctuation or end of line, CommonMark closes it fine and the
+// text is left exactly as written.
+const BOLD_CLOSE_RE = /\*\*(?!\s)([^*\n]+?)\*\*(?=(\S))/gu
+const INNER_TRAILING_PUNCT_RE = /[\p{P}\p{S}]+$/u
+// An "ordinary" character for flanking purposes: anything CommonMark counts as
+// neither whitespace nor punctuation. Letters (CJK ideographs included) and
+// digits are what actually appear after a mis-closed `**`.
+const ORDINARY_CHAR_RE = /[\p{L}\p{N}]/u
+
+// Both emphasis repairs rewrite `**` markers, which are literal characters
+// inside an inline code span — `` `**code：**inline` `` must survive untouched.
+// The capturing group keeps the spans in the split result, so only the prose
+// between them is rewritten. (Fenced blocks are already split off by
+// `preprocessMarkdown` before any of this runs.)
+function outsideInlineCode(text: string, fix: (segment: string) => string): string {
+    return text
+        .split(/(`+[^`\n]*?`+)/g)
+        .map((segment) => (segment.startsWith('`') ? segment : fix(segment)))
+        .join('')
+}
+
+function fixEmphasisClosing(text: string): string {
+    return text.replace(BOLD_CLOSE_RE, (match, inner: string, next: string) => {
+        if (!ORDINARY_CHAR_RE.test(next)) return match
+        const trail = inner.match(INNER_TRAILING_PUNCT_RE)
+        if (!trail) return match
+        const head = inner.slice(0, inner.length - trail[0].length)
+        // Nothing but punctuation inside — not a bold run worth rescuing.
+        if (!head) return match
+        return `**${head}**${trail[0]}`
+    })
+}
+
 // Rewrites `[n]` inline citation markers into `[n](citation:n)` so they parse
 // as ordinary markdown links (intercepted by a custom `a` renderer) instead of
 // literal bracketed text. Only markers with a known source are rewritten —
@@ -184,7 +235,18 @@ export function preprocessMarkdown(
         .map((segment) =>
             segment.startsWith('```')
                 ? segment
-                : transformMath(citationStep(fixEmphasisFlanking(escapeCurrencyDollars(moveCitationsAfterPunctuation(segment))), citationNumbers))
+                : transformMath(
+                      citationStep(
+                          // `fixEmphasisFlanking` first: it peels quotes out of
+                          // `**"foo"**`, which is what makes the closing marker
+                          // legal there. Whatever punctuation it leaves inside
+                          // the bold is then handled by `fixEmphasisClosing`.
+                          outsideInlineCode(escapeCurrencyDollars(moveCitationsAfterPunctuation(segment)), (prose) =>
+                              fixEmphasisClosing(fixEmphasisFlanking(prose))
+                          ),
+                          citationNumbers
+                      )
+                  )
         )
         .join('')
 }
