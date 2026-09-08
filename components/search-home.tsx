@@ -309,8 +309,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [modelDropdownOpen])
 
-  const [backendStatus, setBackendStatus] = useState<'unknown' | 'ready' | 'not-ready'>('unknown')
-  const [isCheckPending, setIsCheckPending] = useState(true)
   const { fetchWithAuth } = useApi()
 
   // Always write both state (for re-render) and ref (for sync closure access)
@@ -354,82 +352,17 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     return null
   }, [fetchWithAuth, applyThreadId])
 
-  // Use refs for the interval ID to keep it accessible in cleanup
-  const intervalIdRef = useRef<NodeJS.Timeout | null>(null)
-
+  // Fire-and-forget backend warm-up ping. Never blocks the UI and we don't
+  // care about the result — it just wakes a cold backend a little earlier.
   useEffect(() => {
-    // Determine backend URL
-    const backendUrl = process.env.NEXT_PUBLIC_USE_MOCK === 'true'
-      ? '/api/health'
-      : process.env.NEXT_PUBLIC_BACKEND_URL
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/health`
-        : '/api/health'
+    if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') return
 
-    if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
-      setBackendStatus('ready')
-      setIsCheckPending(false)
-      return
-    }
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL
+      ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/health`
+      : '/api/health'
 
-    const STORAGE_KEY = 'backend_health_status'
-    const EXPIRY_KEY = 'backend_health_expiry'
-    const EXPIRY_TIME = 10 * 60 * 1000 // 10 minutes
-
-    const getStoredStatus = () => {
-      if (typeof window === 'undefined') return null
-      const status = localStorage.getItem(STORAGE_KEY)
-      const expiry = localStorage.getItem(EXPIRY_KEY)
-      if (status === 'ready' && expiry && parseInt(expiry) > Date.now()) {
-        return 'ready'
-      }
-      return null
-    }
-
-    const setStoredStatus = () => {
-      localStorage.setItem(STORAGE_KEY, 'ready')
-      localStorage.setItem(EXPIRY_KEY, (Date.now() + EXPIRY_TIME).toString())
-    }
-
-    const checkHealth = async () => {
-      try {
-        const res = await fetch(backendUrl)
-        if (res.ok) {
-          setBackendStatus('ready')
-          setIsCheckPending(false)
-          setStoredStatus()
-          // Stop polling if we become ready
-          if (intervalIdRef.current) {
-            clearInterval(intervalIdRef.current)
-            intervalIdRef.current = null
-          }
-        } else {
-          setBackendStatus('not-ready')
-          setIsCheckPending(false)
-        }
-      } catch (error) {
-        setBackendStatus('not-ready')
-        setIsCheckPending(false)
-      }
-    }
-
-    // 1. Check local storage first
-    const stored = getStoredStatus()
-    if (stored === 'ready') {
-      setBackendStatus('ready')
-      setIsCheckPending(false)
-    } else {
-      // 2. If not stored/expired, check immediately
-      checkHealth()
-      // 3. And start polling every 5s
-      intervalIdRef.current = setInterval(checkHealth, 5000)
-    }
-
-    return () => {
-      if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current)
-      }
-    }
-  }, [fetchThreadId])
+    void fetch(backendUrl).catch(() => {})
+  }, [])
 
   // NOTE: We intentionally do NOT pre-fetch thread_id here.
   // Pre-fetching caused empty threads to be created on the backend before
@@ -463,14 +396,13 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       return
     }
 
-    if (backendStatus !== 'ready') return
     const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
     if (!activeThreadId) return
     console.log('[SearchHome] handleFillEnd submit — thread_id:', activeThreadId)
     onSearch(current.text, activeThreadId)
     setQuery('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
-  }, [backendStatus, threadId, fetchThreadId, createLocalFallbackThreadId, onSearch])
+  }, [threadId, fetchThreadId, createLocalFallbackThreadId, onSearch])
 
   const triggerFillAnimation = useCallback((text: string, submit: boolean) => {
     const payload = { text, submit }
@@ -545,7 +477,6 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (backendStatus !== 'ready') return
 
     if (attachedFiles.some((f) => f.status === 'uploading')) {
       toast.info('Please wait for the file to finish uploading.')
@@ -605,7 +536,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         return
       }
     }
-    if (e.key === 'Tab' && !query && backendStatus === 'ready' && !isRecording && !sstPrompt) {
+    if (e.key === 'Tab' && !query && !isRecording && !sstPrompt) {
       e.preventDefault()
       triggerFillAnimation(getActiveSuggestion(), false)
       return
@@ -779,7 +710,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   }
 
   const handleSst = async () => {
-    if (backendStatus !== 'ready' || isSstPending) return
+    if (isSstPending) return
 
     if (isRecording) {
       stopRecording()
@@ -1124,16 +1055,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   onBlur={() => setIsFocused(false)}
                   onKeyDown={handleKeyDown}
                   onPaste={onPaste}
-                  disabled={backendStatus !== 'ready' || isCheckPending}
-                  placeholder={
-                    (isRecording || !!sstPrompt)
-                      ? (sstPrompt || 'listening...')
-                      : backendStatus === 'ready'
-                        ? ''
-                        : isCheckPending
-                          ? "Connecting to brain..."
-                          : "Backend is not ready, please wait..."
-                  }
+                  placeholder={(isRecording || !!sstPrompt) ? (sstPrompt || 'listening...') : ''}
                   className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
                   style={{ minHeight: '52px' }}
                 />
@@ -1156,7 +1078,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       {fillAnim.text}
                     </div>
                   </div>
-                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt && (attachedFiles.length > 0 || sourceUrls.length > 0) ? (
+                ) : !query && !isRecording && !sstPrompt && (attachedFiles.length > 0 || sourceUrls.length > 0) ? (
                   <div
                     className="absolute inset-0 pointer-events-none px-6 pt-3 pb-2 text-base leading-relaxed overflow-hidden"
                     aria-hidden="true"
@@ -1168,7 +1090,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                         : 'Please read this source'}
                     </span>
                   </div>
-                ) : !query && backendStatus === 'ready' && !isRecording && !sstPrompt ? (() => {
+                ) : !query && !isRecording && !sstPrompt ? (() => {
                   const placeholders = activeSkill
                     ? SKILL_PLACEHOLDERS[activeSkill]
                     : SUGGESTED_QUERIES
@@ -1199,15 +1121,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   <div>
                     <button
                       type="button"
-                      onClick={() => { if (backendStatus === 'ready' && !isCheckPending) setPlusMenuOpen(p => !p) }}
-                      disabled={backendStatus !== 'ready' || isCheckPending}
-                      className={`
-                        flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                        ${backendStatus === 'ready' && !isCheckPending
-                          ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                          : 'bg-muted text-muted-foreground cursor-not-allowed'
-                        }
-                      `}
+                      onClick={() => setPlusMenuOpen(p => !p)}
+                      className="flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200 bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80"
                       aria-label="Add"
                     >
                       <Plus className="h-4 w-4" />
@@ -1358,10 +1273,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   <button
                     type="button"
                     onClick={handleSst}
-                    disabled={backendStatus !== 'ready' || isSstPending || isCheckPending}
+                    disabled={isSstPending}
                     className={`
                       relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                      ${backendStatus === 'ready' && !isSstPending
+                      ${!isSstPending
                         ? isRecording
                           ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
                           : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
@@ -1378,14 +1293,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
                   <button
                     type="submit"
-                    disabled={backendStatus !== 'ready' || (!!isRecording || !!sstPrompt ? !query.trim() : false)}
+                    disabled={(!!isRecording || !!sstPrompt) ? !query.trim() : false}
                     className={`
                     flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                    ${backendStatus === 'ready' && !isRecording && !sstPrompt
+                    ${(!isRecording && !sstPrompt) || query.trim()
                         ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                        : query.trim() && backendStatus === 'ready'
-                          ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                          : 'bg-muted text-muted-foreground cursor-not-allowed'
+                        : 'bg-muted text-muted-foreground cursor-not-allowed'
                       }
                   `}
                     aria-label="Submit search"
@@ -1447,20 +1360,8 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         </div>
       </div>
 
-      {/* Footer Status */}
+      {/* Footer */}
       <footer className="w-full py-6 hidden md:flex flex-col gap-4 justify-center items-center animate-fade-up" style={{ animationDelay: '500ms' }}>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-full backdrop-blur-sm border border-border/50">
-          <div className={`w-2 h-2 rounded-full ${backendStatus === 'ready' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' :
-            backendStatus === 'not-ready' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]' :
-              'bg-gray-400'
-            }`} />
-          <span>
-            {backendStatus === 'ready' ? 'System Operational' :
-              backendStatus === 'not-ready' ? 'System Offline / Starting' :
-                'Connecting...'}
-          </span>
-        </div>
-
         <div className="flex flex-col items-center gap-1 text-[10px] text-muted-foreground/60">
           <p>
             &copy; {new Date().getFullYear()}{' '}
