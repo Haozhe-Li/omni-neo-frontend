@@ -21,7 +21,7 @@ import {
 import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep, type ReportArtifact } from '@/lib/types'
 import { MarkdownMessage } from '@/components/markdown-message'
 
-// One `run_python` call's filename, defaulted the same way everywhere it's
+// One `python_exec` call's filename, defaulted the same way everywhere it's
 // read from — the args come straight off a persisted tool-call step, so an
 // older turn recorded before the backend started sending `filename` (or an
 // agent that skips the arg) must fall back identically here and in
@@ -32,7 +32,7 @@ function scriptFilename(args: any): string {
   return typeof f === 'string' && f.trim() ? f.trim() : 'script.py'
 }
 
-// Synthesizes a "report" per `run_python` call so its code can be opened in
+// Synthesizes a "report" per `python_exec` call so its code can be opened in
 // the same side-panel reader used for `<report>` artifacts — not a real
 // persisted report, just `content` wrapped in a fenced code block, which
 // rides through the exact same MarkdownMessage + rehype-highlight rendering
@@ -67,7 +67,13 @@ function domainOf(url: string) {
 
 const lc = (s: string) => (s || '').toLowerCase()
 const isTodo = (t: string) => lc(t).includes('todo')
-const isSearch = (t: string) => (lc(t).includes('search') || lc(t).includes('arxiv')) && !lc(t).includes('places')
+// Web search. `stock_search` and the retired `search_place` also contain
+// "search" but are lookups of a specific thing, not a query over the web —
+// they have their own rows below and must not be swallowed by this one.
+const isSearch = (t: string) =>
+  (lc(t).includes('search') || lc(t).includes('arxiv')) &&
+  !lc(t).includes('place') &&
+  !lc(t).includes('stock')
 
 // A read_file on a /skills/<name>/SKILL.md path = the agent activating a skill.
 function skillOf(step: ToolStep): string | null {
@@ -85,13 +91,13 @@ function singleStepInfo(tool: string, args: any) {
   if (isSearch(tool)) return { Icon: Search, label: 'Searching', chip: a.query || a.q }
   if (['load_web', 'web_page', 'fetch', 'read_web'].some((k) => t.includes(k)))
     return { Icon: Globe, label: 'Reading', chip: a.url ? domainOf(a.url) : undefined }
-  if (t.includes('places')) return { Icon: MapPin, label: 'Finding places', chip: a.query || a.location }
+  if (t.includes('place')) return { Icon: MapPin, label: 'Finding places', chip: a.query || a.location }
   if (t.includes('weather')) return { Icon: Cloud, label: 'Checking weather', chip: a.location }
   if (t.includes('stock')) return { Icon: TrendingUp, label: 'Looking up', chip: a.ticker || a.symbol }
   if (t.includes('currency'))
     return { Icon: DollarSign, label: 'Currency', chip: [a.base_currency || a.base, a.target_currency || a.target].filter(Boolean).join(' → ') }
   if (t.includes('document') || t.includes('read_user')) return { Icon: FileText, label: 'Reading your file', chip: undefined }
-  if (t === 'run_python' || t.includes('run_python')) return { Icon: Terminal, label: 'Running Python', chip: undefined }
+  if (t === 'python_exec' || t.includes('run_python')) return { Icon: Terminal, label: 'Running Python', chip: undefined }
   // deepagents builtin file/system tools — shown faithfully.
   const base = (p: any) => (typeof p === 'string' ? p.split('/').pop() : undefined)
   if (t === 'read_file') return { Icon: FileText, label: 'Reading file', chip: base(a.file_path) }
@@ -105,7 +111,7 @@ function singleStepInfo(tool: string, args: any) {
   return { Icon: Wrench, label: tool || 'Working', chip: undefined }
 }
 
-// run_python's code, shown Perplexity-style: a fixed "Running Python Code"
+// python_exec's code, shown Perplexity-style: a fixed "Running Python Code"
 // label plus a single clickable file chip (no inline expansion) — clicking
 // opens the code in the artifact side-panel instead, where it renders
 // through the same highlighted-code path as an answer's own code blocks.
@@ -144,7 +150,7 @@ function ToolRowContent({
   scriptId?: string
   onOpenScript?: (id: string) => void
 }) {
-  // run_python (and any tool whose sole arg is `code`) → clickable script card.
+  // python_exec (and any tool whose sole arg is `code`) → clickable script card.
   if (typeof step.args?.code === 'string') {
     return (
       <ScriptCard

@@ -41,10 +41,10 @@ export async function POST(request: NextRequest) {
 
         await delay(800)
 
-        // Step 3: Tavily search
+        // Step 3: Web search
         send({
-          type: 'tool', tool: 'google_search', agent: 'Sub-agent', content: 'Tool Calling',
-          raw: { args: { query, max_results: 5, topic: 'general' } },
+          type: 'tool', tool: 'web_search', agent: 'Sub-agent', content: 'Tool Calling',
+          raw: { args: { query, k: 5, time_range: 'month' } },
         })
 
         await delay(1000)
@@ -63,18 +63,10 @@ export async function POST(request: NextRequest) {
 
         await delay(600)
 
-        // Step 5: Skimming
+        // Step 5: Read a source
         send({
-          type: 'tool', tool: 'skimming_web_pages', agent: 'Sub-agent', content: 'Tool Calling',
-          raw: { args: {
-            purpose: 'Gather comprehensive information about the topic',
-            urls: [
-              'https://en.wikipedia.org/wiki/Quantum_computing',
-              'https://nature.com/articles/s41586-024-quantum',
-              'https://arxiv.org/abs/2024.12345',
-              'https://technologyreview.com/2026/quantum-leap',
-            ],
-          } },
+          type: 'tool', tool: 'fetch_url', agent: 'Sub-agent', content: 'Tool Calling',
+          raw: { args: { url: 'https://en.wikipedia.org/wiki/Quantum_computing' } },
         })
 
         await delay(900)
@@ -90,7 +82,7 @@ export async function POST(request: NextRequest) {
 
         // Step 7: Full text reading
         send({
-          type: 'tool', tool: 'load_web_page', agent: 'Sub-agent', content: 'Tool Calling',
+          type: 'tool', tool: 'fetch_url', agent: 'Sub-agent', content: 'Tool Calling',
           raw: { args: { url: 'https://nature.com/articles/s41586-024-quantum' } },
         })
 
@@ -110,10 +102,10 @@ export async function POST(request: NextRequest) {
 
         await delay(600)
 
-        // Step 9: Verify claim
+        // Step 9: Cross-check the key claim with a second search
         send({
-          type: 'tool', tool: 'verify_claim', agent: 'Sub-agent', content: 'Tool Calling',
-          raw: { args: { fact: 'Quantum computers can solve certain problems exponentially faster than classical computers' } },
+          type: 'tool', tool: 'web_search', agent: 'Sub-agent', content: 'Tool Calling',
+          raw: { args: { query: 'quantum speedup exponential evidence', k: 5 } },
         })
 
         await delay(900)

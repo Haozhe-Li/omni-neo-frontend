@@ -25,7 +25,7 @@ import { CHAT_MODELS, getModel, type ChatModelId } from '@/lib/models'
 import { cn } from '@/lib/utils'
 
 /**
- * Each model's real maker mark rather than a generic glyph — Gemma/Gemini are
+ * Each model's real maker mark rather than a generic glyph — Gemini is
  * Google's, Luna is OpenAI's, Best/Rix are Omni's own. The brand marks render
  * in `currentColor` (single-path, no brand colors) so they pick up whatever
  * color the row around them is already using — active/locked/etc — the same
@@ -69,7 +69,7 @@ function ModelIcon({ id, className }: { id: ChatModelId; className?: string }) {
   // `opacity` backs off their currentColor fill from full-strength foreground.
   let icon: ReactNode
   if (id === 'luna') icon = <OpenAIIcon className="h-full w-full" />
-  else if (id === 'gemma' || id === 'gemini') icon = <GoogleIcon className="h-full w-full" />
+  else if (id === 'gemini') icon = <GoogleIcon className="h-full w-full" />
   else icon = <Cpu className="h-full w-full" />
 
   return (

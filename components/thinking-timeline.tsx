@@ -265,16 +265,18 @@ function ToolContent({ message }: { message: SSEMessage }) {
 
   const getToolLabel = (): { label: React.ReactNode; detail: React.ReactNode } => {
     switch (tool) {
+      case 'web_search':
+      // Retired backend tool names. Kept so threads persisted before the
+      // rename still render a real label instead of falling through to the
+      // raw tool name — see doc/API_doc.md.
       case 'google_search':
-        return {
-          label: 'Searching',
-          detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
-        }
+      case 'tavily_search':
       case 'arxiv_search':
         return {
           label: 'Searching',
           detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
+      case 'fetch_url':
       case 'skimming_web_pages':
       case 'load_web_page': {
         const urls = args.urls || args.url || ''
@@ -329,7 +331,9 @@ function ToolContent({ message }: { message: SSEMessage }) {
           label: 'Updating Notes',
           detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
         }
+      case 'python_exec':
       case 'run_python_tool':
+      case 'run_python':
         return {
           label: 'Running Code',
           detail: (
@@ -366,10 +370,37 @@ function ToolContent({ message }: { message: SSEMessage }) {
           label: 'Analyzing Stock Trend',
           detail: (args.symbol || args.query) ? <span className="text-muted-foreground/80">"{args.symbol || args.query}"</span> : null
         }
+      case 'stock_search':
       case 'get_stock_data':
         return {
           label: 'Fetching Real-time Stock Data',
           detail: (args.symbol || args.query) ? <span className="text-muted-foreground/80">"{args.symbol || args.query}"</span> : null
+        }
+      case 'weather_current':
+      case 'get_weather':
+        return {
+          label: 'Checking Weather',
+          detail: args.location ? <span className="text-muted-foreground/80">{args.location}</span> : null
+        }
+      case 'weather_forecast':
+      case 'get_weather_forecast':
+        return {
+          label: 'Checking Forecast',
+          detail: args.location ? <span className="text-muted-foreground/80">{args.location}</span> : null
+        }
+      case 'currency_convert':
+      case 'get_realtime_currency_rate': {
+        const pair = [args.base_currency, args.target_currency].filter(Boolean).join(' → ')
+        return {
+          label: 'Checking Exchange Rate',
+          detail: pair ? <span className="text-muted-foreground/80">{pair}</span> : null
+        }
+      }
+      case 'search_place':
+      case 'google_search_places':
+        return {
+          label: 'Finding Places',
+          detail: args.query ? <span className="text-muted-foreground/80">"{args.query}"</span> : null
         }
       default:
         return {

@@ -83,7 +83,7 @@ final_answer你需要给渲染好展示给用户，final_source要在answer最�
 {
     "type": "reasoning",
     "agent": "Sub-agent",
-    "content": "We need to produce a concise research report with key findings and source list. Must use google_search then skim if needed. Let's do a search query.",
+    "content": "We need to produce a concise research report with key findings and source list. Must use web_search then read the best hits if needed. Let's do a search query.",
     "raw": {}
 }
 ````
@@ -96,75 +96,58 @@ some reasoning content （前十个字）
 
 
 
-#### Tavily Search
+> **工具名是稳定契约。** Agent 只会发出后端 `core/tools/adapters.py` 里注册的
+> 适配器工具名；后端换实现（例如 web 搜索从 SearXNG 换成别的）不会改变这里的
+> `tool` 字段。
 
-Tavily Search是当agent调用网络搜索工具时会显示：
+| `tool` | 说明 | 展示 |
+| --- | --- | --- |
+| `web_search` | 联网搜索 | `Searching: "<query>"` |
+| `fetch_url` | 网页精读 | `Intensive reading: <url>` |
+| `weather_current` | 当前天气 | `Checking weather: <location>` |
+| `weather_forecast` | 天气预报 | `Checking forecast: <location>` |
+| `stock_search` | 股票行情 | `Looking up: <symbol>` |
+| `currency_convert` | 汇率 | `Currency: <base> → <target>` |
+| `python_exec` | 运行 Python 代码 | `Running Python code...`，代码默认折叠 |
+| `write_todos` | 研究进度 Todo | 见下 |
+
+
+
+#### 联网搜索
+
 ````json
 {
     "type": "tool",
-    "tool": "google_search",
+    "tool": "web_search",
     "agent": "Sub-agent",
     "content": "Tool Calling",
     "raw": {
         "args": {
-            "max_results": 5,
             "query": "a query",
-            "topic": "general"
+            "k": 5,
+            "time_range": "month"
         },
         "id": "fc_7841fa95-a3f0-42af-87db-7e502a11e99f"
     }
 }
 ````
 
-
-
-你只需要展示搜索了"raw"字段下的那个”query“就可以了。
+你只需要展示 `raw.args` 下的 `query`。`k` 是结果条数，`time_range` 可选，
+取值 `day` / `week` / `month` / `year`，不传表示不限时间。
 
 展示效果例如：
 Searching on Internet on topic: query
 
 
 
-#### 网页速读
-
-这个工具是agent用来快速阅读网页的。样式如下：
-
-````json
-{
-    "type": "tool",
-    "tool": "skimming_web_pages",
-    "agent": "Sub-agent",
-    "content": "Tool Calling",
-    "raw": {
-        "args": {
-            "purpose": "some purpose",
-            "urls": [
-                "url1",
-              	"url2"
-            ]
-        },
-        "id": "fc_09a41cb6-cd8d-4b20-bdef-6b2d78e37394"
-    }
-}
-````
-
-你需要显示purpose和urls。
-
-展示效果例如：
-Gathering information on Topic: purpose.
-
-Url1, url2, url3 xxx
-
-
-
 #### 网页精读
 
-这个工具精读一个网页的，如下
+这个工具精读一个网页，如下
 
 ````json
 {
     "type": "tool",
-    "tool": "load_web_page",
+    "tool": "fetch_url",
     "agent": "Sub-agent",
     "content": "Tool Calling",
     "raw": {
@@ -184,30 +167,49 @@ Intensive reading and researching on url
 
 
 
-#### 断言验证
+#### 天气
 
-agent会调用这个工具来验证某个claim。
+`weather_current` 查当前天气，`weather_forecast` 查预报，args 相同：
 
 ````json
 {
     "type": "tool",
-    "tool": "verify_claim",
+    "tool": "weather_forecast",
     "agent": "Sub-agent",
     "content": "Tool Calling",
     "raw": {
         "args": {
-            "fact": "some claim"
+            "location": "Tokyo"
         },
-        "id": "call_oVetXtBb3NV7ReUiDQAVh4hk"
+        "id": "fc_..."
     }
 }
 ````
 
+展示 `location` 即可：Checking forecast: Tokyo
 
 
-你需要展示的信息只有fact。效果如下：
 
-Verifying some claim 
+#### 行情与汇率
+
+````json
+{
+    "type": "tool",
+    "tool": "stock_search",
+    "agent": "Sub-agent",
+    "content": "Tool Calling",
+    "raw": {
+        "args": {
+            "symbol": "TSLA"
+        },
+        "id": "fc_..."
+    }
+}
+````
+
+`currency_convert` 的 args 为 `{ "base_currency": "USD", "target_currency": "CNY" }`。
+
+展示效果：Looking up: TSLA / Currency: USD → CNY
 
 
 
@@ -250,31 +252,6 @@ Verifying some claim
 
 
 
-#### 检查python代码 compile
-
-检查一段python代码能否compile
-
-````json
-{
-    "type": "tool",
-    "tool": "run_python_tool",
-    "agent": "Sub-agent",
-    "content": "Tool Calling",
-    "raw": {
-        "args": {
-            "code": "print(1+1)"
-        },
-        "id": "bvstagb3n"
-    }
-}
-````
-
-你只需要展示code，如下：
-
-Checking python code... （里面具体的code会被默认折叠起来，用户展开会是一个代码框）
-
-
-
 #### 运行python代码
 
 运行一段python代码
@@ -282,11 +259,12 @@ Checking python code... （里面具体的code会被默认折叠起来，用户�
 ````json
 {
     "type": "tool",
-    "tool": "run_python_tool",
+    "tool": "python_exec",
     "agent": "Sub-agent",
     "content": "Tool Calling",
     "raw": {
         "args": {
+            "filename": "compound_interest.py",
             "code": "print(1+1)"
         },
         "id": "bvstagb3n"
@@ -297,3 +275,15 @@ Checking python code... （里面具体的code会被默认折叠起来，用户�
 你只需要展示code，如下：
 
 Running python code... （里面具体的code会被默认折叠起来，用户展开会是一个代码框）。
+`filename` 用作代码卡片的标题，缺省时用 `script.py`。
+
+
+
+#### 已下线的工具名
+
+以下工具名不会再出现在新的对话里，但历史 thread 里仍然存在，前端应继续能渲染：
+
+`google_search`、`tavily_search`、`google_search_places`、`search_place`、
+`skimming_web_pages`、`load_web_page`、`verify_claim`、`run_python_tool`、
+`get_weather`、`get_weather_forecast`、`get_stock_data`、
+`get_realtime_currency_rate`。

@@ -33,7 +33,7 @@ function domainOf(url: string) {
 
 // Always production, even when this page is being previewed on localhost or
 // staging — Omni's chat has to be able to fetch the URL it's handed, and the
-// backend's load_web_page shortcut for /pages/{id} (see
+// backend's fetch_url shortcut for /pages/{id} (see
 // core/tools/web_page_reader.py) only recognizes the omniknows.xyz host.
 const SITE_URL = 'https://omniknows.xyz'
 

@@ -975,7 +975,7 @@ export function ChatView({
     () => messages.flatMap((m) => (m.reports ?? []).map((r) => ({ ...r, sources: r.sources ?? mergedSources, verifiedClaims: m.reportVerifiedClaims?.[r.id] }))),
     [messages, mergedSources]
   )
-  // Synthetic "reports" for run_python code steps so they can open in the same
+  // Synthetic "reports" for python_exec code steps so they can open in the same
   // artifact panel — id prefixes here must match what the two `<ToolActivity>`
   // call sites below pass as `idPrefix` for the very same steps array.
   const scriptReports: ReportArtifact[] = useMemo(
