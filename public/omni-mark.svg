@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.55 -1.25 25 25" role="img" aria-label="Omni">
+  <title>Omni</title>
+  <!--
+    The three-ring mark, traced from the live DOM version in
+    components/app-sidebar.tsx (`OmniMark`) rather than redrawn by eye.
+
+    That component builds the rings from three CSS borders on a 22px box,
+    each transformed with translate + scale. CSS scales the border along with
+    the box, so the visual stroke of each ring is 1.5 x its own scale; SVG
+    strokes sit centred on the path where a CSS border sits inside the box,
+    so every radius here is (outer diameter - stroke) / 2. The centres and
+    diameters below were measured off the rendered element, not derived.
+
+    The viewBox is not square-on-the-box: the second and third rings hang
+    off the right and bottom edges by design, so it is sized to the mark's
+    real bounds and centred on them. Cropping to the 22px box would clip the
+    rust ring.
+
+    Two deliberate departures from the app mark, both for legibility at
+    16px, where this is mostly seen: the base stroke goes 1.5 -> 1.7 (the
+    other two keep their exact ratios to it), and the faintest ring lifts
+    from 0.5 to 0.6 opacity, below which it disappears entirely at tab size.
+
+    Colours follow the app's own light and dark palettes, so the mark stays
+    legible on a dark tab strip. Browsers that ignore prefers-color-scheme in
+    an SVG favicon fall through to the light values, which is the safe half.
+  -->
+  <style>
+    .ring-teal { stroke: #26696B; }
+    .ring-rust { stroke: #C0673C; }
+    @media (prefers-color-scheme: dark) {
+      .ring-teal { stroke: #6FB4AF; }
+      .ring-rust { stroke: #DC8B5C; }
+    }
+  </style>
+  <g fill="none">
+    <circle class="ring-teal" cx="11" cy="11" r="10.15" stroke-width="1.7" />
+    <circle class="ring-rust" cx="15.994" cy="12.98" r="7.308" stroke-width="1.224" opacity="0.85" />
+    <circle class="ring-teal" cx="10.01" cy="17.006" r="5.075" stroke-width="0.85" opacity="0.6" />
+  </g>
+</svg>

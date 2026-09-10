@@ -77,16 +77,28 @@ export const metadata: Metadata = {
     images: ['/omniknows_main.png'],
     creator: '@omniknows',
   },
+  /* All of these are the three-ring mark, generated from public/omni-mark.svg
+     — see the note in that file for the geometry.
+
+     The SVG is listed first and is what any current browser will use: it is
+     the only one that can follow the tab strip's own light/dark, and it stays
+     sharp at whatever size the browser asks for. The raster sizes below it
+     are the fallback, and the ones iOS and Android actually install.
+
+     `?v=2` is not decoration. Browsers cache a favicon far past a normal
+     asset, keyed on URL, so replacing the file at the same path leaves
+     returning visitors on the old icon indefinitely. */
   icons: {
     icon: [
-      { url: '/favicon.ico' },
-      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/omni-mark.svg?v=2', type: 'image/svg+xml' },
+      { url: '/favicon.ico?v=2', sizes: '16x16 32x32 48x48' },
+      { url: '/favicon-16x16.png?v=2', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png?v=2', sizes: '32x32', type: 'image/png' },
+      { url: '/android-chrome-192x192.png?v=2', sizes: '192x192', type: 'image/png' },
+      { url: '/android-chrome-512x512.png?v=2', sizes: '512x512', type: 'image/png' },
     ],
     apple: [
-      { url: '/apple-touch-icon.png' },
+      { url: '/apple-touch-icon.png?v=2', sizes: '180x180' },
     ],
   },
   robots: {
