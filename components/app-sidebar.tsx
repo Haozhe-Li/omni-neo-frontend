@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, type LucideIcon } from 'lucide-react'
-import { OmniMark } from '@/components/omni-mark'
+import { OmniMark, useMarkBurst } from '@/components/omni-mark'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -104,6 +104,7 @@ export function AppSidebar({
     // Same hidden scrollbar as the sources rail, so the same soft edge — a
     // long history otherwise ends mid-title against a hard line.
     const recentFade = useEdgeFade<HTMLDivElement>()
+    const markBurst = useMarkBurst()
     const [history, setHistory] = useState<StoredChat[]>([])
     const [generatingThreadIds, setGeneratingThreadIds] = useState<Set<string>>(new Set())
     // Threads optimistically shown while generating, before the backend list has
@@ -600,8 +601,14 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                             href="/"
                             className="group flex min-h-[28px] items-center gap-2.5"
                             aria-label="Omni — home"
+                            /* The rings take a turn on the way home. Nothing
+                               depends on it and nothing waits for it — the
+                               navigation is unchanged, and on the layout the
+                               sidebar lives in the mark does not unmount, so
+                               the spin finishes wherever you land. */
+                            onClick={markBurst.trigger}
                         >
-                            <OmniMark size={22} />
+                            <OmniMark key={markBurst.run} size={22} {...markBurst.mark} />
                             <span className="font-[family-name:var(--font-plex)] pt-[2px] text-[25px] leading-none tracking-[-0.01em] text-[var(--ink)] transition-colors group-hover:text-[var(--teal)]">
                                 omni
                             </span>

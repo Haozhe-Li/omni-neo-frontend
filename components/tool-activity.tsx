@@ -7,6 +7,7 @@ import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from 're
 import { ChevronDown, ChevronRight, Blocks, Code2 } from 'lucide-react'
 import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep, type ReportArtifact } from '@/lib/types'
 import { MarkdownMessage } from '@/components/markdown-message'
+import { OmniMark } from '@/components/omni-mark'
 
 // One `python_exec` call's filename, defaulted the same way everywhere it's
 // read from — the args come straight off a persisted tool-call step, so an
@@ -801,7 +802,7 @@ function Bullet({
 }: {
   kind?: StepKind
   reasoning?: boolean
-  /** The step running right now: a spinning ring, the trace's only motion. */
+  /** The step running right now: the mark in orbit, the trace's only motion. */
   live?: boolean
   /** The capstone at the end of a finished trace. */
   done?: boolean
@@ -809,10 +810,12 @@ function Bullet({
   return (
     <span className="flex h-5 w-5 items-center justify-center text-[var(--teal)]">
       {live ? (
-        <span
-          className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--teal)] border-t-transparent"
-          style={{ animation: 'omni-spin 900ms linear infinite' }}
-        />
+        /* Omni's own mark with its rings in motion, not a generic arc
+           spinner. The trace has exactly one moving thing in it and this is
+           it, so it may as well be the thing that says whose work is going
+           on. `current` because the cell is already teal, and because a
+           two-colour mark at 15px in a gutter would be noise. */
+        <OmniMark size={15} tone="current" motion="orbit" />
       ) : done ? (
         <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--teal)] text-[9px] leading-none text-[var(--accent-foreground)]">
           ✓

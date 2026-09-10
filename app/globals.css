@@ -1285,6 +1285,17 @@
   to { transform: rotate(360deg); }
 }
 
+/* The mark's two inner rings, carried around the mark's centre.
+   Applied to a wrapper that sits on the full box, so rotating it swings the
+   ring's own offset around that centre — the ring travels rather than
+   spinning in place, which on a circle would be no motion at all. Every run
+   is a whole number of turns, so the mark always lands back in the
+   composition it was drawn in. Durations and turn counts live at the call
+   site in components/omni-mark.tsx, next to the geometry they belong to. */
+@keyframes omni-orbit {
+  to { transform: rotate(var(--omni-turn, 360deg)); }
+}
+
 @keyframes omni-rise {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: none; }
@@ -1362,6 +1373,18 @@
   .omni-caret::after,
   .omni-streaming > *:last-child::after {
     animation: none;
+  }
+
+  /* The rings stop travelling. Where the orbit was decoration that is the
+     whole fix, but where it was saying "still working" something has to keep
+     saying it, so the mark breathes instead — the standard substitution, and
+     the one the trace's own skeleton bars already use. */
+  .omni-mark-orbit {
+    animation: none;
+  }
+
+  .omni-mark-breathe {
+    animation: omni-soft-pulse 1600ms ease-in-out infinite;
   }
 }
 
