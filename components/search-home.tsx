@@ -110,7 +110,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const firstName = user?.firstName ?? null
   const clerk = useClerk()
 
-  const [greeting, setGreeting] = useState<string | null>(null)
+  // The name the headline greets, or null when signed out / unavailable.
+  // Cached rather than read straight off Clerk because `user` is null for the
+  // first paint: without the cache a returning user watches the generic
+  // headline render and then swap to their own, on every single load.
+  const [heroName, setHeroName] = useState<string | null>(null)
   const [suggestionIndex, setSuggestionIndex] = useState(0)
   const [suggestionVisible, setSuggestionVisible] = useState(true)
   const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -121,22 +125,23 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   useEffect(() => {
     try {
-      const cached = localStorage.getItem('omni_greeting')
-      if (cached) setGreeting(cached)
+      const cached = localStorage.getItem('omni_hero_name')
+      if (cached) setHeroName(cached)
     } catch {}
   }, [])
 
   useEffect(() => {
     if (!userLoaded) return
-    if (!firstName || firstName.length > 10) {
-      try { localStorage.removeItem('omni_greeting') } catch {}
-      setGreeting(null)
+    // Long names are dropped rather than truncated: the name is the first
+    // word of a display-serif headline, and "Bartholomew-Christop, what do
+    // you want to know?" is worse than no name at all.
+    if (!firstName || firstName.length > 12) {
+      try { localStorage.removeItem('omni_hero_name') } catch {}
+      setHeroName(null)
       return
     }
-    const options = [`Hey ${firstName}!`, `${firstName} returns!`]
-    const chosen = options[Math.floor(Math.random() * options.length)]
-    try { localStorage.setItem('omni_greeting', chosen) } catch {}
-    setGreeting(chosen)
+    try { localStorage.setItem('omni_hero_name', firstName) } catch {}
+    setHeroName(firstName)
   }, [firstName, userLoaded])
 
   useEffect(() => {
@@ -981,20 +986,35 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         {/* Content — sits above the glow */}
 
         {/* ── Hero ────────────────────────────────────────────────────────
-            The question is asked in the display serif and left-aligned to the
-            composer below it, so the headline, the input and the suggestion
-            chips read as one column rather than a centered banner sitting on
-            top of a form. A returning name appears as a mono eyebrow instead
-            of replacing the headline — the greeting is a courtesy, the
-            question is the screen. */}
+            One question, in the display serif, left-aligned to the composer so
+            the headline and the input read as a single column rather than a
+            centered banner sitting on top of a form.
+
+            "What do you want to know" rather than anything about curiosity:
+            the product is called Omni Knows, and the headline saying the same
+            word the name does ties the two together without printing the
+            brand at the reader. `know` takes the italic teal, which is the
+            one piece of emphasis this screen gets.
+
+            A signed-in name goes INTO the sentence, not above it. It used to
+            sit in a mono eyebrow — a second, smaller greeting stacked over
+            the real one, which made the personal touch the least prominent
+            thing on the page. Addressed by name, the same sentence does both
+            jobs at once. */}
         <div className="relative z-10 flex w-full flex-1 flex-col justify-center md:flex-none">
           <div className="animate-fade-up w-full max-w-[720px] mx-auto">
-            {greeting && (
-              <p className="omni-eyebrow mb-4">{greeting}</p>
-            )}
             <h1 className="omni-display text-[clamp(34px,5.2vw,62px)] text-[var(--ink)] mb-8 md:mb-9">
-              What are you<br />
-              <em>curious</em> about today?
+              {heroName ? (
+                <>
+                  {heroName}, what do you<br />
+                  want to <em>know</em>?
+                </>
+              ) : (
+                <>
+                  What do you want<br />
+                  to <em>know</em>?
+                </>
+              )}
             </h1>
           </div>
         </div>
