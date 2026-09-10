@@ -238,6 +238,7 @@ export default function Home() {
             onSearch={handleSearch}
             isAutoDetecting={false}
             onToggleSidebar={toggleSidebar}
+            onNewChat={handleNewSearch}
             isMobile={isMobile}
             model={model}
             onModelChange={handleModelChange}

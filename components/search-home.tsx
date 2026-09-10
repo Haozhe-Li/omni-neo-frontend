@@ -15,7 +15,6 @@ import { ModelPicker } from '@/components/model-picker'
 import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, type ChatModelId } from '@/lib/models'
 
 import { toast } from 'sonner'
-import { OmniMark } from '@/components/omni-mark'
 
 
 type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
@@ -94,6 +93,10 @@ interface SearchHomeProps {
   onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[], skill?: SkillId | null, sourceUrls?: string[]) => void
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
+  /** Mobile-only header button. Resets the composer's own staged state
+   * (attachments, skill, deep-link fill) — see `handleNewSearch` in
+   * app/page.tsx, the same reset a sidebar "New thread" click runs. */
+  onNewChat?: () => void
   isMobile?: boolean
   model?: ChatModelId
   onModelChange?: (model: ChatModelId) => void
@@ -114,7 +117,7 @@ interface SearchHomeProps {
   deepLinkSourceUrls?: string[]
 }
 
-export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, isMobile = false, model = DEFAULT_MODEL, onModelChange, locked = false, deepLinkFill, deepLinkSourceUrls }: SearchHomeProps) {
+export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, onNewChat, isMobile = false, model = DEFAULT_MODEL, onModelChange, locked = false, deepLinkFill, deepLinkSourceUrls }: SearchHomeProps) {
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -940,22 +943,22 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         accept={UPLOAD_ACCEPT_ATTR}
       />
 
-      {/* Mobile Header */}
-      <header className="fixed top-0 left-0 right-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center gap-1 px-4 z-40 md:hidden">
-        <button
-          onClick={onToggleSidebar}
-          className="p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <Menu size={20} />
-        </button>
-        {/* On mobile this header is the only place the product signs its name
-            at all, and the bar held nothing but the menu button. Sitting next
-            to that button rather than centred: the mark belongs with the other
-            chrome at the leading edge, the way it does in the rail this button
-            opens. Not a link — this header only exists on home, so there is
-            nowhere for it to go. */}
-        <OmniMark size={22} />
-      </header>
+      {/* Mobile header — no bar. This screen is already the blank slate a
+          header would otherwise announce, so there's nothing for a bar or a
+          logo to frame; two buttons floating over the hero are enough. */}
+      <button
+        onClick={onToggleSidebar}
+        className="fixed top-3 left-3 z-40 p-2.5 rounded-full text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors md:hidden"
+      >
+        <Menu size={20} />
+      </button>
+      <button
+        onClick={onNewChat}
+        title="New thread"
+        className="fixed top-3 right-3 z-40 p-2.5 rounded-full text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors md:hidden"
+      >
+        <Plus size={20} />
+      </button>
 
       {/* Auto-detecting overlay */}
       {isAutoDetecting && (
@@ -1037,7 +1040,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
             it. */}
         <div className="relative z-10 flex w-full flex-1 flex-col justify-center md:flex-none">
           <div className="animate-fade-up w-full max-w-[720px] mx-auto">
-            <h1 className="omni-display text-[clamp(34px,5.2vw,62px)] text-[var(--ink)] mb-8 md:mb-9">
+            <h1 className="omni-display omni-hero-headline text-[clamp(34px,11vw,46px)] md:text-[clamp(34px,5.2vw,62px)] text-[var(--ink)] mb-8 md:mb-9">
               {heroName ? (
                 // No explicit line break here, unlike the signed-out line:
                 // these vary in length and carry a name of unknown width, so

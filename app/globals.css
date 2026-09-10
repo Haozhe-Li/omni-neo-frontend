@@ -1112,6 +1112,16 @@
   color: var(--teal);
 }
 
+/* The home hero's 1.05 leading is tuned for the desktop headline, which is
+   one line. On a phone width the same sentence wraps to two, and 1.05
+   between two display-serif lines reads as overlapping rather than tight —
+   loosen it back up under the breakpoint where wrapping is the common case. */
+@media (max-width: 767px) {
+  .omni-hero-headline {
+    line-height: 1.22;
+  }
+}
+
 /* Eyebrow labels: SOURCES, REFERENCES, MODEL, the date over Discover. */
 .omni-eyebrow {
   font-family: var(--font-plex-mono), ui-monospace, monospace;
