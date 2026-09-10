@@ -46,6 +46,27 @@ const SKILL_PLACEHOLDERS: Record<string, string[]> = {
   ],
 }
 
+/* ── Signed-in headlines ───────────────────────────────────────────────────
+   Someone who is signed in gets greeted, not interviewed. The signed-out
+   headline asks a question of a stranger; these open a session with someone
+   the product already knows, so they are warmer, shorter, and deliberately
+   NOT variations on the same sentence — a personalised line that is just the
+   generic one with a name bolted to the front reads as a mail merge.
+
+   One is drawn per page load rather than per user, so the screen is not
+   identical every single morning. Each keeps exactly one italic word, which
+   is the accent the display serif is built around; the phrasing varies, the
+   composition does not. */
+const SIGNED_IN_HEADLINES: ((name: string) => React.ReactNode)[] = [
+  (n) => (<>Let&rsquo;s <em>jump in</em>, {n}.</>),
+  (n) => (<>{n}, wanna <em>know</em> something new?</>),
+  (n) => (<>{n}, what&rsquo;s on your <em>mind</em>?</>),
+  (n) => (<>Where shall we <em>start</em>, {n}?</>),
+  (n) => (<>Good to see you, {n}. What&rsquo;s <em>next</em>?</>),
+  (n) => (<>{n}, what should we <em>dig into</em>?</>),
+  (n) => (<>Ready when you are, <em>{n}</em>.</>),
+]
+
 const SUGGESTED_QUERIES = [
   "Is it rainy today?",
   "What is the difference between sea lions and seals?",
@@ -115,6 +136,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   // first paint: without the cache a returning user watches the generic
   // headline render and then swap to their own, on every single load.
   const [heroName, setHeroName] = useState<string | null>(null)
+  // Chosen in the mount effect below, never in the initializer: this
+  // component is server-rendered, and a Math.random() there would disagree
+  // with the client's and trip a hydration mismatch.
+  const [headlineIndex, setHeadlineIndex] = useState(0)
   const [suggestionIndex, setSuggestionIndex] = useState(0)
   const [suggestionVisible, setSuggestionVisible] = useState(true)
   const suggestionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -124,6 +149,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
   const fillRafRef = useRef<number | null>(null)
 
   useEffect(() => {
+    setHeadlineIndex(Math.floor(Math.random() * SIGNED_IN_HEADLINES.length))
     try {
       const cached = localStorage.getItem('omni_hero_name')
       if (cached) setHeroName(cached)
@@ -990,29 +1016,30 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
             the headline and the input read as a single column rather than a
             centered banner sitting on top of a form.
 
-            "What do you want to know" rather than anything about curiosity:
-            the product is called Omni Knows, and the headline saying the same
-            word the name does ties the two together without printing the
-            brand at the reader. `know` takes the italic teal, which is the
-            one piece of emphasis this screen gets.
+            The copy is deliberately back to "curious about today" after a
+            detour through "What do you want to know" — which reads better
+            against the product's name, but is the line Perplexity runs today,
+            and a landing headline that matches a competitor's word for word
+            is worse than one that merely rhymes with it. `curious` takes the
+            italic teal, the one piece of emphasis this screen gets.
 
-            A signed-in name goes INTO the sentence, not above it. It used to
+            A signed-in name goes INTO the headline, not above it. It used to
             sit in a mono eyebrow — a second, smaller greeting stacked over
             the real one, which made the personal touch the least prominent
-            thing on the page. Addressed by name, the same sentence does both
-            jobs at once. */}
+            thing on the page. See `SIGNED_IN_HEADLINES` for what replaces
+            it. */}
         <div className="relative z-10 flex w-full flex-1 flex-col justify-center md:flex-none">
           <div className="animate-fade-up w-full max-w-[720px] mx-auto">
             <h1 className="omni-display text-[clamp(34px,5.2vw,62px)] text-[var(--ink)] mb-8 md:mb-9">
               {heroName ? (
-                <>
-                  {heroName}, what do you<br />
-                  want to <em>know</em>?
-                </>
+                // No explicit line break here, unlike the signed-out line:
+                // these vary in length and carry a name of unknown width, so
+                // where they wrap has to be left to the measure.
+                SIGNED_IN_HEADLINES[headlineIndex](heroName)
               ) : (
                 <>
-                  What do you want<br />
-                  to <em>know</em>?
+                  What are you<br />
+                  <em>curious</em> about today?
                 </>
               )}
             </h1>
