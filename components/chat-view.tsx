@@ -991,33 +991,23 @@ export function ChatView({
   )
 
   /**
-   * The sources shown beside the answer — scoped to the LAST assistant turn,
-   * not accumulated across the thread.
+   * Every turn's sources, keyed by the assistant message that produced them.
    *
-   * A five-turn thread's merged list is mostly sources that have nothing to
-   * do with the answer being read; stacking them turns the rail into a log.
-   * So each turn shows its own: what it cited (resolved against the
-   * thread-wide map, because a citation can legitimately reach back to a
-   * source an earlier turn fetched) and what it opened without citing.
-   *
-   * While the turn is still running there is nothing to split by — no answer
-   * text has been written, so no source has been cited yet, and hiding
-   * everything behind "read but not used" would empty the rail during the
-   * one phase where watching sources arrive is the point. Mid-run the rail
-   * shows every source as it lands; the split appears when the answer does.
+   * Scoped per turn, never accumulated: a five-turn thread's merged list is
+   * mostly sources that have nothing to do with the answer being read, and
+   * stacking them turns the rail into a log. A turn's `cited` resolves
+   * against the thread-wide map — a citation can legitimately reach back to a
+   * source an earlier turn fetched, and turn 2 citing [2] from turn 1 should
+   * show it — while `unused` stays scoped to that turn's own fetches, or
+   * every earlier turn's leftovers would arrive by another route.
    */
-  const turnSources = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i]
-      if (m.role !== 'assistant') continue
+  const sourcesByTurn = useMemo(() => {
+    const out = new Map<number, { cited: Source[]; unused: Source[] }>()
+    messages.forEach((m, i) => {
+      if (m.role !== 'assistant') return
       const own = m.sources ?? []
-      const streaming = i === streamingIndex && isLoading
-      if (streaming) return { cited: own, unused: [] as Source[], researching: true }
-
       const text = parsedByIndex[i]?.text ?? m.content ?? ''
-      if (!text.trim() && own.length === 0) continue
       const citedNumbers = extractCitedNumbers(text)
-      // Cited, in the order the answer cites them.
       const seen = new Set<number>()
       const cited: Source[] = []
       for (const n of citedNumbers) {
@@ -1026,14 +1016,91 @@ export function ChatView({
         const src = mergedSources.find((s) => s.n === n)
         if (src) cited.push(src)
       }
-      // Not-cited is scoped to THIS turn's own fetches — folding in earlier
-      // turns' leftovers would put the whole thread back in the rail by
-      // another route.
       const unused = own.filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n)))
-      return { cited, unused, researching: false }
+      out.set(i, { cited, unused })
+    })
+    return out
+  }, [messages, parsedByIndex, mergedSources])
+
+  /**
+   * Which turn the rail is describing — the one you are currently reading.
+   *
+   * The rail follows the scroll rather than pinning to the newest answer.
+   * Scrolled back to the second question, the rail shows what the second
+   * answer used; a turn that cited nothing shows nothing. Sources belong to
+   * the answer in front of you, and a rail that keeps showing the last turn's
+   * while you read an earlier one is actively misleading about which claims
+   * rest on what.
+   */
+  const [activeTurn, setActiveTurn] = useState<number | null>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let frame = 0
+    const measure = () => {
+      frame = 0
+      const containerTop = el.getBoundingClientRect().top
+      // A third of the way down the viewport: high enough that the turn you
+      // are reading has been chosen before its heading leaves the screen, low
+      // enough that a heading scrolling in at the very bottom doesn't steal
+      // the rail from the answer still filling it.
+      const anchor = containerTop + el.clientHeight * 0.33
+      let picked: number | null = null
+      for (const node of el.querySelectorAll<HTMLElement>('[data-message-index]')) {
+        const idx = Number(node.dataset.messageIndex)
+        if (!Number.isFinite(idx)) continue
+        if (node.getBoundingClientRect().top > anchor) break
+        // A turn is a question and its answer; both map to the answer's
+        // sources, so a user block hands the rail to the reply after it.
+        if (messagesRef.current[idx]?.role === 'assistant') picked = idx
+        else {
+          for (let j = idx + 1; j < messagesRef.current.length; j++) {
+            if (messagesRef.current[j]?.role === 'assistant') {
+              picked = j
+              break
+            }
+          }
+        }
+      }
+      setActiveTurn(picked)
     }
-    return { cited: [] as Source[], unused: [] as Source[], researching: false }
-  }, [messages, parsedByIndex, mergedSources, streamingIndex, isLoading])
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(measure)
+    }
+    measure()
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (frame) cancelAnimationFrame(frame)
+    }
+    // Re-measure when the thread grows or the layout shifts under it.
+  }, [messages.length, spacerH])
+
+  const turnSources = useMemo(() => {
+    // Default to the newest answer: on first paint, and any time the scroll
+    // spy has nothing (a thread shorter than the anchor), the bottom of the
+    // thread is what is on screen.
+    let idx = activeTurn
+    if (idx == null || !sourcesByTurn.has(idx)) {
+      idx = null
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant') {
+          idx = i
+          break
+        }
+      }
+    }
+    if (idx == null) return { cited: [] as Source[], unused: [] as Source[], researching: false }
+    // A turn still being written has cited nothing yet, so there is nothing to
+    // split by — show everything it has fetched, flat.
+    if (idx === streamingIndex && isLoading) {
+      return { cited: messages[idx]?.sources ?? [], unused: [] as Source[], researching: true }
+    }
+    const entry = sourcesByTurn.get(idx)
+    return { cited: entry?.cited ?? [], unused: entry?.unused ?? [], researching: false }
+  }, [activeTurn, sourcesByTurn, messages, streamingIndex, isLoading])
 
   const hasTurnSources = turnSources.cited.length > 0 || turnSources.unused.length > 0
 

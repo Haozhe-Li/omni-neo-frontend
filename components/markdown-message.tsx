@@ -246,7 +246,17 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  const triggerClassName = `mx-0.5 inline-flex max-w-[150px] items-center rounded-[5px] bg-[var(--teal-tint)] px-1.5 py-[3px] align-middle font-mono text-[11px] leading-none text-[var(--teal)] no-underline transition-colors transition-opacity duration-300 ease-out hover:bg-[var(--teal)] hover:text-[var(--accent-foreground)] ${revealed ? 'opacity-100' : 'opacity-0'}`
+  /* Deliberately quiet. A citation is punctuation, not a call to action:
+     every teal chip in a paragraph pulled the eye off the sentence it was
+     supporting, and a dense answer became a field of buttons. Sand fill,
+     muted ink, colour only on hover — it recedes into the prose until you
+     look for it.
+
+     `leading-[1.35]` rather than `leading-none` is the fix for the clipped
+     glyphs: at zero leading the line box is exactly the font size, so
+     descenders in a host like "google" or "gg" were cut off by the chip's
+     own rounded edge. */
+  const triggerClassName = `mx-0.5 inline-flex max-w-[150px] items-center rounded-[4px] bg-[var(--sand)] px-1.5 py-[1px] align-baseline font-mono text-[11px] leading-[1.35] text-[var(--ink-muted)] no-underline transition-colors transition-opacity duration-300 ease-out hover:bg-[var(--sand-deep)] hover:text-[var(--ink)] ${revealed ? 'opacity-100' : 'opacity-0'}`
 
   return (
     <HoverCard openDelay={150} closeDelay={100} onOpenChange={(open) => { if (!open) setIdx(0) }}>
@@ -255,13 +265,13 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
           <button type="button" onClick={notifyUploadedDocument} className={triggerClassName}>
             <CredibilityIcon credibility={sources[0].credibility} className="mr-1" />
             <span className="min-w-0 truncate">{primaryLabel}</span>
-            {extra > 0 && <span className="ml-1 shrink-0 font-semibold">+{extra}</span>}
+            {extra > 0 && <span className="ml-1 shrink-0 text-[var(--ink-faint)]">+{extra}</span>}
           </button>
         ) : (
           <a href={sources[0].url} target="_blank" rel="noopener noreferrer" className={triggerClassName}>
             <CredibilityIcon credibility={sources[0].credibility} className="mr-1" />
             <span className="min-w-0 truncate">{primaryLabel}</span>
-            {extra > 0 && <span className="ml-1 shrink-0 font-semibold">+{extra}</span>}
+            {extra > 0 && <span className="ml-1 shrink-0 text-[var(--ink-faint)]">+{extra}</span>}
           </a>
         )}
       </HoverCardTrigger>
