@@ -2,7 +2,6 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -17,6 +16,7 @@ import { InlineEcharts, InlineMap, CitationBadge, citationUrlTransform, resolveC
 import type { Source } from '@/lib/types'
 import { SourceItem } from '@/components/source-item'
 import { extractCitedNumbers, partitionSources, preprocessMarkdown } from '@/lib/markdown'
+import { OmniMark } from '@/components/omni-mark'
 
 interface MarkdownBlogViewProps {
   title: string
@@ -241,13 +241,7 @@ export function MarkdownBlogView({
         <header className="sticky top-0 z-30 bg-[var(--background)]/85 backdrop-blur-xl border-b border-[var(--border-subtle)]">
           <div className="max-w-6xl mx-auto flex items-center px-6 h-14">
             <Link href="/pages" className="flex items-center gap-2 group">
-              <Image
-                src="/android-chrome-512x512.png"
-                alt="Omni Knows Logo"
-                width={20}
-                height={20}
-                className="rounded-lg"
-              />
+              <OmniMark size={20} />
               <span className="font-[family-name:var(--font-plex)] text-[14px] font-light tracking-tight text-[var(--muted-foreground)] lowercase group-hover:text-[var(--foreground)] transition-colors">
                 omni<span className="font-normal" style={{ color: 'var(--teal)' }}>knows</span>
               </span>

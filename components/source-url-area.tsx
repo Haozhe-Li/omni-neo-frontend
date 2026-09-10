@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import Image from 'next/image'
 import { X, Link2 } from 'lucide-react'
 import { SourceUrlEntry } from '@/hooks/useSourceUrls'
+import { OmniMark } from '@/components/omni-mark'
 
 export interface SourceUrlAreaProps {
     urls: SourceUrlEntry[]
@@ -61,7 +61,7 @@ export function SourceUrlArea({ urls, onRemove, className = '' }: SourceUrlAreaP
                     >
                         <div className="shrink-0 relative w-8 h-8 rounded bg-[var(--background)] border border-[var(--border-subtle)] overflow-hidden flex items-center justify-center">
                             {entry.isFirstParty ? (
-                                <Image src="/android-chrome-512x512.png" alt="" width={18} height={18} className="rounded-[3px]" />
+                                <OmniMark size={16} />
                             ) : (
                                 <Link2 className="h-4 w-4 text-[var(--muted-foreground)]" />
                             )}

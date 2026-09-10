@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
 import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, type LucideIcon } from 'lucide-react'
+import { OmniMark } from '@/components/omni-mark'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -34,31 +34,6 @@ interface StoredChat {
     isExpiring?: boolean
     /** Locked for safety (core/stream.py's SAFETY_TERMINATED path) — no more sends/regenerates on this thread. */
     isLocked?: boolean
-}
-
-/* ── The mark ──────────────────────────────────────────────────────────────
-   Three rings, offset and shrinking: the whole answer engine in one glyph —
-   a question, its narrowing, the thing found. Drawn rather than imported so
-   it takes ink and teal from the theme and needs no second file for dark
-   mode. */
-export function OmniMark({ size = 22 }: { size?: number }) {
-    return (
-        <span
-            aria-hidden="true"
-            className="relative block shrink-0"
-            style={{ width: size, height: size }}
-        >
-            <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)]" />
-            <span
-                className="absolute inset-0 rounded-full border-[1.5px] border-[var(--rust)] opacity-85"
-                style={{ transform: `translate(${size * 0.227}px, ${size * 0.09}px) scale(0.72)` }}
-            />
-            <span
-                className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)] opacity-50"
-                style={{ transform: `translate(${-size * 0.045}px, ${size * 0.273}px) scale(0.5)` }}
-            />
-        </span>
-    )
 }
 
 /* Real icons, not the abstract glyph set this rail shipped with first.

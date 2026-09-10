@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { BarChart3, GitCompare, Menu, RefreshCw } from 'lucide-react'
@@ -10,6 +9,7 @@ import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
 import { AskOmniButton, LlmsTxtActionRow, useLlmsTxtActions } from '@/components/benchmark/llms-txt-menu'
 import { BENCH_BASE, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
+import { OmniMark } from '@/components/omni-mark'
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 const lerp = (from: number, to: number, t: number) => from + (to - from) * t
@@ -120,13 +120,7 @@ function BrandMark({ collapseProgress }: { collapseProgress: number }) {
     const wordmarkGone = clamp01((collapseProgress - 0.5) / 0.5)
     return (
         <Link href={benchRoutes.overview()} className="group flex shrink-0 items-center">
-            <Image
-                src="/android-chrome-512x512.png"
-                alt=""
-                width={20}
-                height={20}
-                className="rounded-lg"
-            />
+            <OmniMark size={20} />
             <span
                 className="overflow-hidden whitespace-nowrap font-[family-name:var(--font-plex)] text-[14px] font-light lowercase tracking-tight text-[var(--muted-foreground)] transition-colors group-hover:text-[var(--foreground)]"
                 style={{

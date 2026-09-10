@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, memo, useRef, type ReactNode } from 'react'
-import Image from 'next/image'
 import {
   ChevronDown,
   ChevronRight,
@@ -39,6 +38,7 @@ import { useClerk } from '@clerk/nextjs'
 import { preprocessMarkdown } from '@/lib/markdown'
 import type { Components } from 'react-markdown'
 import type { Source, PublishDuration } from '@/lib/types'
+import { OmniMark } from '@/components/omni-mark'
 
 interface Asset {
   title: string
@@ -527,13 +527,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
               rel="noopener noreferrer"
               className="flex items-center gap-2 group shrink-0"
             >
-              <Image
-                src="/android-chrome-512x512.png"
-                alt="Omni Knows"
-                width={20}
-                height={20}
-                className="rounded-md opacity-90"
-              />
+              <OmniMark size={20} />
               <span className="font-[family-name:var(--font-plex)] text-[18px] font-light tracking-tight text-foreground/90 lowercase group-hover:opacity-60 transition-opacity">
                 omni<span className="font-normal" style={{ color: 'var(--teal)' }}>knows</span>
               </span>

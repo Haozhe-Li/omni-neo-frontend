@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useState, type ReactNode } from 'react'
-import Image from 'next/image'
 import { ArrowUpRight, Check, ChevronDown, Copy, FileText } from 'lucide-react'
 import { AnchoredPanel, useAnchoredPanel } from '@/components/benchmark/popover'
 import { LLMS_TXT_URL, OMNI_CHAT_URL, benchRoutes } from '@/lib/benchmark'
 import { cn } from '@/lib/utils'
+import { OmniMark } from '@/components/omni-mark'
 
 export interface LlmsTxtAction {
     key: string
@@ -113,13 +113,7 @@ export function useLlmsTxtActions(): LlmsTxtAction[] {
             // own BrandMark uses, so the two don't disagree on what "Omni"
             // looks like within one page.
             icon: (
-                <Image
-                    src="/android-chrome-512x512.png"
-                    alt=""
-                    width={14}
-                    height={14}
-                    className="rounded-[3px]"
-                />
+                <OmniMark size={14} />
             ),
             onClick: triggerAgentCacheRefresh,
             href: omniHref,

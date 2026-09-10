@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import { useTheme } from 'next-themes'
 import { useUser, useAuth, useClerk, SignInButton } from '@clerk/nextjs'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
@@ -59,6 +58,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { ScheduledResearchSection } from '@/components/scheduled-research-section'
+import { OmniMark } from '@/components/omni-mark'
 
 const APP_VERSION = '0.2.0'
 const APP_NAME = 'Omni Knows'
@@ -1486,15 +1486,8 @@ function AboutSection() {
     return (
         <Section title="About">
             <div className="py-4 flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[var(--sand)]">
-                    <Image
-                        src="/android-chrome-512x512.png"
-                        alt="Omni Knows logo"
-                        width={48}
-                        height={48}
-                        className="w-full h-full object-cover"
-                        unoptimized
-                    />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-[var(--sand)]">
+                    <OmniMark size={26} />
                 </div>
                 <div>
                     <p className="text-sm font-medium text-[var(--foreground)]">{APP_NAME}</p>

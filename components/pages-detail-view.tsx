@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 import {
   ArrowLeft,
   Check,
@@ -22,6 +21,7 @@ import { SourcesPanel } from '@/components/sources-panel'
 import { usePagesShellControls } from '@/components/pages-shell'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
+import { OmniMark } from '@/components/omni-mark'
 
 function domainOf(url: string) {
   try {
@@ -504,7 +504,9 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
             title="Starts a chat with this page ready to ask about"
             className="omni-pill omni-pill-solid gap-1.5 px-3.5 py-1.5 text-[12.5px]"
           >
-            <Image src="/android-chrome-512x512.png" alt="" width={13} height={13} priority className="rounded-[3px]" />
+            {/* `current` rather than brand: this pill's ground is teal, which
+                is one of the mark's own two colours. */}
+            <OmniMark size={14} tone="current" />
             Ask Omni
           </a>
         </div>
