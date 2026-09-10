@@ -531,20 +531,65 @@ function ContinuedFromBanner({ urls }: { urls: string[] }) {
   )
 }
 
-/* ── Follow-up prompts ─────────────────────────────────────────────────────
-   A fixed set, not model-generated ones. Generated follow-ups cost a round
-   trip before the reader can act on them, and land after the moment they were
-   useful; these are the four moves that apply to almost any answer, so they
-   can be on screen the instant the answer finishes. Each is phrased as
-   something the reader would actually say, and they escalate: go deeper, get
-   concrete, get shorter, then check the work. */
-const FOLLOW_UP_PROMPTS = [
+/* ── Fallback follow-ups ───────────────────────────────────────────────────
+   Real suggestions come from the backend, generated from the turn's own Q/A
+   and in the user's own language (`follow_up` SSE event). This pool is what
+   runs when that call fails, is skipped, or comes back short.
+
+   Twenty of them, four drawn per turn, because a fixed four shown under every
+   unlucky answer starts reading as chrome rather than as a suggestion. They
+   are the moves that apply to almost any answer — go deeper, get concrete,
+   get shorter, push back, go sideways, act on it.
+
+   English-only, which is the known cost of this path: a fallback cannot know
+   the user's language without the model call that just failed. It is a
+   degraded state, not the design. */
+const FALLBACK_FOLLOW_UPS = [
   'Can you explain this in more depth?',
   'Give me a concrete example.',
   'Summarize this in three bullet points.',
   'What are the strongest counterarguments?',
   'What should I read next on this?',
+  'What am I still missing here?',
+  'How confident are you in this?',
+  'What would change your answer?',
+  'Walk me through it step by step.',
+  'Is there a simpler way to put it?',
+  'What do the sources disagree on?',
+  'How does this compare to the alternatives?',
+  'What are the common mistakes here?',
+  'Where does this break down?',
+  'What should I do first?',
+  'Can you show me the numbers?',
+  'Who disagrees with this, and why?',
+  'What has changed about this recently?',
+  'Give me the one-sentence version.',
+  'What question should I be asking instead?',
 ]
+
+/**
+ * Four fallback prompts, chosen by `seed` rather than by `Math.random()`.
+ *
+ * Random-per-render would reshuffle the list on every composer keystroke, and
+ * random-per-mount would hand the same turn a different set after a reload.
+ * Seeding on the turn's own identity fixes both: stable while you look at it,
+ * stable when you come back to it, different from the turn above it.
+ */
+function fallbackFollowUps(seed: string): string[] {
+  let h = 2166136261
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  const pool = [...FALLBACK_FOLLOW_UPS]
+  const out: string[] = []
+  for (let i = 0; i < 4 && pool.length; i++) {
+    // Re-hash per draw so the four picks aren't a contiguous run of the pool.
+    h = Math.imul(h ^ (h >>> 15), 2246822519)
+    out.push(pool.splice(Math.abs(h) % pool.length, 1)[0])
+  }
+  return out
+}
 
 export function ChatView({
   query,
@@ -920,6 +965,24 @@ export function ChatView({
   const firstUserIndex = useMemo(() => messages.findIndex((m) => m.role === 'user'), [messages])
   const isFirstQuestion = useCallback((i: number) => i === firstUserIndex, [firstUserIndex])
 
+  /**
+   * The suggestions under the newest answer.
+   *
+   * The backend's, when it sent any — generated from this turn's own Q/A and
+   * in the user's own language. Otherwise four drawn from the local pool,
+   * seeded on the thread and turn so they hold still while you read and are
+   * the same when you come back.
+   */
+  const activeFollowUps = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role !== 'assistant') continue
+      if (m.followUps?.length) return m.followUps
+      return fallbackFollowUps(`${threadId}:${i}`)
+    }
+    return fallbackFollowUps(threadId || 'omni')
+  }, [messages, threadId])
+
   // The thread is idle when the last message is a completed assistant turn —
   // the only moment where offering a next question is help rather than noise.
   const threadIdle = useMemo(() => {
@@ -1164,7 +1227,24 @@ export function ChatView({
   const syncToBackend = useCallback(
     (msgs: ChatMessage[], syncTitle?: string) => {
       if (!threadId) return
-      const payloadMessages = msgs.map((m, i) => (i === 0 ? { ...m, mode } : m))
+      // Only the newest assistant turn keeps its suggestions. They are about
+      // the answer in front of you and go stale the moment there is a newer
+      // one, so stripping them here means older turns shed them on the next
+      // sync — no migration, and the stored thread never accumulates dead
+      // prompts.
+      let lastAssistant = -1
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i].role === 'assistant') {
+          lastAssistant = i
+          break
+        }
+      }
+      const payloadMessages = msgs.map((m, i) => {
+        const withMode = i === 0 ? { ...m, mode } : m
+        if (m.role !== 'assistant' || i === lastAssistant || !m.followUps) return withMode
+        const { followUps: _drop, ...rest } = withMode
+        return rest
+      })
       const body: Record<string, unknown> = { messages: payloadMessages }
       if (syncTitle && !isUntitled(syncTitle)) body.title = syncTitle
       fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/sync`, {
@@ -1444,6 +1524,10 @@ export function ChatView({
 
       const steps: TimelineStep[] = []
       let text = ''
+      // The message list as of `done`. Held because `follow_up` lands after
+      // it and needs something to attach to — reading `messages` there would
+      // see a stale closure from the render that started this turn.
+      let settledMessages: ChatMessage[] | null = null
       // The reasoning run currently receiving tokens. A tool call (or answer
       // text) closes it, so the next reasoning token starts a NEW timeline
       // entry — that's what keeps think → tool → think chronological instead
@@ -1640,12 +1724,35 @@ export function ChatView({
                 ...baseHistory,
                 { role: 'assistant', content: finalText, steps, blocks, widgets, artifacts, sources, drafting: null, ...regenTag },
               ]
+              settledMessages = finalMessages
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
-              activeReaderRef.current = null
               setIsLoading(false)
               setStreamingIndex(-1)
-              return
+              // Deliberately NOT returning. `done` means the answer is
+              // complete, not that the stream is: the backend emits
+              // `follow_up` after it (see core/routers/chat.py) precisely so
+              // the answer never waits on a second model call. The loop ends
+              // when the reader actually closes, a beat later.
+              break
+            }
+
+            case 'follow_up': {
+              // Arrives after `done`, so the turn is already rendered and
+              // synced — attach the suggestions to it and sync once more.
+              // One extra upsert per turn, off the critical path.
+              const questions: string[] = Array.isArray(ev.questions) ? ev.questions : []
+              if (!questions.length || !settledMessages) break
+              const settled = settledMessages
+              const withFollowUps: ChatMessage[] = settled.map((m, i) =>
+                i === settled.length - 1 && m.role === 'assistant'
+                  ? { ...m, followUps: questions }
+                  : m
+              )
+              settledMessages = withFollowUps
+              setMessages(withFollowUps)
+              syncToBackend(withFollowUps, titleRef.current)
+              break
             }
           }
         }
@@ -2672,7 +2779,7 @@ export function ChatView({
                     own spacing — a line between every prompt turned five
                     short sentences into a table. */}
                 <div className="flex flex-col border-t border-[var(--line)]">
-                  {FOLLOW_UP_PROMPTS.map((prompt) => (
+                  {activeFollowUps.map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => askFollowUp(prompt)}
