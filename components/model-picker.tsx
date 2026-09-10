@@ -22,13 +22,14 @@ import { SignUpButton } from '@clerk/nextjs'
 
 import { CHAT_MODELS, getModel, type ChatModelId } from '@/lib/models'
 import { cn } from '@/lib/utils'
+import { OmniMark } from '@/components/omni-mark'
 
 /**
  * Each model's real maker mark rather than a generic glyph — Gemini is
- * Google's, Luna is OpenAI's, Best/Rix are Omni's own. The brand marks render
- * in `currentColor` (single-path, no brand colors) so they pick up whatever
- * color the row around them is already using — active/locked/etc — the same
- * way the `Lock`/`Check` icons do. `best` reuses the chip icon Settings'
+ * Google's, Luna is OpenAI's, Best/Rix are Omni's own. All four render in
+ * `currentColor` — no brand colours — so they pick up whatever colour the row
+ * around them is already using (active, locked, and so on), the same way the
+ * `Lock`/`Check` icons do. `best` reuses the chip icon Settings'
  * now-removed Model tab used for itself; nothing else in the app has claimed
  * it since.
  */
@@ -48,25 +49,27 @@ function OpenAIIcon({ className }: { className?: string }) {
   )
 }
 
-function OmniIcon({ className }: { className?: string }) {
-  return (
-    <span className={cn('relative inline-block', className)} aria-hidden>
-      <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)]" />
-      <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--rust)] opacity-85 [transform:translate(23%,9%)_scale(0.72)]" />
-      <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)] opacity-50 [transform:translate(-4%,27%)_scale(0.5)]" />
-    </span>
-  )
-}
+function ModelIcon({ id, size, className }: { id: ChatModelId; size: number; className?: string }) {
+  // Every mark here draws edge-to-edge in its own box, which is a touch large
+  // for a list where the marks sit beside a label rather than standing alone.
+  // `scale` brings the rendered size down without touching the box (so the
+  // row's gap and alignment stay put), and `opacity` backs the currentColor
+  // fill off full-strength foreground.
+  if (id === 'rix') {
+    // Rix is Omni's own model, so its mark is Omni's own — but in this list it
+    // is one maker mark among four, and the other three are single-colour. Full
+    // brand colour would make it the only thing on the menu asking to be looked
+    // at. `current` keeps the shape and drops the colour, so it picks up the
+    // row's state (accent when selected, foreground otherwise) like the rest.
+    // Scaled through `size` rather than a transform: the mark thins its own
+    // stroke as it shrinks, and it can only do that if it knows the real size.
+    return (
+      <span className={cn('inline-flex items-center justify-center opacity-95', className)}>
+        <OmniMark size={Math.round(size * 0.82)} tone="current" />
+      </span>
+    )
+  }
 
-function ModelIcon({ id, className }: { id: ChatModelId; className?: string }) {
-  if (id === 'rix') return <OmniIcon className={className} />
-
-  // The vector marks (chip glyph, Google "G", OpenAI mark) all draw edge-to-edge
-  // in their viewBox, while Omni's PNG carries built-in padding around the
-  // hexagon — at an identical box size they read both bigger and higher-contrast
-  // than Omni's mark. `scale` brings their rendered size down to match without
-  // touching the box itself (so the row's gap/alignment stay untouched), and
-  // `opacity` backs off their currentColor fill from full-strength foreground.
   let icon: ReactNode
   if (id === 'luna') icon = <OpenAIIcon className="h-full w-full" />
   else if (id === 'gemini') icon = <GoogleIcon className="h-full w-full" />
@@ -217,7 +220,7 @@ export function ModelPicker({
                       across that whole block floats it away from the label
                       it's supposed to sit next to. `mt-0.5` instead lines it up
                       with the label's cap-height on the first line. */}
-                  <ModelIcon id={m.id} className="h-[18px] w-[18px] shrink-0 mt-0.5" />
+                  <ModelIcon id={m.id} size={18} className="h-[18px] w-[18px] shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[14px] font-semibold leading-none">{m.label}</span>
@@ -269,7 +272,7 @@ export function ModelPicker({
                           m.authLocked && 'opacity-50',
                         )}
                       >
-                        <ModelIcon id={m.id} className="h-5 w-5 shrink-0" />
+                        <ModelIcon id={m.id} size={20} className="h-5 w-5 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span
