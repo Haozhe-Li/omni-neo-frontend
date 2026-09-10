@@ -15,6 +15,7 @@ import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesRail } from '@/components/source-rail'
+import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
@@ -1033,6 +1034,10 @@ export function ChatView({
    * rest on what.
    */
   const [activeTurn, setActiveTurn] = useState<number | null>(null)
+
+  // The rail caps its height and hides its scrollbar, so without this a long
+  // source list ends in a hard cut through whichever card the cap lands on.
+  const railFade = useEdgeFade<HTMLElement>()
 
   useEffect(() => {
     const el = scrollRef.current
@@ -2688,7 +2693,11 @@ export function ChatView({
               to the turn on screen and carrying the detail the old drawer
               had: host, credibility, and the passage the answer drew on. */}
           {(hasTurnSources || checkSourceState) && (
-            <aside className="omni-thread-rail omni-hide-scrollbar sticky top-6 max-h-[calc(100dvh-170px)] flex-col gap-2.5 overflow-y-auto pb-6">
+            <aside
+              ref={railFade.ref}
+              style={railFade.style}
+              className="omni-thread-rail omni-hide-scrollbar omni-edge-fade sticky top-6 max-h-[calc(100dvh-170px)] flex-col gap-2.5 overflow-y-auto pb-6"
+            >
               <SourcesRail
                 cited={turnSources.cited}
                 unused={turnSources.unused}

@@ -1449,3 +1449,29 @@
   width: 0;
   height: 0;
 }
+
+/* ── Softened scroll edges ─────────────────────────────────────────────────
+   Pairs with `useEdgeFade`. The panel's own content dissolves at whichever
+   edge has more past it, so a list that continues never ends in a hard cut
+   through the middle of a card — and the fade doubles as the only "there is
+   more" cue the panel needs. Both custom properties default to 0, so the
+   class is inert until the hook says otherwise and a short list is never
+   clipped. */
+.omni-edge-fade {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent 100%
+  );
+}

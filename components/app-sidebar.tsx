@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import type { TodoItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SettingsDialog, TAB_SLUGS, type TabId } from '@/components/settings-dialog'
@@ -125,6 +126,9 @@ export function AppSidebar({
     const clerk = useClerk()
     const { fetchWithAuth } = useApi()
     const [mounted, setMounted] = useState(false)
+    // Same hidden scrollbar as the sources rail, so the same soft edge — a
+    // long history otherwise ends mid-title against a hard line.
+    const recentFade = useEdgeFade<HTMLDivElement>()
     const [history, setHistory] = useState<StoredChat[]>([])
     const [generatingThreadIds, setGeneratingThreadIds] = useState<Set<string>>(new Set())
     // Threads optimistically shown while generating, before the backend list has
@@ -771,7 +775,11 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             {/* Same treatment as the sources rail: a classic scrollbar in a
                 narrow column of hairline-separated text lands a grey track
                 right where the titles end and reads as a second border. */}
-            <div className="omni-hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-5 pt-7 pb-2">
+            <div
+                ref={recentFade.ref}
+                style={recentFade.style}
+                className="omni-hide-scrollbar omni-edge-fade flex-1 overflow-y-auto overflow-x-hidden px-5 pt-7 pb-2"
+            >
                 {isExpanded && (
                     <>
                         <div className="omni-eyebrow pb-2">Recent</div>
