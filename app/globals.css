@@ -1455,10 +1455,19 @@
 }
 
 /* The narrow-width counterpart to `.omni-thread-rail`: the same source list,
-   stacked under the answer once the rail's column no longer fits. Exactly one
-   of the two is ever visible. */
+   stacked under the answer once the rail's column no longer fits. Below 640px
+   this steps aside too, for the phone sheet in chat-view.tsx (a fixed overlay,
+   not a Tailwind display class, so it isn't toggled here) — a phone has no
+   room to spare for a growing inline list, and a check-source result needs to
+   land where the tap happened, not in a block scrolled out of view. */
 .omni-thread-inline-sources {
   display: flex;
+}
+
+@media (max-width: 639px) {
+  .omni-thread-inline-sources {
+    display: none;
+  }
 }
 
 @container omni-thread (min-width: 1050px) {

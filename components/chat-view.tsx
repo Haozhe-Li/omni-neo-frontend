@@ -702,6 +702,15 @@ export function ChatView({
   // hold two copies of the same list in their head.
   const [checkSourceState, setCheckSourceState] = useState<CheckSourceState | null>(null)
 
+  // Mobile-only: below the width where either the sticky rail or the inline
+  // list fits (see `.omni-thread-inline-sources` in globals.css), a turn's
+  // sources live behind a button instead — this is which turn's `AnswerFooter`
+  // opened it. Irrelevant once `checkSourceState` is set: a check result takes
+  // the sheet over regardless of which turn's button was tapped, same as it
+  // takes the rail over on desktop.
+  const [mobileSourcesOpen, setMobileSourcesOpen] = useState(false)
+  const [mobileSourcesTurn, setMobileSourcesTurn] = useState<number | null>(null)
+
   // "Check source" from the text-selection menu: `turn` is the assistant
   // message index the highlighted claim came from (see data-message-index
   // below) — the backend confines matches to sources introduced at or
@@ -712,6 +721,13 @@ export function ChatView({
         toast.error('Check source is unavailable here')
         return
       }
+      // Harmless on desktop — nothing reads this state there — but on mobile
+      // it's what pops the sheet open at the exact moment a claim is tapped,
+      // rather than updating a list the reader has already scrolled past.
+      // `turn` is set too so dismissing the check result (not closing the
+      // sheet) falls back to that turn's own list instead of an empty one.
+      setMobileSourcesOpen(true)
+      setMobileSourcesTurn(turn)
       setCheckSourceState({ status: 'loading', claim, matches: [] })
       try {
         const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
@@ -2783,6 +2799,8 @@ export function ChatView({
                             onRegenerate={isLocked ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                             isSignedIn={!!isSignedIn}
+                            sourceCount={sourcesByTurn.get(i)?.cited.length ?? 0}
+                            onOpenSources={() => { setMobileSourcesTurn(i); setMobileSourcesOpen(true) }}
                           />
                         ) : null}
                       </div>
@@ -2872,9 +2890,11 @@ export function ChatView({
           )}
           </div>
 
-          {/* Below the rail's breakpoint the same list runs under the answer
-              at full width, so sources are never unreachable — they just stop
-              being something you read alongside the text. */}
+          {/* Between the rail's breakpoint and the phone-sheet one below (see
+              `.omni-thread-inline-sources` in globals.css — hidden under
+              640px), the same list runs under the answer at full width: a
+              tablet or a narrow desktop window has room to spare for it, just
+              not room for the two columns the rail needs. */}
           {(hasTurnSources || checkSourceState) && (
             <div className="omni-thread-inline-sources mx-auto w-full max-w-[760px] flex-col gap-3">
               <SourcesRail
@@ -2884,6 +2904,43 @@ export function ChatView({
                 checkSource={checkSourceState}
                 onDismissCheck={() => setCheckSourceState(null)}
               />
+            </div>
+          )}
+
+          {/* Phone sheet — under 640px there's no width to spare for a rail
+              or an inline list, and a check-source result needs to appear
+              where the tap happened rather than in a block the reader has
+              long since scrolled past. One instance for the whole thread:
+              which turn it's showing is `mobileSourcesTurn`, set by whichever
+              `AnswerFooter` button opened it (or by `handleCheckSource`,
+              which also takes the sheet over regardless of which turn's
+              button — if any — was last tapped, same as the rail on desktop
+              lets a check result take it over mid-browse. */}
+          {mobileSourcesOpen && (
+            <div className="fixed inset-0 z-50 flex flex-col bg-[var(--paper)] sm:hidden animate-in fade-in slide-in-from-bottom-8 duration-300">
+              <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-[var(--line)] px-4">
+                {/* Static, unlike the rail's own heading right below it — that
+                    one already says "Sources · 4" or "Checking sources…", and
+                    echoing it up here just to fill the bar would read as the
+                    same fact stated twice in two sizes. This bar exists to
+                    hold the close button, not to repeat the count. */}
+                <span className="text-[14px] text-[var(--ink)]">Sources</span>
+                <button
+                  onClick={() => { setMobileSourcesOpen(false); setCheckSourceState(null); setMobileSourcesTurn(null) }}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
+                  title="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="custom-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <SourcesRail
+                  cited={mobileSourcesTurn != null ? sourcesByTurn.get(mobileSourcesTurn)?.cited ?? [] : []}
+                  unused={mobileSourcesTurn != null ? sourcesByTurn.get(mobileSourcesTurn)?.unused ?? [] : []}
+                  checkSource={checkSourceState}
+                  onDismissCheck={() => setCheckSourceState(null)}
+                />
+              </div>
             </div>
           )}
 
