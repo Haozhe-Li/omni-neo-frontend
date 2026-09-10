@@ -14,8 +14,7 @@ import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party-title'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
-import { SourcesPanel } from '@/components/sources-panel'
-import { SourceList } from '@/components/source-rail'
+import { SourcesRail } from '@/components/source-rail'
 import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
@@ -42,6 +41,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { ModelPicker } from '@/components/model-picker'
 import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, normalizeModelId, type ChatModelId } from '@/lib/models'
+import { extractCitedNumbers } from '@/lib/markdown'
 import type { ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
 import { canHighlightExcerpt } from '@/lib/highlight'
@@ -650,13 +650,10 @@ export function ChatView({
   const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState<string | null>(null)
 
-  // The side panel is now ONLY the `/check_source` result view. Browsing the
-  // thread's sources used to open the same panel from a button in the answer
-  // footer; that button and this panel showed the same list at two different
-  // levels of detail, and both could be open at once over each other. The
-  // sources rail beside the answer is the single browse surface now, and it
-  // absorbed this panel's per-source detail — see components/source-rail.tsx.
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  // "Check source" takes the sources rail over rather than opening a panel of
+  // its own: which of these sources says that is a question about the list
+  // already on screen, and answering it in a second surface made the reader
+  // hold two copies of the same list in their head.
   const [checkSourceState, setCheckSourceState] = useState<CheckSourceState | null>(null)
 
   // "Check source" from the text-selection menu: `turn` is the assistant
@@ -670,7 +667,6 @@ export function ChatView({
         return
       }
       setCheckSourceState({ status: 'loading', claim, matches: [] })
-      setSourcesOpen(true)
       try {
         const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
           method: 'POST',
@@ -680,7 +676,6 @@ export function ChatView({
         if (!response.ok) {
           toast.error(data?.error || 'Failed to check source')
           setCheckSourceState(null)
-          setSourcesOpen(false)
           return
         }
         setCheckSourceState({ status: 'done', claim, matches: data?.matches ?? [] })
@@ -688,7 +683,6 @@ export function ChatView({
         console.error('Check source error:', error)
         toast.error('Failed to check source')
         setCheckSourceState(null)
-        setSourcesOpen(false)
       }
     },
     [threadId, fetchWithAuth]
@@ -995,6 +989,43 @@ export function ChatView({
       }),
     [messages, mergedSources]
   )
+
+  /**
+   * The sources shown beside the answer — scoped to the LAST assistant turn,
+   * not accumulated across the thread.
+   *
+   * A five-turn thread's merged list is mostly sources that have nothing to
+   * do with the answer being read; stacking them turns the rail into a log.
+   * So each turn shows its own: what it cited (resolved against the
+   * thread-wide map, because a citation can legitimately reach back to a
+   * source an earlier turn fetched) and what it opened without citing.
+   */
+  const turnSources = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (m.role !== 'assistant') continue
+      const text = parsedByIndex[i]?.text ?? m.content ?? ''
+      if (!text.trim() && !(m.sources?.length)) continue
+      const citedNumbers = extractCitedNumbers(text)
+      // Cited, in the order the answer cites them.
+      const seen = new Set<number>()
+      const cited: Source[] = []
+      for (const n of citedNumbers) {
+        if (seen.has(n)) continue
+        seen.add(n)
+        const src = mergedSources.find((s) => s.n === n)
+        if (src) cited.push(src)
+      }
+      // Not-cited is scoped to THIS turn's own fetches — folding in earlier
+      // turns' leftovers would put the whole thread back in the rail by
+      // another route.
+      const unused = (m.sources ?? []).filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n)))
+      return { cited, unused }
+    }
+    return { cited: [] as Source[], unused: [] as Source[] }
+  }, [messages, parsedByIndex, mergedSources])
+
+  const hasTurnSources = turnSources.cited.length > 0 || turnSources.unused.length > 0
 
   // Flatten artifacts/reports across the whole conversation for the panel.
   const allArtifacts: ChartArtifact[] = messages.flatMap((m) => m.artifacts ?? [])
@@ -2576,16 +2607,18 @@ export function ChatView({
           </div>
 
           {/* ── Sources rail ─────────────────────────────────────────────
-              The thread's one and only sources surface at this width. It
-              carries the same detail the old drawer did — host, credibility,
-              and the passage the answer drew on — because there is no longer
-              a second place to go for it. */}
-          {mergedSources.length > 0 && (
-            <aside className="omni-thread-rail custom-scrollbar sticky top-6 max-h-[calc(100dvh-170px)] flex-col gap-2.5 overflow-y-auto pb-6">
-              <div className="omni-eyebrow mb-0.5">
-                Sources · {mergedSources.length}
-              </div>
-              <SourceList sources={mergedSources} compact />
+              The thread's one and only sources surface at this width, scoped
+              to the turn on screen and carrying the detail the old drawer
+              had: host, credibility, and the passage the answer drew on. */}
+          {(hasTurnSources || checkSourceState) && (
+            <aside className="omni-thread-rail omni-hide-scrollbar sticky top-6 max-h-[calc(100dvh-170px)] flex-col gap-2.5 overflow-y-auto pb-6">
+              <SourcesRail
+                cited={turnSources.cited}
+                unused={turnSources.unused}
+                checkSource={checkSourceState}
+                onDismissCheck={() => setCheckSourceState(null)}
+                compact
+              />
             </aside>
           )}
           </div>
@@ -2593,10 +2626,14 @@ export function ChatView({
           {/* Below the rail's breakpoint the same list runs under the answer
               at full width, so sources are never unreachable — they just stop
               being something you read alongside the text. */}
-          {mergedSources.length > 0 && (
+          {(hasTurnSources || checkSourceState) && (
             <div className="omni-thread-inline-sources mx-auto w-full max-w-[760px] flex-col gap-3">
-              <div className="omni-eyebrow mb-1">Sources · {mergedSources.length}</div>
-              <SourceList sources={mergedSources} />
+              <SourcesRail
+                cited={turnSources.cited}
+                unused={turnSources.unused}
+                checkSource={checkSourceState}
+                onDismissCheck={() => setCheckSourceState(null)}
+              />
             </div>
           )}
 
@@ -2986,16 +3023,6 @@ export function ChatView({
           </div>
         </div>
       )}
-
-      {/* "Check source" results — the passages backing a highlighted claim,
-          opened from the text-selection menu. Browsing the thread's sources
-          is the rail's job; this panel only ever shows a check. */}
-      <SourcesPanel
-        sources={[]}
-        open={sourcesOpen}
-        onClose={() => { setSourcesOpen(false); setCheckSourceState(null) }}
-        checkSource={checkSourceState}
-      />
 
       {/* Confirm before regenerating/editing an earlier message — it discards
           every turn after it, not just the one being redone. */}

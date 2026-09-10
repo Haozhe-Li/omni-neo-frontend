@@ -1427,3 +1427,19 @@
     display: none;
   }
 }
+
+/* ── Scrollbars that don't draw ────────────────────────────────────────────
+   For panels whose scroll is incidental to their layout rather than part of
+   it — the sources rail above all. A classic scrollbar there lays a grey
+   track down the right edge of the card column, which reads as a border on
+   the cards and cuts the rail off from the page. Content still scrolls by
+   wheel, trackpad, touch and keyboard; only the chrome is gone. */
+.omni-hide-scrollbar {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* legacy Edge */
+}
+
+.omni-hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
