@@ -1475,3 +1475,18 @@
     transparent 100%
   );
 }
+
+/* Follow-up rows resolving in after the answer. A short rise plus a fade —
+   the same gesture the trace rows use, so a turn settles in one visual
+   language rather than two. `both` holds the pre-state during the stagger
+   delay, otherwise a delayed row paints at full opacity first and then
+   animates, which is the flicker this is meant to remove. */
+.omni-followup-in {
+  animation: omni-rise 320ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omni-followup-in {
+    animation: none;
+  }
+}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { BookOpen, ChevronDown, FileText, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
-import { highlightExcerpt } from '@/lib/highlight'
+import { highlightExcerpt, type HighlightSegment } from '@/lib/highlight'
 import { isTrustedTier } from '@/lib/credibility'
 import { CredibilityTag } from '@/components/credibility-badge'
 
@@ -48,6 +48,47 @@ function cleanSnippet(raw: string): string {
       .trim()
       .replace(/^(?=[a-z\u00e0-\u024f])/, '\u2026 ')
   )
+}
+
+/**
+ * Trim a highlighted passage down to a window around the match.
+ *
+ * `highlightExcerpt` returns the matched phrase plus a couple of lines either
+ * side, and on a long chunk that is still a wall of text in a 248px column.
+ * Worse, clamping it with CSS would sometimes cut off the highlight itself —
+ * the one part worth showing. So the trim happens per segment instead:
+ * leading context keeps its tail, trailing context keeps its head, and the
+ * match survives whole in between.
+ */
+const _CONTEXT_CHARS = 90
+const _MATCH_CHARS = 220
+
+function windowAround(segments: HighlightSegment[]): HighlightSegment[] {
+  const first = segments.findIndex((s) => s.highlight)
+  const last = segments.map((s) => s.highlight).lastIndexOf(true)
+  if (first === -1) {
+    // No match found — `highlightExcerpt` already fell back to a plain prefix.
+    const text = segments.map((s) => s.text).join('')
+    return [{ text: text.slice(0, _CONTEXT_CHARS * 2).trimEnd() + (text.length > _CONTEXT_CHARS * 2 ? '…' : ''), highlight: false }]
+  }
+  return segments.flatMap((seg, i) => {
+    if (seg.highlight) {
+      const t = seg.text.length > _MATCH_CHARS ? seg.text.slice(0, _MATCH_CHARS).trimEnd() + '…' : seg.text
+      return [{ text: t, highlight: true }]
+    }
+    if (i < first) {
+      // Only the context immediately before the match earns space.
+      if (i !== first - 1) return []
+      const t = seg.text.length > _CONTEXT_CHARS ? '…' + seg.text.slice(-_CONTEXT_CHARS).trimStart() : seg.text
+      return [{ text: t, highlight: false }]
+    }
+    if (i > last) {
+      if (i !== last + 1) return []
+      const t = seg.text.length > _CONTEXT_CHARS ? seg.text.slice(0, _CONTEXT_CHARS).trimEnd() + '…' : seg.text
+      return [{ text: t, highlight: false }]
+    }
+    return [seg]
+  })
 }
 
 /** Float official/trusted/first-party sources up without otherwise reshuffling. */
@@ -147,33 +188,37 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
  * material, the same way a blockquote does inside an answer.
  */
 function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: boolean }) {
-  const segments = highlightExcerpt(match.chunk, match.excerpt, match.title, match.url)
+  const segments = windowAround(highlightExcerpt(match.chunk, match.excerpt, match.title, match.url))
   const isDocument = !match.url
 
+  // Deliberately the same shape as SourceCard — head, title, body, tag, at the
+  // same sizes. A source is a source whether you arrived at it by browsing or
+  // by checking a claim, and giving the check view its own card made the rail
+  // look like it had swapped to a different product mid-thread. The only
+  // difference is what the body says: the passage, with the matched phrase
+  // marked, in place of the snippet.
   const body = (
     <>
       <CardHead url={match.url} />
       <span
-        className={`mt-2 line-clamp-2 text-[var(--ink)] ${
-          compact ? 'text-[13.5px] leading-[1.4]' : 'text-[16px] leading-[1.45]'
+        className={`mt-2 text-[var(--ink)] ${
+          compact ? 'line-clamp-3 text-[13.5px] leading-[1.4]' : 'line-clamp-2 text-[16px] leading-[1.45]'
         }`}
       >
         {match.title}
       </span>
       <span
-        className={`mt-2.5 block border-l-2 border-[var(--rust)] pl-3 ${
-          compact ? 'text-[12.5px] leading-[1.65]' : 'text-[14px] leading-[1.7]'
+        className={`mt-1.5 block ${
+          compact ? 'text-[12px] leading-[1.6]' : 'text-[14px] leading-[1.6]'
         }`}
       >
         {segments.map((seg, i) =>
           seg.highlight ? (
-            <span key={i} className="rounded-[3px] bg-[var(--teal-tint)] px-0.5 text-[var(--ink)]">
+            <span key={i} className="rounded-[3px] bg-[var(--teal-tint)] px-0.5 text-[var(--ink-body)]">
               {seg.text}
             </span>
           ) : (
-            // Context, deliberately faint: it is here to put the phrase back
-            // in its sentence, not to be read.
-            <span key={i} className="text-[var(--ink-fainter)]">
+            <span key={i} className="text-[var(--ink-muted)]">
               {seg.text}
             </span>
           )
@@ -185,7 +230,7 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
     </>
   )
 
-  const className = `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] ${
+  const className = `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)] ${
     compact ? 'px-3.5 py-3' : 'px-5 py-4'
   }`
 
@@ -276,14 +321,17 @@ export function SourcesRail({
           </button>
         </div>
 
-        {/* The claim, quoted back. Without it the passages below answer a
-            question the reader has to hold in their head. Set in the display
-            serif because it is a quotation of the answer's own prose, not a
-            piece of UI copy about it. */}
-        <div className="rounded-[16px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-4 py-3.5">
+        {/* The claim, quoted back — without it the passages below answer a
+            question the reader has to hold in their head. Set in the UI face
+            at body size, not the display serif: it sits directly above a
+            column of source cards, and a large italic serif line there read
+            as a pull-quote demanding to be read rather than as the reference
+            point for what follows. Clamped, because a long selection is
+            recognisable from its opening. */}
+        <div className="rounded-[16px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-3.5 py-3">
           <p
-            className={`omni-display italic text-[var(--ink)] ${
-              compact ? 'text-[15px] leading-[1.4]' : 'text-[18px] leading-[1.4]'
+            className={`line-clamp-3 text-[var(--ink-body)] ${
+              compact ? 'text-[12.5px] leading-[1.55]' : 'text-[14px] leading-[1.6]'
             }`}
           >
             {checkSource.claim}

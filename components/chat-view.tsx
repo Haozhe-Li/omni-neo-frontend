@@ -1096,6 +1096,18 @@ export function ChatView({
    * while you read an earlier one is actively misleading about which claims
    * rest on what.
    */
+  /**
+   * True between `done` and the `follow_up` that follows it.
+   *
+   * The section is rendered the moment the answer completes, but its contents
+   * are still being generated for another half second — so it holds skeleton
+   * rows for that window instead of popping fully-formed content in. Cleared
+   * by the event, and again when the reader closes, so a turn whose backend
+   * never sends one falls through to the local pool rather than pulsing
+   * forever.
+   */
+  const [followUpsPending, setFollowUpsPending] = useState(false)
+
   const [activeTurn, setActiveTurn] = useState<number | null>(null)
 
   // The rail caps its height and hides its scrollbar, so without this a long
@@ -1727,6 +1739,9 @@ export function ChatView({
               settledMessages = finalMessages
               setMessages(finalMessages)
               syncToBackend(finalMessages, titleRef.current)
+              // The backend skips generation for stopped/errored turns, so
+              // only wait on it when there is an answer to follow up on.
+              setFollowUpsPending(!!text && !isStoppingRef.current)
               setIsLoading(false)
               setStreamingIndex(-1)
               // Deliberately NOT returning. `done` means the answer is
@@ -1752,6 +1767,7 @@ export function ChatView({
               settledMessages = withFollowUps
               setMessages(withFollowUps)
               syncToBackend(withFollowUps, titleRef.current)
+              setFollowUpsPending(false)
               break
             }
           }
@@ -1767,6 +1783,7 @@ export function ChatView({
         syncToBackend(stoppedMessages, titleRef.current)
       }
       activeReaderRef.current = null
+      setFollowUpsPending(false)
       setIsLoading(false)
       setStreamingIndex(-1)
     },
@@ -2779,18 +2796,43 @@ export function ChatView({
                     own spacing — a line between every prompt turned five
                     short sentences into a table. */}
                 <div className="flex flex-col border-t border-[var(--line)]">
-                  {activeFollowUps.map((prompt) => (
-                    <button
-                      key={prompt}
-                      onClick={() => askFollowUp(prompt)}
-                      className="group flex items-center justify-between gap-4 py-3.5 text-left text-[16px] text-[var(--ink-body)] transition-colors hover:text-[var(--teal)]"
-                    >
-                      <span>{prompt}</span>
-                      <span className="shrink-0 text-[var(--ink-fainter)] transition-colors group-hover:text-[var(--teal)]">
-                        +
-                      </span>
-                    </button>
-                  ))}
+                  {followUpsPending
+                    ? /* The suggestions are generated after the answer, so
+                         there is a real half-second where the section exists
+                         and its contents do not. Four skeleton rows hold the
+                         space at the exact row height, so nothing below jumps
+                         when the questions land — and the reader can see that
+                         something is coming rather than watching a block
+                         appear out of nowhere. Widths vary because four
+                         identical bars read as a loading bar, not as a list
+                         of questions. */
+                      [62, 78, 54, 70].map((w, i) => (
+                        <div key={i} className="flex items-center py-3.5" aria-hidden>
+                          <span
+                            className="h-[11px] rounded-full bg-[var(--line-strong)]"
+                            style={{
+                              width: `${w}%`,
+                              animation: `omni-soft-pulse 1300ms ease-in-out ${i * 130}ms infinite`,
+                            }}
+                          />
+                        </div>
+                      ))
+                    : activeFollowUps.map((prompt, i) => (
+                        <button
+                          key={prompt}
+                          onClick={() => askFollowUp(prompt)}
+                          className="omni-followup-in group flex items-center justify-between gap-4 py-3.5 text-left text-[16px] text-[var(--ink-body)] transition-colors hover:text-[var(--teal)]"
+                          // Staggered so the list resolves top-to-bottom the
+                          // way it would be read, rather than all four
+                          // arriving on the same frame.
+                          style={{ animationDelay: `${i * 55}ms` }}
+                        >
+                          <span>{prompt}</span>
+                          <span className="shrink-0 text-[var(--ink-fainter)] transition-colors group-hover:text-[var(--teal)]">
+                            +
+                          </span>
+                        </button>
+                      ))}
                 </div>
               </div>
             )}
