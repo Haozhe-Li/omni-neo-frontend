@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Link2, Telescope, Plane, GraduationCap } from 'lucide-react'
+import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, SquarePen, Paperclip, Link2, Telescope, Plane, GraduationCap } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -957,7 +957,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         title="New thread"
         className="fixed top-3 right-3 z-40 p-2.5 rounded-full text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors md:hidden"
       >
-        <Plus size={20} />
+        <SquarePen size={20} />
       </button>
 
       {/* Auto-detecting overlay */}

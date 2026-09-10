@@ -1,7 +1,7 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, SquarePen, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
@@ -2402,6 +2402,15 @@ export function ChatView({
               <Pencil size={12} strokeWidth={1.75} />
             </button>
           </div>
+          {isMobile && (
+            <button
+              onClick={onNewSearch}
+              title="New thread"
+              className="-mr-2 shrink-0 rounded-full p-2 text-[var(--ink-muted)] hover:bg-[var(--sand)]"
+            >
+              <SquarePen size={20} />
+            </button>
+          )}
         </header>
 
         {/* Title editor — drops down below the header instead of editing
