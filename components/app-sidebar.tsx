@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, type LucideIcon } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, type LucideIcon } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -603,33 +603,61 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
 
     const SidebarContent = (
         <>
-            {/* ── Mark ───────────────────────────────────────────────────────
-                Three offset rings — the same drawing at 22px here and at 20px
-                on mobile — rather than a raster logo, so it takes the ink and
-                teal from the theme instead of needing a second file for dark
-                mode. The expand control lives only at the foot of the rail:
-                one toggle, in one place, whichever state the rail is in. */}
+            {/* ── Mark + collapse ────────────────────────────────────────────
+                Three offset rings rather than a raster logo, so the mark takes
+                its ink and teal from the theme instead of needing a second
+                file for dark mode.
+
+                The toggle rides the mark in both states, which is why it is
+                not a row of its own: expanded it sits opposite the wordmark;
+                collapsed there is no room beside a 22px mark, so the mark
+                itself becomes the control — it fades out under the cursor and
+                the expand icon fades in behind it. One affordance, in the
+                place your eye already goes. */}
             <div className={`flex items-center px-5 pt-6 pb-1 ${isExpanded ? 'justify-between gap-3' : 'justify-center'}`}>
-                <Link
-                    href="/"
-                    className="flex items-center gap-2.5 min-h-[28px] group"
-                    aria-label="Omni — home"
-                >
-                    <OmniMark size={22} />
-                    {isExpanded && (
-                        <span className="font-[family-name:var(--font-plex)] text-[25px] leading-none pt-[2px] tracking-[-0.01em] text-[var(--ink)] group-hover:text-[var(--teal)] transition-colors">
-                            omni
-                        </span>
-                    )}
-                </Link>
-                {isExpanded && !isMobile && (
-                    <div className="flex items-center gap-1">
-                        {isSyncing && (
-                            <span title="Syncing…" className="flex items-center px-1">
-                                <Loader2 size={13} className="animate-spin text-[var(--ink-faint)]" />
+                {isExpanded ? (
+                    <>
+                        <Link
+                            href="/"
+                            className="group flex min-h-[28px] items-center gap-2.5"
+                            aria-label="Omni — home"
+                        >
+                            <OmniMark size={22} />
+                            <span className="font-[family-name:var(--font-plex)] pt-[2px] text-[25px] leading-none tracking-[-0.01em] text-[var(--ink)] transition-colors group-hover:text-[var(--teal)]">
+                                omni
                             </span>
-                        )}
-                    </div>
+                        </Link>
+                        <div className="flex items-center gap-1">
+                            {isSyncing && (
+                                <span title="Syncing…" className="flex items-center px-1">
+                                    <Loader2 size={13} className="animate-spin text-[var(--ink-faint)]" />
+                                </span>
+                            )}
+                            {!isMobile && (
+                                <button
+                                    onClick={onToggle}
+                                    className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--ink-faint)] transition-colors hover:bg-[var(--sand-deep)] hover:text-[var(--teal)]"
+                                    title="Collapse sidebar"
+                                >
+                                    <PanelLeftClose size={16} strokeWidth={1.5} />
+                                </button>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <button
+                        onClick={onToggle}
+                        className="group relative flex h-7 w-7 items-center justify-center"
+                        title="Expand sidebar"
+                        aria-label="Expand sidebar"
+                    >
+                        <span className="transition-opacity duration-200 group-hover:opacity-0">
+                            <OmniMark size={22} />
+                        </span>
+                        <span className="absolute inset-0 flex items-center justify-center rounded-full text-[var(--teal)] opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                            <PanelLeftOpen size={16} strokeWidth={1.5} />
+                        </span>
+                    </button>
                 )}
             </div>
 
@@ -812,22 +840,10 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 )}
             </div>
 
-            {/* ── Rail footer ────────────────────────────────────────────── */}
+            {/* ── Rail footer ─────────────────────────────────────────────
+                Just the account now — the collapse toggle moved up to the
+                mark, where it is one control instead of a second row. */}
             <div className="mt-auto flex flex-col gap-1 px-3.5 pb-5 pt-3">
-                {!isMobile && (
-                    <button
-                        onClick={onToggle}
-                        className={`flex items-center gap-3 rounded-full px-3.5 py-2 text-[14px] whitespace-nowrap text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)] ${isExpanded ? '' : 'justify-center'}`}
-                        title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-                    >
-                        <span
-                            className="h-[11px] w-[11px] shrink-0 border-l-[1.5px] border-t-[1.5px] border-current transition-transform"
-                            style={{ transform: `rotate(${isExpanded ? -45 : 135}deg)` }}
-                        />
-                        {isExpanded && <span>Collapse</span>}
-                    </button>
-                )}
-
                 {/* Auth row — only after mount, to avoid an SSR/client mismatch */}
                 {mounted && (
                     isSignedIn ? (
