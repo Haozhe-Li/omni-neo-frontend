@@ -16,6 +16,40 @@ function hostOf(url: string) {
   }
 }
 
+/**
+ * Source snippets are raw scraped chunks, and they read like it: half-broken
+ * markdown links from a wiki mirror, reference brackets, table pipes, runs of
+ * newlines from a stripped nav. None of that survives being shown at 12px in
+ * a 248px column — it just looks like the card is corrupted. This pulls the
+ * prose back out: link text without the target, no emphasis marks, no
+ * citation or edit brackets, single spaces.
+ */
+function cleanSnippet(raw: string): string {
+  return (
+    raw
+      .replace(/```[\s\S]*?```/g, ' ')
+      // `[label](/target)`, and the bare `](/target)` fragments left behind
+      // when a scraper cuts a link in half.
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\]\([^)]*\)/g, '')
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+      .replace(/^\s{0,3}[-*+]\s+/gm, '')
+      .replace(/^\s{0,3}>\s?/gm, '')
+      // Wikipedia-style reference and edit markers.
+      .replace(/\[\s*(?:\d+|edit|citation needed)\s*\]/gi, '')
+      .replace(/[*_`~|]/g, ' ')
+      .replace(/\s*\n\s*/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+([,.;:!?])/g, '$1')
+      // A chunk almost always starts mid-sentence, so it opens on the tail of
+      // the previous one — a lone ". " or ", " before the first real word.
+      // An ellipsis says "picks up mid-thought" without looking like a typo.
+      .replace(/^[\s.,;:!?)\]}\u2019\u201d>-]+/, '')
+      .trim()
+      .replace(/^(?=[a-z\u00e0-\u024f])/, '\u2026 ')
+  )
+}
+
 /** Float official/trusted/first-party sources up without otherwise reshuffling. */
 function sortByTrust<T extends { credibility?: Source['credibility'] }>(list: T[]): T[] {
   return [...list].sort((a, b) => Number(isTrustedTier(b.credibility)) - Number(isTrustedTier(a.credibility)))
@@ -58,6 +92,7 @@ function CardHead({ url }: { url: string }) {
  */
 export function SourceCard({ source, compact = false }: { source: Source; compact?: boolean }) {
   const isDocument = !source.url
+  const snippet = source.content ? cleanSnippet(source.content) : ''
 
   const body = (
     <>
@@ -69,16 +104,16 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
       >
         {source.title}
       </span>
-      {source.content && (
+      {snippet && (
         <span
           className={`mt-1.5 text-[var(--ink-muted)] ${
-            compact ? 'line-clamp-[6] text-[12px] leading-[1.55]' : 'line-clamp-[8] text-[14px] leading-[1.6]'
+            compact ? 'line-clamp-[5] text-[12px] leading-[1.6]' : 'line-clamp-4 text-[14px] leading-[1.6]'
           }`}
         >
-          {source.content}
+          {snippet}
         </span>
       )}
-      <span className="mt-2 flex items-center">
+      <span className="mt-2.5 flex items-center">
         <CredibilityTag credibility={source.credibility} />
       </span>
     </>
@@ -103,13 +138,13 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
 }
 
 /**
- * A source that backs the claim currently being checked, with the supporting
- * phrase highlighted inside its surrounding lines.
+ * A source that backs the claim currently being checked.
  *
- * This used to live in a drawer that slid over the thread. It belongs here:
- * "which of these sources says that" is a question about the list already on
- * screen, and answering it in a second panel made the reader hold two lists
- * of the same sources in their head.
+ * The passage is set as a pull-quote rather than a grey code-ish block: the
+ * matched phrase sits at full ink weight with the surrounding lines dropped
+ * back, so "which words back this" is answerable at a glance instead of by
+ * reading the whole chunk. A rust rule down the left marks it as quoted
+ * material, the same way a blockquote does inside an answer.
  */
 function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: boolean }) {
   const segments = highlightExcerpt(match.chunk, match.excerpt, match.title, match.url)
@@ -119,35 +154,38 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
     <>
       <CardHead url={match.url} />
       <span
-        className={`mt-2 text-[var(--ink)] ${
-          compact ? 'line-clamp-3 text-[13.5px] leading-[1.4]' : 'line-clamp-2 text-[16px] leading-[1.45]'
+        className={`mt-2 line-clamp-2 text-[var(--ink)] ${
+          compact ? 'text-[13.5px] leading-[1.4]' : 'text-[16px] leading-[1.45]'
         }`}
       >
         {match.title}
       </span>
       <span
-        className={`mt-2 block whitespace-pre-wrap rounded-[10px] bg-[var(--sand)] px-2.5 py-2 text-[var(--ink-muted)] ${
-          compact ? 'text-[12px] leading-[1.55]' : 'text-[13.5px] leading-[1.6]'
+        className={`mt-2.5 block border-l-2 border-[var(--rust)] pl-3 ${
+          compact ? 'text-[12.5px] leading-[1.65]' : 'text-[14px] leading-[1.7]'
         }`}
       >
         {segments.map((seg, i) =>
           seg.highlight ? (
-            <mark
-              key={i}
-              className="rounded-[3px] bg-[var(--teal-tint)] px-0.5 text-[var(--ink)]"
-              style={{ boxShadow: '0 0 0 1px var(--teal-line)' }}
-            >
+            <span key={i} className="rounded-[3px] bg-[var(--teal-tint)] px-0.5 text-[var(--ink)]">
               {seg.text}
-            </mark>
+            </span>
           ) : (
-            <span key={i}>{seg.text}</span>
+            // Context, deliberately faint: it is here to put the phrase back
+            // in its sentence, not to be read.
+            <span key={i} className="text-[var(--ink-fainter)]">
+              {seg.text}
+            </span>
           )
         )}
+      </span>
+      <span className="mt-2.5 flex items-center">
+        <CredibilityTag credibility={match.credibility} />
       </span>
     </>
   )
 
-  const className = `flex flex-col rounded-[16px] border border-[var(--teal-line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] ${
+  const className = `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] ${
     compact ? 'px-3.5 py-3' : 'px-5 py-4'
   }`
 
@@ -171,18 +209,20 @@ function CheckSkeleton({ delay }: { delay: number }) {
       className="flex flex-col gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] px-3.5 py-3"
       style={{ animation: `omni-soft-pulse 1300ms ease-in-out ${delay}ms infinite` }}
     >
-      <div className="h-2.5 w-1/2 rounded-full bg-[var(--line-strong)]" />
-      <div className="h-2.5 w-4/5 rounded-full bg-[var(--line-strong)]" />
-      <div className="h-2.5 w-2/3 rounded-full bg-[var(--line-strong)]" />
+      <div className="h-2 w-1/2 rounded-full bg-[var(--line-strong)]" />
+      <div className="mt-1 h-2 w-4/5 rounded-full bg-[var(--line-strong)]" />
+      <div className="h-2 w-2/3 rounded-full bg-[var(--line-strong)]" />
     </div>
   )
 }
 
 export interface SourcesRailProps {
-  /** Sources this turn's answer cites inline, in citation order. */
+  /** Sources this turn's answer cites. While `researching`, all of them. */
   cited: Source[]
   /** Fetched this turn and not cited — collapsed behind a toggle. */
   unused: Source[]
+  /** Turn still running: show everything flat, nothing has been cited yet. */
+  researching?: boolean
   /** Set while a claim is being checked; takes the rail over until dismissed. */
   checkSource?: CheckSourceState | null
   onDismissCheck?: () => void
@@ -200,6 +240,7 @@ export interface SourcesRailProps {
 export function SourcesRail({
   cited,
   unused,
+  researching = false,
   checkSource,
   onDismissCheck,
   compact = false,
@@ -210,25 +251,41 @@ export function SourcesRail({
   useEffect(() => setShowUnused(false), [cited, unused])
 
   if (checkSource) {
+    const done = checkSource.status === 'done'
     return (
       <>
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="omni-eyebrow">
-            {checkSource.status === 'loading' ? 'Checking' : `Backing this claim · ${checkSource.matches.length}`}
-          </div>
+        {/* ── Checking a claim ──────────────────────────────────────────────
+            The rail becomes a single-question view: here is the sentence, and
+            here is what says it. The header says which of the two states it
+            is in, and the X is the only way out — this is a mode, not a
+            filter on the list underneath. */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="omni-eyebrow text-[var(--teal)]">
+            {done
+              ? checkSource.matches.length > 0
+                ? `Backed by ${checkSource.matches.length}`
+                : 'No direct match'
+              : 'Checking sources'}
+          </span>
           <button
             onClick={onDismissCheck}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--ink-fainter)] transition-colors hover:text-[var(--teal)]"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
             title="Back to sources"
           >
-            <X size={12} />
+            <X size={11} />
           </button>
         </div>
 
-        {/* The claim, quoted back — without it the highlighted passages below
-            are answers to a question the reader has to remember. */}
-        <div className="rounded-[14px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-3.5 py-3">
-          <p className={`text-[var(--ink-body)] ${compact ? 'text-[12.5px] leading-[1.5]' : 'text-[14px] leading-[1.55]'}`}>
+        {/* The claim, quoted back. Without it the passages below answer a
+            question the reader has to hold in their head. Set in the display
+            serif because it is a quotation of the answer's own prose, not a
+            piece of UI copy about it. */}
+        <div className="rounded-[16px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-4 py-3.5">
+          <p
+            className={`omni-display italic text-[var(--ink)] ${
+              compact ? 'text-[15px] leading-[1.4]' : 'text-[18px] leading-[1.4]'
+            }`}
+          >
             {checkSource.claim}
           </p>
         </div>
@@ -238,10 +295,10 @@ export function SourcesRail({
         ) : checkSource.matches.length > 0 ? (
           checkSource.matches.map((m, i) => <CheckMatchCard key={`${m.url}-${i}`} match={m} compact={compact} />)
         ) : (
-          <div className="flex flex-col items-center gap-3 px-2 py-8 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--line-strong)] px-4 py-7 text-center">
             <BookOpen size={20} strokeWidth={1.25} className="text-[var(--ink-fainter)]" />
             <p className="text-[12.5px] leading-[1.55] text-[var(--ink-muted)]">
-              No source here directly supports that passage — it may combine several, or rest on general knowledge.
+              Nothing here says this outright. It may combine several sources, or rest on general knowledge.
             </p>
           </div>
         )}
@@ -254,7 +311,9 @@ export function SourcesRail({
   return (
     <>
       <div className="omni-eyebrow">
-        {cited.length > 0 ? `Sources · ${cited.length}` : 'Sources'}
+        {/* Mid-run the count is still climbing, so it reads as an activity
+            rather than a total. */}
+        {researching ? `Reading · ${cited.length}` : `Sources · ${cited.length}`}
       </div>
 
       {sortByTrust(cited).map((s, i) => (
@@ -264,8 +323,9 @@ export function SourcesRail({
       {/* Read but not used: everything the agent opened this turn and did not
           end up citing. Worth keeping — it is the difference between "these
           are the sources" and "these are the sources it chose" — but not
-          worth the same visual weight as the ones the answer rests on. */}
-      {unused.length > 0 && (
+          worth the same weight as the ones the answer rests on. Never shown
+          mid-run: until an answer exists, nothing has been "not used" yet. */}
+      {!researching && unused.length > 0 && (
         <div className={cited.length > 0 ? 'mt-1' : ''}>
           <button
             type="button"

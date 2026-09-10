@@ -999,13 +999,23 @@ export function ChatView({
    * So each turn shows its own: what it cited (resolved against the
    * thread-wide map, because a citation can legitimately reach back to a
    * source an earlier turn fetched) and what it opened without citing.
+   *
+   * While the turn is still running there is nothing to split by — no answer
+   * text has been written, so no source has been cited yet, and hiding
+   * everything behind "read but not used" would empty the rail during the
+   * one phase where watching sources arrive is the point. Mid-run the rail
+   * shows every source as it lands; the split appears when the answer does.
    */
   const turnSources = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
       if (m.role !== 'assistant') continue
+      const own = m.sources ?? []
+      const streaming = i === streamingIndex && isLoading
+      if (streaming) return { cited: own, unused: [] as Source[], researching: true }
+
       const text = parsedByIndex[i]?.text ?? m.content ?? ''
-      if (!text.trim() && !(m.sources?.length)) continue
+      if (!text.trim() && own.length === 0) continue
       const citedNumbers = extractCitedNumbers(text)
       // Cited, in the order the answer cites them.
       const seen = new Set<number>()
@@ -1019,11 +1029,11 @@ export function ChatView({
       // Not-cited is scoped to THIS turn's own fetches — folding in earlier
       // turns' leftovers would put the whole thread back in the rail by
       // another route.
-      const unused = (m.sources ?? []).filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n)))
-      return { cited, unused }
+      const unused = own.filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n)))
+      return { cited, unused, researching: false }
     }
-    return { cited: [] as Source[], unused: [] as Source[] }
-  }, [messages, parsedByIndex, mergedSources])
+    return { cited: [] as Source[], unused: [] as Source[], researching: false }
+  }, [messages, parsedByIndex, mergedSources, streamingIndex, isLoading])
 
   const hasTurnSources = turnSources.cited.length > 0 || turnSources.unused.length > 0
 
@@ -2615,6 +2625,7 @@ export function ChatView({
               <SourcesRail
                 cited={turnSources.cited}
                 unused={turnSources.unused}
+                researching={turnSources.researching}
                 checkSource={checkSourceState}
                 onDismissCheck={() => setCheckSourceState(null)}
                 compact
@@ -2631,6 +2642,7 @@ export function ChatView({
               <SourcesRail
                 cited={turnSources.cited}
                 unused={turnSources.unused}
+                researching={turnSources.researching}
                 checkSource={checkSourceState}
                 onDismissCheck={() => setCheckSourceState(null)}
               />
@@ -2649,12 +2661,21 @@ export function ChatView({
             answer text should look like it continues under the composer, not
             like it stops at a bar. The gradient does the separating, so the
             column keeps its full measure. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,var(--paper)_45%,transparent)] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-8 sm:px-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-8 sm:px-10">
           {/* Left-aligned inside the same 1120px container the thread uses, so
               the composer sits under the answer column rather than drifting
               toward the middle of column-plus-rail. */}
-          <div className="pointer-events-auto mx-auto w-full max-w-[1120px]">
-          <div className="w-full max-w-[760px]">
+          <div className="mx-auto w-full max-w-[1120px]">
+          <div className="relative w-full max-w-[760px]">
+            {/* The scrim is scoped to the reading column, not the full width.
+                Spanning everything meant it also faded out the bottom of the
+                sources rail sitting to the right of it — including the "read
+                but not used" toggle, which is the one control down there. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-[-28px] -top-8 bottom-[-40px] bg-[linear-gradient(to_top,var(--paper)_52%,transparent)]"
+            />
+            <div className="pointer-events-auto relative">
             <div
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
@@ -2976,6 +2997,7 @@ export function ChatView({
                   </div>
                 )
               })()}
+            </div>
             </div>
           </div>
           </div>
