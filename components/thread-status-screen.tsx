@@ -53,7 +53,7 @@ export function ThreadStatusScreen({ title, description, primaryAction, secondar
   }, [animateGlow])
 
   return (
-    <main className="relative min-h-[100dvh] w-full flex flex-col items-center justify-center px-4 overflow-hidden bg-background font-[family-name:var(--font-plex)] selection:bg-accent/20">
+    <main className="relative flex min-h-[100dvh] w-full flex-col items-center justify-center overflow-hidden bg-background px-4">
       <style jsx global>{`
         @keyframes thread-status-drift {
           0% { transform: translate(0, 0) scale(1); }
@@ -83,7 +83,7 @@ export function ThreadStatusScreen({ title, description, primaryAction, secondar
           width: '600px',
           height: '600px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(32,178,170,0.12) 0%, rgba(32,178,170,0.04) 40%, transparent 70%)',
+          background: 'radial-gradient(circle, color-mix(in srgb, var(--teal) 10%, transparent) 0%, color-mix(in srgb, var(--teal) 3%, transparent) 40%, transparent 70%)',
           filter: 'blur(40px)',
         }}
       />
@@ -91,25 +91,25 @@ export function ThreadStatusScreen({ title, description, primaryAction, secondar
       <div className="relative z-10 flex flex-col items-center text-center max-w-md mx-auto">
         <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 ease-out flex flex-col items-center">
           {icon && (
-            <div className="mb-5 flex items-center justify-center size-11 rounded-full bg-secondary/80 border border-border/50 text-muted-foreground">
+            <div className="mb-5 flex size-11 items-center justify-center rounded-full border border-[var(--line-strong)] bg-[var(--sand)] text-[var(--teal)]">
               {icon}
             </div>
           )}
-          <h1 className="text-xl font-medium tracking-tight text-foreground mb-1">{title}</h1>
-          <p className="text-[13px] text-muted-foreground/80 font-normal mb-10 text-balance">{description}</p>
+          <h1 className="omni-display mb-2 text-[30px] text-[var(--ink)]">{title}</h1>
+          <p className="mb-10 text-balance text-[15px] leading-[1.65] text-[var(--ink-muted)]">{description}</p>
         </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-4 delay-300 duration-700 ease-out fill-mode-both flex items-center gap-3">
           <button
             onClick={primaryAction.onClick}
-            className="inline-flex items-center justify-center px-6 py-2 rounded-full bg-[var(--accent)] text-white text-[13px] font-medium hover:opacity-90 transition-opacity shadow-sm"
+            className="omni-pill omni-pill-solid px-6 py-2.5 text-[14px]"
           >
             {primaryAction.label}
           </button>
           {secondaryAction && (
             <Link
               href={secondaryAction.href}
-              className="inline-flex items-center justify-center px-6 py-2 rounded-full text-[13px] font-medium text-muted-foreground hover:text-foreground transition-all duration-300"
+              className="omni-pill border-transparent px-6 py-2.5 text-[14px]"
             >
               {secondaryAction.label}
             </Link>

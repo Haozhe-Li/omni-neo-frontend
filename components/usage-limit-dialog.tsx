@@ -73,9 +73,9 @@ export function UsageLimitDialog() {
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent
                 showCloseButton={false}
-                overlayClassName="bg-black/5 dark:bg-black/40"
+                overlayClassName="bg-[var(--scrim)]"
                 className="p-0 border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden
-                    w-[92vw] max-w-[400px] rounded-2xl gap-0"
+                    w-[92vw] max-w-[400px] rounded-[24px] gap-0"
             >
                 <DialogTitle className="sr-only">Usage limit reached</DialogTitle>
 
@@ -92,10 +92,10 @@ export function UsageLimitDialog() {
                     {detail.isGuest ? (
                         <>
                             <div className="space-y-1.5">
-                                <h2 className="text-base font-medium text-[var(--foreground)]">
+                                <h2 className="omni-display text-[24px] leading-[1.2] text-[var(--ink)]">
                                     You've reached your usage limit for {scopeLabel}
                                 </h2>
-                                <p className="text-[13px] leading-relaxed text-[var(--muted-foreground)]">
+                                <p className="text-[14px] leading-[1.6] text-[var(--ink-muted)]">
                                     Sign in for free to get 10× more usage every month, plus chat history synced
                                     across all your devices.
                                 </p>
@@ -103,13 +103,13 @@ export function UsageLimitDialog() {
                             <div className="flex flex-col w-full gap-2 pt-1">
                                 <button
                                     onClick={handleSignIn}
-                                    className="w-full h-10 rounded-xl bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                                    className="h-10 w-full rounded-full bg-[var(--teal)] text-sm text-[var(--accent-foreground)] transition-colors hover:bg-[var(--teal-hover)]"
                                 >
                                     Sign in
                                 </button>
                                 <button
                                     onClick={() => setOpen(false)}
-                                    className="w-full h-10 rounded-xl text-sm font-medium text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors"
+                                    className="h-10 w-full rounded-full text-sm text-[var(--ink-muted)] transition-colors hover:bg-[var(--sand)]"
                                 >
                                     Maybe later
                                 </button>
@@ -118,16 +118,16 @@ export function UsageLimitDialog() {
                     ) : (
                         <>
                             <div className="space-y-1.5">
-                                <h2 className="text-base font-medium text-[var(--foreground)]">
+                                <h2 className="omni-display text-[24px] leading-[1.2] text-[var(--ink)]">
                                     You've reached your usage limit for {scopeLabel}
                                 </h2>
-                                <p className="text-[13px] leading-relaxed text-[var(--muted-foreground)]">
+                                <p className="text-[14px] leading-[1.6] text-[var(--ink-muted)]">
                                     More usage unlocks {resetText}. Thanks for being an active user of Omni.
                                 </p>
                             </div>
                             <button
                                 onClick={() => setOpen(false)}
-                                className="w-full h-10 rounded-xl bg-[var(--secondary)] text-[var(--foreground)] text-sm font-medium hover:bg-[var(--secondary)]/70 transition-colors"
+                                className="h-10 w-full rounded-full border border-[var(--line-strong)] text-sm text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                             >
                                 Got it
                             </button>

@@ -205,25 +205,32 @@ export interface EvalCheck {
  * than a bolted-on dashboard. Never saturated "tech blue".
  */
 export const SERIES_COLORS = [
-    '#20B2AA', // washed teal — the app accent
-    '#005A5A', // deep teal
-    '#7B9E9E', // muted teal-gray
-    '#C4A882', // warm tan
-    '#8B7D6B', // warm brown
-    '#5B8FA8', // steel blue
+    '#26696B', // teal — the app accent
+    '#C0673C', // rust — the provenance accent
+    '#6B8F70', // sage
+    '#8A6E9E', // plum
+    '#B3A791', // clay
+    '#8C7A4A', // olive
 ]
 
-/** Provider identity, used consistently across every chart and badge. */
+/**
+ * Provider identity, used consistently across every chart and badge. Drawn
+ * from the paper palette rather than each vendor's brand color: a benchmark
+ * page full of other companies' brand blues stops looking like Omni's own
+ * measurement and starts looking like their marketing. Six hues, spaced far
+ * enough apart in hue and lightness to stay separable side by side and in
+ * grayscale.
+ */
 export const PROVIDER_COLORS: Record<string, string> = {
-    cerebras: '#20B2AA',
-    groq: '#C4A882',
-    google_genai: '#5B8FA8',
-    openai: '#8B7D6B',
-    anthropic: '#005A5A',
+    cerebras: '#26696B',
+    groq: '#C0673C',
+    google_genai: '#8A6E9E',
+    openai: '#6B8F70',
+    anthropic: '#8C7A4A',
 }
 
 export function providerColor(provider: string | null | undefined): string {
-    return PROVIDER_COLORS[provider ?? ''] ?? '#7B9E9E'
+    return PROVIDER_COLORS[provider ?? ''] ?? '#B3A791'
 }
 
 export function providerLabel(provider: string | null | undefined): string {
@@ -323,12 +330,15 @@ export function scoreTint(score: number | null | undefined): string {
     const clamped = Math.max(0, Math.min(1, score))
     // Floor at 0.06 so a genuine zero is still visibly a cell, not a hole.
     const alpha = 0.06 + clamped * 0.72
-    return `rgba(32, 178, 170, ${alpha.toFixed(3)})`
+    return `rgba(38, 105, 107, ${alpha.toFixed(3)})`
 }
 
 export function scoreTextColor(score: number | null | undefined): string {
     if (score === null || score === undefined) return 'var(--muted-foreground)'
-    return score >= 0.62 ? '#0b3b3b' : 'var(--foreground)'
+    // Past ~0.62 the teal wash is dark enough that body ink loses contrast
+    // against it; switch to the near-black end of the teal ramp instead of
+    // the page's own ink, which would read as a different kind of value.
+    return score >= 0.62 ? '#0C2E2F' : 'var(--foreground)'
 }
 
 // ── formatters ──────────────────────────────────────────────────────────────

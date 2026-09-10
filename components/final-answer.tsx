@@ -112,7 +112,7 @@ const markdownComponents: Components = {
     if (isInline) {
       return (
         <code
-          className="bg-secondary px-1.5 py-0.5 rounded text-[13px] font-mono text-accent"
+          className="rounded-[5px] border border-[var(--line)] bg-[var(--sand)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--ink-body)]"
           {...props}
         >
           {children}
@@ -126,59 +126,61 @@ const markdownComponents: Components = {
     )
   },
   table: ({ children }) => (
-    <div className="my-6 overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-sm">{children}</table>
+    <div className="my-6 overflow-x-auto rounded-2xl border border-[var(--line)] custom-scrollbar">
+      <table className="w-full text-[14.5px]">{children}</table>
     </div>
   ),
   thead: ({ children }) => (
-    <thead className="bg-secondary/50 border-b border-border">{children}</thead>
+    <thead className="border-b border-[var(--line)] bg-[var(--paper-rail)]">{children}</thead>
   ),
   th: ({ children }) => (
-    <th className="px-4 py-2.5 text-left font-medium text-foreground text-xs uppercase tracking-wider">
+    <th className="omni-eyebrow px-4 py-2.5 text-left" style={{ letterSpacing: '0.08em' }}>
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="px-4 py-2.5 text-foreground border-b border-border/50">{children}</td>
+    <td className="border-b border-[var(--line-hair)] px-4 py-3 leading-[1.45] text-[var(--ink-body)]">{children}</td>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="my-4 border-l-3 border-accent/50 bg-accent/5 rounded-r-lg pl-4 pr-3 py-3 text-muted-foreground italic">
+    <blockquote className="my-5 border-l-2 border-[var(--rust)] py-1 pl-4 text-[16.5px] italic leading-[1.7] text-[var(--ink-muted)]">
       {children}
     </blockquote>
   ),
   hr: () => (
-    <hr className="my-8 border-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+    <hr className="my-9 h-px border-0 bg-[var(--line)]" />
   ),
+  /* Same display-serif heading scale as an inline answer — a published page
+     and the answer it came from must not read as two products. */
   h1: ({ children }) => (
-    <h1 className="text-2xl font-semibold tracking-tight text-foreground mt-8 mb-4 first:mt-0">
+    <h1 className="omni-display text-[30px] leading-[1.15] text-[var(--ink)] mt-9 mb-4 first:mt-0">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-xl font-semibold tracking-tight text-foreground mt-8 mb-3 pb-2 border-b border-border/50">
+    <h2 className="omni-display text-[25px] leading-[1.2] text-[var(--ink)] mt-8 mb-3.5 first:mt-0">
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-lg font-medium text-foreground mt-6 mb-2">{children}</h3>
+    <h3 className="omni-display text-[20px] leading-[1.25] text-[var(--ink)] mt-6 mb-2">{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul className="my-3 ml-1 space-y-1.5">{children}</ul>
+    <ul className="my-4 list-disc list-outside space-y-2 pl-5 marker:text-[var(--rust)]">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="my-3 ml-1 space-y-1.5 list-decimal list-inside">{children}</ol>
+    <ol className="my-4 list-decimal list-outside space-y-2 pl-5 marker:text-[var(--ink-faint)]">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="text-foreground leading-[1.7]">
+    <li className="pl-1 text-[16.5px] leading-[1.7] text-[var(--ink-body)]">
       {children}
     </li>
   ),
   p: ({ children, node }) => {
     const hasImage = node?.children?.some((child: any) => child.tagName === 'img')
     if (hasImage) {
-      return <div className="text-foreground leading-[1.8] mb-4 text-pretty">{children}</div>
+      return <div className="mb-5 text-[17px] leading-[1.75] text-[var(--ink-body)] text-pretty">{children}</div>
     }
-    return <p className="text-foreground leading-[1.8] mb-4 text-pretty">{children}</p>
+    return <p className="mb-5 text-[17px] leading-[1.75] text-[var(--ink-body)] text-pretty">{children}</p>
   },
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
@@ -454,16 +456,21 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
             <head>
               <title>${title || 'Research Report'}</title>
               <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #1a1a18; padding: 20mm; }
+                /* Print is always the light palette — dark ink on dark paper is
+                   not a thing, and a reader's printer would fight it. */
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.7; color: #3A342E; padding: 20mm; }
                 .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
-                h1 { font-size: 24pt; margin-bottom: 10pt; color: #1a1a18; }
-                h2 { font-size: 18pt; margin-top: 20pt; border-bottom: 1px solid #eee; padding-bottom: 5pt; }
+                h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; color: #2B2724; }
+                h1 { font-size: 26pt; margin-bottom: 10pt; }
+                h2 { font-size: 19pt; margin-top: 20pt; }
+                h3 { font-size: 15pt; margin-top: 14pt; }
                 img { max-width: 100%; height: auto; border-radius: 8px; margin: 10pt 0; }
-                pre { background: #f5f4ef; padding: 10pt; border-radius: 5pt; overflow-x: auto; font-family: monospace; font-size: 10pt; }
-                blockquote { border-left: 4px solid #20B2AA; padding-left: 10pt; font-style: italic; color: #666; }
+                pre { background: #F1EADC; padding: 10pt; border-radius: 6pt; overflow-x: auto; font-family: monospace; font-size: 10pt; color: #3A342E; }
+                blockquote { border-left: 2px solid #C0673C; padding-left: 10pt; font-style: italic; color: #6C6357; }
                 table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
-                th, td { border: 1px solid #eee; padding: 8pt; text-align: left; }
-                a { color: #20B2AA; text-decoration: none; }
+                th, td { border: 1px solid #E8DFD2; padding: 8pt; text-align: left; }
+                th { background: #F6F1E8; font-weight: 500; }
+                a { color: #26696B; text-decoration: none; }
                 @page { size: A4; margin: 0; }
                 @media print {
                   body { padding: 15mm; }
@@ -528,7 +535,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                 className="rounded-md opacity-90"
               />
               <span className="font-[family-name:var(--font-plex)] text-[18px] font-light tracking-tight text-foreground/90 lowercase group-hover:opacity-60 transition-opacity">
-                omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
+                omni<span className="font-normal" style={{ color: 'var(--teal)' }}>knows</span>
               </span>
             </a>
 
@@ -634,7 +641,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
                                   className="peer sr-only"
                                 />
                                 <div className="w-4 h-4 rounded border border-border bg-background peer-checked:bg-accent peer-checked:border-accent transition-colors"></div>
-                                <Check className="w-3 h-3 text-white absolute inset-0 m-auto opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
+                                <Check className="absolute inset-0 m-auto h-3 w-3 text-[var(--accent-foreground)] opacity-0 transition-opacity peer-checked:opacity-100" strokeWidth={3} />
                               </div>
                               <span className="text-[12px] font-medium text-foreground group-hover:text-foreground/80 transition-colors">
                                 Publish to Pages Home
@@ -643,7 +650,7 @@ export const FinalAnswer = memo(function FinalAnswer({ answer: initialAnswer, so
 
                             <Button
                               size="sm"
-                              className="h-8 text-[11px] w-full rounded-lg bg-accent text-white hover:bg-accent/90"
+                              className="h-8 text-[11px] w-full rounded-lg bg-accent text-[var(--accent-foreground)] hover:bg-accent/90"
                               onClick={async (e) => {
                                 e.stopPropagation()
                                 setIsPublishing(true)

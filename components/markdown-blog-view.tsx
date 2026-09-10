@@ -249,7 +249,7 @@ export function MarkdownBlogView({
                 className="rounded-lg"
               />
               <span className="font-[family-name:var(--font-plex)] text-[14px] font-light tracking-tight text-[var(--muted-foreground)] lowercase group-hover:text-[var(--foreground)] transition-colors">
-                omni<span className="font-normal" style={{ color: '#20B2AA' }}>knows</span>
+                omni<span className="font-normal" style={{ color: 'var(--teal)' }}>knows</span>
               </span>
             </Link>
           </div>
@@ -260,7 +260,7 @@ export function MarkdownBlogView({
         <article className={embedded ? 'mx-auto w-full max-w-[880px]' : 'mx-auto w-full max-w-[880px] rounded-2xl border border-border/70 bg-card/95 p-5 shadow-sm sm:p-8'}>
           <header className="border-b border-border/70 pb-6">
             {showMeta && <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{sectionLabel}</p>}
-            <h1 className={`${showMeta ? 'mt-2' : ''} text-2xl font-semibold tracking-tight text-foreground sm:text-3xl`}>{title}</h1>
+            <h1 className={`omni-display ${showMeta ? 'mt-2' : ''} text-[clamp(30px,4vw,42px)] text-[var(--ink)]`}>{title}</h1>
             {excerpt && <p className="mt-4 text-base leading-7 text-muted-foreground">{excerpt}</p>}
 
             {showMeta && (

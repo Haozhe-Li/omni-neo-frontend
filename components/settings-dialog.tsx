@@ -132,21 +132,21 @@ export function SettingsDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 showCloseButton={false}
-                overlayClassName="bg-black/5 dark:bg-black/40"
-                className="p-0 border-0 sm:border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0
+                overlayClassName="bg-[var(--scrim)]"
+                className="flex flex-col gap-0 overflow-hidden border-0 bg-[var(--paper)] p-0 shadow-[0_40px_90px_-50px_color-mix(in_srgb,var(--ink)_65%,transparent)] sm:border sm:border-[var(--line-strong)]
                     w-[100vw] h-[100dvh] max-w-none rounded-none
                     !top-0 !left-0 !translate-x-0 !translate-y-0
                     sm:!top-[50%] sm:!left-[50%] sm:!-translate-x-1/2 sm:!-translate-y-1/2
-                    sm:w-[92vw] sm:h-[min(680px,85dvh)] sm:max-w-[900px] sm:rounded-2xl"
+                    sm:w-[92vw] sm:h-[min(680px,85dvh)] sm:max-w-[900px] sm:rounded-[28px]"
             >
                 <DialogTitle className="sr-only">Settings</DialogTitle>
 
                 {/* Mobile header */}
-                <div className="md:hidden flex items-center justify-between px-4 h-14 border-b border-[var(--border-subtle)] shrink-0">
-                    <span className="text-sm font-medium text-[var(--foreground)]">Settings</span>
+                <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-[var(--line)] px-4 md:hidden">
+                    <span className="text-[14px] text-[var(--ink)]">Settings</span>
                     <button
                         onClick={close}
-                        className="p-2 -mr-2 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                        className="-mr-1 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
                     >
                         <X size={18} />
                     </button>
@@ -154,16 +154,16 @@ export function SettingsDialog({
 
                 <div className="flex-1 min-h-0 flex flex-col md:flex-row">
                     {/* ── Left navigation ── */}
-                    <nav className="shrink-0 md:w-52 border-b md:border-b-0 md:border-r border-[var(--border-subtle)] flex flex-col">
+                    <nav className="flex shrink-0 flex-col border-b border-[var(--line)] bg-[var(--paper-rail)] md:w-52 md:border-b-0 md:border-r">
                         <div className="hidden md:flex items-center gap-2 px-4 pt-4 pb-2">
                             <button
                                 onClick={close}
-                                className="p-1.5 -ml-1.5 rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+                                className="-ml-1 flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
                                 title="Close settings"
                             >
-                                <X size={17} />
+                                <X size={14} />
                             </button>
-                            <span className="text-sm font-medium text-[var(--foreground)]">Settings</span>
+                            <span className="text-[14px] text-[var(--ink)]">Settings</span>
                         </div>
 
                         <div className="flex md:flex-col gap-1 p-2 md:p-2.5 overflow-x-auto md:overflow-y-auto custom-scrollbar">
@@ -174,10 +174,10 @@ export function SettingsDialog({
                                         key={item.id}
                                         onClick={() => selectTab(item.id)}
                                         className={cn(
-                                            'flex items-center gap-2.5 shrink-0 md:w-full px-3 py-2 rounded-lg text-sm text-left whitespace-nowrap transition-colors duration-200',
+                                            'flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3.5 py-2 text-left text-[14px] transition-colors duration-200 md:w-full',
                                             activeTab === item.id
-                                                ? 'bg-[var(--secondary)] text-[var(--foreground)] font-medium'
-                                                : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60 hover:text-[var(--foreground)]'
+                                                ? 'bg-[var(--teal-tint)] text-[var(--teal)]'
+                                                : 'text-[var(--ink-muted)] hover:bg-[var(--sand-deep)] hover:text-[var(--ink)]'
                                         )}
                                     >
                                         <Icon size={16} className="shrink-0" />
@@ -190,7 +190,7 @@ export function SettingsDialog({
 
                     {/* ── Content pane ── */}
                     <div className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
-                        <div className="px-5 py-6 md:px-8 md:py-7">
+                        <div className="px-5 py-7 md:px-9 md:py-8">
                             {activeTab === 'general' && <GeneralSection />}
                             {activeTab === 'personalization' && <PersonalizationSection />}
                             {activeTab === 'data' && <DataControlsSection />}
@@ -214,10 +214,10 @@ export function SettingsDialog({
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
         <div className="animate-in fade-in duration-300">
-            <h2 className="text-lg font-semibold text-[var(--foreground)] pb-4 border-b border-[var(--border-subtle)]">
+            <h2 className="omni-display border-b border-[var(--line)] pb-4 text-[28px] leading-[1.1] text-[var(--ink)]">
                 {title}
             </h2>
-            <div className="divide-y divide-[var(--border-subtle)]">{children}</div>
+            <div className="divide-y divide-[var(--line-hair)]">{children}</div>
         </div>
     )
 }
@@ -235,11 +235,11 @@ export function Row({
     stacked?: boolean
 }) {
     return (
-        <div className={cn('py-4', stacked ? 'space-y-3' : 'flex items-center justify-between gap-4')}>
-            <div className="min-w-0 space-y-0.5">
-                <p className="text-sm text-[var(--foreground)]">{title}</p>
+        <div className={cn('py-[18px]', stacked ? 'space-y-3' : 'flex items-center justify-between gap-5')}>
+            <div className="min-w-0 space-y-1">
+                <p className="text-[15.5px] leading-snug text-[var(--ink)]">{title}</p>
                 {description && (
-                    <p className="text-[13px] leading-relaxed text-[var(--muted-foreground)]">{description}</p>
+                    <p className="text-[13.5px] leading-[1.55] text-[var(--ink-muted)]">{description}</p>
                 )}
             </div>
             {children && <div className={cn(!stacked && 'shrink-0')}>{children}</div>}
@@ -253,14 +253,14 @@ export function SettingSwitch(props: React.ComponentProps<typeof SwitchPrimitive
         <SwitchPrimitive.Root
             {...props}
             className={cn(
-                'relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full outline-none transition-colors duration-300',
-                'data-[state=checked]:bg-[var(--accent)] data-[state=unchecked]:bg-[var(--muted-foreground)]/25',
+                'relative inline-flex h-[26px] w-[46px] shrink-0 items-center rounded-full outline-none transition-colors duration-300',
+                'data-[state=checked]:bg-[var(--teal)] data-[state=unchecked]:bg-[var(--line-strong)]',
                 'focus-visible:ring-2 focus-visible:ring-[var(--ring)]/40 disabled:cursor-not-allowed disabled:opacity-50',
                 props.className
             )}
         >
             <SwitchPrimitive.Thumb
-                className="pointer-events-none block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform duration-300 translate-x-[2px] data-[state=checked]:translate-x-[18px]"
+                className="pointer-events-none block h-[20px] w-[20px] translate-x-[3px] rounded-full bg-[var(--paper-raised)] shadow-sm transition-transform duration-300 data-[state=checked]:translate-x-[23px]"
             />
         </SwitchPrimitive.Root>
     )
@@ -281,20 +281,20 @@ export function SettingSelect({
     return (
         <Select value={value} onValueChange={onValueChange}>
             <SelectTrigger
-                className="h-8 w-auto gap-1.5 rounded-lg border-0 bg-transparent px-2.5 text-sm font-normal text-[var(--foreground)] shadow-none hover:bg-[var(--secondary)] data-[state=open]:bg-[var(--secondary)] focus-visible:ring-0 transition-colors"
+                className="h-8 w-auto gap-1.5 rounded-full border border-[var(--line-strong)] bg-transparent px-3.5 text-[13.5px] font-normal text-[var(--ink)] shadow-none transition-colors hover:border-[var(--teal)] focus-visible:ring-0 data-[state=open]:border-[var(--teal)]"
             >
                 <SelectValue placeholder={placeholder} />
             </SelectTrigger>
             <SelectContent
                 align="end"
-                className="rounded-xl border-[var(--border-subtle)] bg-[var(--popover)] shadow-lg min-w-[160px] z-[110]"
+                className="z-[110] min-w-[160px] rounded-[18px] border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)]"
             >
                 {options.map(opt => (
                     <SelectItem
                         key={opt.value}
                         value={opt.value}
                         disabled={opt.disabled}
-                        className="rounded-lg text-sm focus:bg-[var(--secondary)] focus:text-[var(--foreground)]"
+                        className="rounded-[12px] text-[13.5px] focus:bg-[var(--sand)] focus:text-[var(--ink)]"
                     >
                         {opt.label}
                     </SelectItem>
@@ -315,10 +315,10 @@ export function SettingButton({
         <button
             {...props}
             className={cn(
-                'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-3.5 text-[13px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
-                variant === 'default' && 'border border-[var(--border-subtle)] bg-transparent text-[var(--foreground)] hover:bg-[var(--secondary)]',
-                variant === 'danger' && 'border border-red-500/25 bg-transparent text-red-500 hover:bg-red-500/10',
-                variant === 'primary' && 'border border-transparent bg-[var(--accent)] text-white hover:opacity-90',
+                'inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                variant === 'default' && 'border border-[var(--line-strong)] bg-transparent text-[var(--ink-muted)] hover:border-[var(--teal)] hover:text-[var(--teal)]',
+                variant === 'danger' && 'border border-[color-mix(in_srgb,var(--destructive)_35%,transparent)] bg-transparent text-[var(--destructive)] hover:bg-[color-mix(in_srgb,var(--destructive)_10%,transparent)]',
+                variant === 'primary' && 'border border-transparent bg-[var(--teal)] text-[var(--accent-foreground)] hover:bg-[var(--teal-hover)]',
                 className
             )}
         >
@@ -606,7 +606,7 @@ function MemoryDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 showCloseButton={false}
-                overlayClassName="bg-black/5 dark:bg-black/40"
+                overlayClassName="bg-[var(--scrim)]"
                 className="p-0 border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0
                     w-[94vw] max-w-[560px] h-[min(560px,80dvh)] rounded-2xl"
             >
@@ -1461,10 +1461,10 @@ function UsageMeter({
         <Row title={label} stacked>
             <div className="space-y-2">
                 <div className="flex items-center justify-between text-[13px]">
-                    <span className="text-[var(--foreground)] font-medium">{pct}% used</span>
-                    <span className="text-[var(--muted-foreground)]">{resetLabel}</span>
+                    <span className="text-[var(--ink)]">{pct}% used</span>
+                    <span className="omni-mono text-[12px] text-[var(--ink-faint)]">{resetLabel}</span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-[var(--secondary)] overflow-hidden">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--line)]">
                     <div
                         // `transition-all` already covers background-color, so
                         // crossing the threshold fades from teal to amber over
@@ -1486,7 +1486,7 @@ function AboutSection() {
     return (
         <Section title="About">
             <div className="py-4 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-[var(--secondary)] flex items-center justify-center overflow-hidden shrink-0">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[16px] bg-[var(--sand)]">
                     <Image
                         src="/android-chrome-512x512.png"
                         alt="Omni Knows logo"
@@ -1536,9 +1536,7 @@ function AboutLink({ href, label }: { href: string; label: string }) {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium
-                text-[var(--muted-foreground)] border border-[var(--border-subtle)]
-                hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+            className="omni-pill h-8 gap-1.5 px-3.5 py-0 text-[13px]"
         >
             {label}
             <ExternalLink size={12} />

@@ -1,23 +1,10 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
-import {
-  Search,
-  Globe,
-  MapPin,
-  Cloud,
-  TrendingUp,
-  DollarSign,
-  FileText,
-  Wrench,
-  ChevronDown,
-  ChevronRight,
-  Terminal,
-  Blocks,
-  CircleCheck,
-  Code2,
-  type LucideIcon,
-} from 'lucide-react'
+// The trace's own step icons are drawn inline (see `StepIcon`) so they hold
+// one optical weight against the reasoning dot beside them; these are the few
+// places that still want a set icon.
+import { ChevronDown, ChevronRight, Blocks, Code2 } from 'lucide-react'
 import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep, type ReportArtifact } from '@/lib/types'
 import { MarkdownMessage } from '@/components/markdown-message'
 
@@ -85,30 +72,102 @@ function skillOf(step: ToolStep): string | null {
 }
 
 // ── presentation ────────────────────────────────────────────────────────────
-function singleStepInfo(tool: string, args: any) {
+/**
+ * What a tool call reads as on the trace.
+ *
+ * `kind` picks one of four drawn icons rather than one of a dozen imported
+ * ones — every step is a search, a page read, code, or a data lookup, and
+ * collapsing to those four is what lets a twenty-step trace scan as a list
+ * instead of an icon parade. `verb` and `arg` are rendered as one sentence
+ * ("Searching “fog in July”"), the verb in full ink and the argument a shade
+ * back, so the eye lands on what was done before what it was done to.
+ */
+type StepKind = 'search' | 'page' | 'code' | 'data'
+
+function singleStepInfo(tool: string, args: any): { kind: StepKind; verb: string; arg?: string } {
   const t = lc(tool)
   const a = args || {}
-  if (isSearch(tool)) return { Icon: Search, label: 'Searching', chip: a.query || a.q }
+  const quoted = (v: any) => (v ? `\u201C${v}\u201D` : undefined)
+  if (isSearch(tool)) return { kind: 'search', verb: 'Searching', arg: quoted(a.query || a.q) }
   if (['load_web', 'web_page', 'fetch', 'read_web'].some((k) => t.includes(k)))
-    return { Icon: Globe, label: 'Reading', chip: a.url ? domainOf(a.url) : undefined }
-  if (t.includes('place')) return { Icon: MapPin, label: 'Finding places', chip: a.query || a.location }
-  if (t.includes('weather')) return { Icon: Cloud, label: 'Checking weather', chip: a.location }
-  if (t.includes('stock')) return { Icon: TrendingUp, label: 'Looking up', chip: a.ticker || a.symbol }
+    return { kind: 'page', verb: 'Reading', arg: a.url ? domainOf(a.url) : undefined }
+  if (t.includes('place')) return { kind: 'data', verb: 'Finding places near', arg: a.query || a.location }
+  if (t.includes('weather')) return { kind: 'data', verb: 'Conditions for', arg: a.location }
+  if (t.includes('stock')) return { kind: 'data', verb: 'Quote lookup', arg: a.ticker || a.symbol }
   if (t.includes('currency'))
-    return { Icon: DollarSign, label: 'Currency', chip: [a.base_currency || a.base, a.target_currency || a.target].filter(Boolean).join(' → ') }
-  if (t.includes('document') || t.includes('read_user')) return { Icon: FileText, label: 'Reading your file', chip: undefined }
-  if (t === 'python_exec' || t.includes('run_python')) return { Icon: Terminal, label: 'Running Python', chip: undefined }
+    return {
+      kind: 'data',
+      verb: 'Converting',
+      arg: [a.base_currency || a.base, a.target_currency || a.target].filter(Boolean).join(' \u2192 '),
+    }
+  if (t.includes('document') || t.includes('read_user')) return { kind: 'page', verb: 'Reading your file' }
+  if (t === 'python_exec' || t.includes('run_python')) return { kind: 'code', verb: 'Running Python' }
   // deepagents builtin file/system tools — shown faithfully.
   const base = (p: any) => (typeof p === 'string' ? p.split('/').pop() : undefined)
-  if (t === 'read_file') return { Icon: FileText, label: 'Reading file', chip: base(a.file_path) }
-  if (t === 'write_file') return { Icon: FileText, label: 'Writing file', chip: base(a.file_path) }
-  if (t === 'edit_file') return { Icon: FileText, label: 'Editing file', chip: base(a.file_path) }
-  if (t === 'ls') return { Icon: Wrench, label: 'Listing files', chip: a.path }
-  if (t === 'glob') return { Icon: Search, label: 'Finding files', chip: a.pattern }
-  if (t === 'grep') return { Icon: Search, label: 'Searching files', chip: a.pattern }
-  if (t === 'execute') return { Icon: Wrench, label: 'Running command', chip: a.command }
-  if (t === 'task') return { Icon: Wrench, label: 'Delegating subtask', chip: a.description }
-  return { Icon: Wrench, label: tool || 'Working', chip: undefined }
+  if (t === 'read_file') return { kind: 'page', verb: 'Reading', arg: base(a.file_path) }
+  if (t === 'write_file') return { kind: 'page', verb: 'Writing', arg: base(a.file_path) }
+  if (t === 'edit_file') return { kind: 'page', verb: 'Editing', arg: base(a.file_path) }
+  if (t === 'ls') return { kind: 'data', verb: 'Listing files in', arg: a.path }
+  if (t === 'glob') return { kind: 'search', verb: 'Finding files', arg: a.pattern }
+  if (t === 'grep') return { kind: 'search', verb: 'Searching files for', arg: a.pattern }
+  if (t === 'execute') return { kind: 'code', verb: 'Running', arg: a.command }
+  if (t === 'task') return { kind: 'data', verb: 'Delegating', arg: a.description }
+  return { kind: 'data', verb: tool || 'Working' }
+}
+
+/* The four step icons, drawn at 14px inside a 20px cell. Hand-written paths
+   rather than an icon set: they need to sit on one optical weight with the
+   5px reasoning dot beside them, and a mixed set never quite does. */
+function StepIcon({ kind }: { kind: StepKind }) {
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.5,
+    'aria-hidden': true,
+  } as const
+  if (kind === 'search') {
+    return (
+      <svg {...common}>
+        <circle cx="7" cy="7" r="4.5" />
+        <path d="M10.5 10.5L14 14" />
+      </svg>
+    )
+  }
+  if (kind === 'page') {
+    return (
+      <svg {...common}>
+        <path d="M4 2h5l3 3v9H4z" />
+        <path d="M6 8h4M6 11h4" />
+      </svg>
+    )
+  }
+  if (kind === 'code') {
+    return (
+      <svg {...common}>
+        <path d="M6 5L3 8l3 3M10 5l3 3-3 3" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common}>
+      <path d="M3 12V8M7 12V4M11 12V9" />
+    </svg>
+  )
+}
+
+/* A search that reports "12 results · a.gov, b.org" becomes a row of host
+   chips. The backend does not send tool results into the timeline yet, so
+   this stays dark until it does — `result` is optional on ToolStep for
+   exactly that reason. */
+function parseHosts(result?: string): { hosts: string[]; more: number } | null {
+  if (!result) return null
+  const m = /^(\d+) results · (.+)$/.exec(result)
+  if (!m) return null
+  const hosts = m[2].split(', ').map((h) => h.trim()).filter(Boolean)
+  return { hosts, more: Math.max(0, Number(m[1]) - hosts.length) }
 }
 
 // python_exec's code, shown Perplexity-style: a fixed "Running Python Code"
@@ -117,23 +176,21 @@ function singleStepInfo(tool: string, args: any) {
 // through the same highlighted-code path as an answer's own code blocks.
 function ScriptCard({ filename, isActive, onOpen }: { filename: string; isActive?: boolean; onOpen?: () => void }) {
   return (
-    <div>
-      <div className={`mb-1.5 text-[13px] ${isActive ? 'omni-shimmer-text-accent font-medium' : 'text-[var(--muted-foreground)]'}`}>
-        Running Python Code
+    <div className="flex min-w-0 flex-col gap-[5px]">
+      <div className={`text-[14.5px] leading-[1.45] ${isActive ? 'omni-shimmer-text-accent' : 'text-[var(--ink)]'}`}>
+        Running Python
       </div>
+      {/* The script itself takes the trace's code treatment — mono on raised
+          paper — rather than a generic file chip, so it reads as the thing
+          that ran rather than an attachment. */}
       <button
         type="button"
         onClick={onOpen}
         disabled={!onOpen}
-        className="group flex max-w-[280px] items-center gap-2.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] px-2.5 py-2 text-left transition-colors disabled:cursor-default enabled:hover:bg-[var(--secondary)]/60 enabled:cursor-pointer"
+        className="group flex max-w-[280px] items-center gap-2.5 rounded-xl border border-[var(--line)] bg-[var(--paper-raised)] px-3 py-2 text-left transition-colors enabled:cursor-pointer disabled:cursor-default enabled:hover:border-[var(--teal)]"
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--secondary)] text-[var(--muted-foreground)]">
-          <Code2 size={14} strokeWidth={1.75} />
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-medium text-[var(--foreground)]">{filename}</div>
-          <div className="text-[11px] text-[var(--muted-foreground)]">Python</div>
-        </div>
+        <Code2 size={14} strokeWidth={1.5} className="shrink-0 text-[var(--teal)]" />
+        <span className="omni-mono min-w-0 truncate text-[12px] text-[var(--ink-soft)]">{filename}</span>
       </button>
     </div>
   )
@@ -160,11 +217,37 @@ function ToolRowContent({
       />
     )
   }
-  const { label, chip } = singleStepInfo(step.tool, step.args)
+  const { verb, arg } = singleStepInfo(step.tool, step.args)
+  const parsed = parseHosts(step.result)
   return (
-    <div className="flex items-center gap-2 text-[13px] text-[var(--muted-foreground)]">
-      <span className="shrink-0">{label}</span>
-      {chip && <span className="min-w-0 truncate rounded-md bg-[var(--secondary)] px-2 py-0.5 text-[12px] text-[var(--foreground)]">{chip}</span>}
+    <div className="flex min-w-0 flex-col gap-[5px]">
+      <div className="text-[14.5px] leading-[1.45] text-[var(--ink)]">
+        {verb}
+        {arg && <span className="text-[var(--ink-soft)]"> {arg}</span>}
+      </div>
+
+      {/* Which sites a search actually landed on — the single most useful
+          thing a trace can say, so it gets chips rather than a sentence. */}
+      {parsed && parsed.hosts.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {parsed.hosts.map((h) => (
+            <span
+              key={h}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-2.5 py-[3px] text-[12.5px] text-[var(--ink-soft)]"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--rust)]" />
+              {h}
+            </span>
+          ))}
+          {parsed.more > 0 && (
+            <span className="self-center text-[12.5px] text-[var(--ink-muted)]">+{parsed.more} more</span>
+          )}
+        </div>
+      )}
+
+      {!parsed && step.result && (
+        <div className="text-[13.5px] leading-[1.5] text-[var(--ink-soft)]">{step.result}</div>
+      )}
     </div>
   )
 }
@@ -295,17 +378,17 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
         // on the MarkdownMessage child below) is what getComputedStyle reads for
         // the line-height measurement — boxRef has no competing classes of its
         // own, so unlike the child these apply cleanly with nothing to fight.
-        className="overflow-hidden text-[13px] leading-relaxed transition-[max-height] duration-300 ease-in-out"
+        className="max-w-[62ch] overflow-hidden text-[14.5px] leading-[1.65] transition-[max-height] duration-300 ease-in-out"
       >
         <MarkdownMessage content={revealed} className="reasoning-markdown" />
         {clamped && collapsible && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-[var(--background)] to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-[var(--trace)] to-transparent" />
         )}
       </div>
       {collapsible && (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="mt-0.5 flex items-center gap-0.5 text-[12px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          className="mt-1 flex items-center gap-0.5 text-[12.5px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)]"
         >
           {open ? 'Show less' : 'Show more'}
           <ChevronDown size={13} className={`transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
@@ -317,8 +400,8 @@ function ReasoningText({ content, isActive }: { content: string; isActive?: bool
 
 function SkillRowContent({ name }: { name: string }) {
   return (
-    <div className="text-[13px] text-[var(--muted-foreground)]">
-      Using <span className="text-[var(--foreground)]">{name}</span> skill
+    <div className="text-[14.5px] leading-[1.45] text-[var(--ink)]">
+      Using <span className="text-[var(--ink-soft)]">{name}</span> skill
     </div>
   )
 }
@@ -410,24 +493,9 @@ function activityPreview(items: Item[], drafting?: 'report' | 'chart' | null): s
   if (item.kind === 'reasoning') return 'Thinking'
   if (item.kind === 'skill') return truncatePreview(`Using ${item.name} skill`)
   if (typeof item.step.args?.code === 'string') return 'Writing Python code'
-  const { label, chip } = singleStepInfo(item.step.tool, item.step.args)
-  const chipText = typeof chip === 'string' ? chip.trim() : ''
-  return truncatePreview(chipText ? `${label} ${chipText}` : label)
-}
-
-// The bullet icon for the live row: the live item's own icon, picked exactly
-// the way its timeline row would pick it, so the row doesn't change shape when
-// the body opens around it. `null` means a plain dot — nothing concrete is
-// happening yet ("Thinking"), or an artifact is being drafted.
-function liveIcon(items: Item[], drafting?: 'report' | 'chart' | null): LucideIcon | null {
-  if (drafting) return null
-  const idx = activeActionIndex(items)
-  if (idx < 0) return null
-  const item = items[idx]
-  if (item.kind === 'reasoning') return null
-  if (item.kind === 'skill') return Blocks
-  if (typeof item.step.args?.code === 'string') return Terminal
-  return singleStepInfo(item.step.tool, item.step.args).Icon
+  const { verb, arg } = singleStepInfo(item.step.tool, item.step.args)
+  const argText = typeof arg === 'string' ? arg.trim() : ''
+  return truncatePreview(argText ? `${verb} ${argText}` : verb)
 }
 
 // The header's animated text. A plain re-render swapped labels instantly,
@@ -660,14 +728,23 @@ function HeaderRow({ label, open, onToggle }: { label: HeaderLabelSpec; open: bo
   return (
     <button
       onClick={onToggle}
-      className="flex max-w-full items-center gap-2.5 text-[13px] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+      className="group flex max-w-full items-baseline gap-2 pl-0.5 text-[13.5px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)]"
     >
+      <span className="mb-px h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ink-fainter)]" />
       {'text' in label ? (
         <HeaderLabel text={label.text} shimmer={false} />
       ) : (
         <CountHeaderLabel prefix={label.prefix} count={label.count} suffix={label.suffix} />
       )}
-      <Chevron open={open} />
+      <span className="shrink-0 text-[var(--ink-fainter)]">·</span>
+      <span className="shrink-0">{open ? 'Hide steps' : 'View steps'}</span>
+      {/* A 6px corner rather than a chevron glyph: at this size an icon-set
+          chevron is mostly antialiasing, and this rotates cleanly. */}
+      <span
+        aria-hidden
+        className="mt-0.5 h-1.5 w-1.5 shrink-0 border-l-[1.5px] border-t-[1.5px] border-[var(--ink-fainter)] transition-transform"
+        style={{ transform: `rotate(${open ? 45 : 135}deg)` }}
+      />
     </button>
   )
 }
@@ -684,87 +761,95 @@ function HeaderRow({ label, open, onToggle }: { label: HeaderLabelSpec; open: bo
 // phase where no summary line exists and this row IS the header.
 function LiveRow({
   label,
-  Icon,
   chevron,
   open,
   onToggle,
 }: {
   label: string
-  Icon: LucideIcon | null
   chevron: boolean
   open: boolean
   onToggle: () => void
 }) {
   const body = (
-    <span className="flex min-w-0 max-w-full items-center gap-2.5">
+    <span className="flex min-w-0 max-w-full items-center gap-2.5 text-[14.5px] leading-[1.45] text-[var(--teal)]">
       <HeaderLabel text={label} shimmer />
       {chevron && <Chevron open={open} />}
     </span>
   )
   return (
-    <div className="omni-step-in relative pl-[22px] text-[13px] text-[var(--muted-foreground)]">
-      <Bullet Icon={Icon} live />
+    <TraceRow center animate={false} bullet={<Bullet live />}>
       {chevron ? (
-        <button onClick={onToggle} className="flex max-w-full hover:text-[var(--foreground)] transition-colors">
+        <button onClick={onToggle} className="flex max-w-full transition-colors">
           {body}
         </button>
       ) : (
         body
       )}
-    </div>
+    </TraceRow>
   )
 }
 
-// The bullet that sits on top of the connecting line: an icon for tool/skill
-// rows, a plain dot for reasoning, shared by every row on the timeline — the
-// live row and the trailing Done row included — so they all line up in one
-// gutter.
+/* The 20px icon cell that opens every trace row — a drawn step icon for a
+   tool call, a 5px clay dot for a thought. Teal for the icons because a tool
+   call is something the agent *did*; clay for the dot because a thought is
+   not an action and should not read like one. */
 function Bullet({
-  Icon,
-  active,
-  done,
+  kind,
+  reasoning,
   live,
+  done,
 }: {
-  Icon?: LucideIcon | null
-  active?: boolean
-  done?: boolean
-  /** The always-visible live row's bullet: accent-coloured and breathing. It
-   *  is the one thing on the collapsed header that moves, so it carries the
-   *  "still working" signal the shimmer used to carry alone. */
+  kind?: StepKind
+  reasoning?: boolean
+  /** The step running right now: a spinning ring, the trace's only motion. */
   live?: boolean
+  /** The capstone at the end of a finished trace. */
+  done?: boolean
 }) {
   return (
-    <div className="absolute left-0 top-[1px] flex h-4 w-4 items-center justify-center rounded-full bg-[var(--background)] ring-4 ring-[var(--background)] z-10">
-      {Icon ? (
-        <Icon
-          size={done ? 14 : live ? 13 : 12}
-          strokeWidth={1.75}
-          className={
-            live
-              ? 'text-[var(--accent)] omni-live-pulse'
-              : done || !active
-                ? 'text-[var(--muted-foreground)]'
-                : 'text-[var(--foreground)]'
-          }
+    <span className="flex h-5 w-5 items-center justify-center text-[var(--teal)]">
+      {live ? (
+        <span
+          className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--teal)] border-t-transparent"
+          style={{ animation: 'omni-spin 900ms linear infinite' }}
         />
+      ) : done ? (
+        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--teal)] text-[9px] leading-none text-[var(--accent-foreground)]">
+          ✓
+        </span>
+      ) : reasoning ? (
+        <span className="h-[5px] w-[5px] rounded-full bg-[var(--ink-fainter)]" />
       ) : (
-        <div
-          className={`h-2 w-2 rounded-full ${
-            live
-              ? 'bg-[var(--accent)] omni-live-pulse'
-              : active
-                ? 'bg-[var(--foreground)] animate-pulse'
-                : 'bg-[var(--border-subtle)]'
-          }`}
-        />
+        <StepIcon kind={kind ?? 'data'} />
       )}
-    </div>
+    </span>
   )
 }
 
-function TimelineLine({ isLast }: { isLast: boolean }) {
-  if (isLast) return null
-  return <div className="absolute left-[7px] top-[18px] w-[2px] bg-[var(--border-subtle)]" style={{ height: 'calc(100% + 4px)' }} />
+/* One trace row: fixed icon column, everything else in the second track.
+   A real grid rather than absolute positioning, so a reasoning block that
+   wraps to six lines keeps its icon on the first line and its text on a
+   single left edge. */
+function TraceRow({
+  children,
+  center = false,
+  animate = true,
+  bullet,
+}: {
+  children: React.ReactNode
+  center?: boolean
+  animate?: boolean
+  bullet: React.ReactNode
+}) {
+  return (
+    <div
+      className={`grid grid-cols-[20px_minmax(0,1fr)] gap-3 ${center ? 'items-center' : 'items-start'}`}
+      style={animate ? { animation: 'omni-rise 260ms ease both' } : undefined}
+    >
+      {bullet}
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
 }
 
 // One row on the shared vertical timeline: a connecting line on the left with
@@ -784,16 +869,18 @@ function TimelineRow({
   idPrefix?: string
   onOpenScript?: (id: string) => void
 }) {
-  let Icon: LucideIcon | null = null
+  void isLast
+  let bullet: ReactNode
   let content: ReactNode
   if (item.kind === 'reasoning') {
+    bullet = <Bullet reasoning />
     content = <ReasoningText content={item.step.content} isActive={isActive} />
   } else if (item.kind === 'skill') {
-    Icon = Blocks
+    bullet = <Bullet kind="data" />
     content = <SkillRowContent name={item.name} />
   } else {
     const isCode = typeof item.step.args?.code === 'string'
-    Icon = isCode ? Terminal : singleStepInfo(item.step.tool, item.step.args).Icon
+    bullet = <Bullet kind={isCode ? 'code' : singleStepInfo(item.step.tool, item.step.args).kind} />
     // Must match `scriptReportsFromSteps`' id scheme exactly — both walk the
     // same original `steps` array by position, so `item.stepIndex` (index
     // in that array, not in the filtered `items` list) lines up with the
@@ -802,23 +889,16 @@ function TimelineRow({
     content = <ToolRowContent step={item.step} isActive={isActive} scriptId={scriptId} onOpenScript={onOpenScript} />
   }
 
-  return (
-    <div className="omni-step-in relative pl-[22px]">
-      <TimelineLine isLast={isLast} />
-      <Bullet Icon={Icon} active={isActive} />
-      {content}
-    </div>
-  )
+  return <TraceRow bullet={bullet}>{content}</TraceRow>
 }
 
 // Capstone row at the end of a finished timeline — the quiet "done" beat that
 // takes the live row's place in the gutter once there is nothing left running.
 function DoneTailRow() {
   return (
-    <div className="omni-step-in relative pl-[22px]">
-      <Bullet Icon={CircleCheck} done />
-      <span className="text-[13px] text-[var(--muted-foreground)]">Done</span>
-    </div>
+    <TraceRow center bullet={<Bullet done />}>
+      <span className="text-[13.5px] text-[var(--ink-muted)]">Done</span>
+    </TraceRow>
   )
 }
 
@@ -886,10 +966,25 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // actually did instead — which is also the honest answer for a greeting, the
   // usual case here: the agent thought about it and replied, no tools involved.
   const hasReasoning = items.some((it) => it.kind === 'reasoning')
-  const doneLabel: HeaderLabelSpec =
-    actionCount > 0
-      ? { prefix: 'Completed · ', count: actionCount, suffix: ` step${actionCount === 1 ? '' : 's'}` }
-      : { text: hasReasoning ? 'Thought about it' : 'Completed' }
+  // A finished trace summarises itself by KIND, not by a total: "3 searches ·
+  // 2 tool calls · 1 note" tells you what sort of work the answer rests on,
+  // where "6 steps" tells you only that there were six of something.
+  const doneLabel: HeaderLabelSpec = (() => {
+    let searches = 0
+    let others = 0
+    let notes = 0
+    for (const it of items) {
+      if (it.kind === 'reasoning') notes++
+      else if (it.kind === 'tool' && isSearch(it.step.tool)) searches++
+      else others++
+    }
+    const bits: string[] = []
+    if (searches) bits.push(`${searches} search${searches === 1 ? '' : 'es'}`)
+    if (others) bits.push(`${others} tool call${others === 1 ? '' : 's'}`)
+    if (notes) bits.push(notes === 1 ? '1 note' : `${notes} notes`)
+    if (bits.length) return { text: bits.join(' · ') }
+    return { text: hasReasoning ? 'Thought about it' : 'Completed' }
+  })()
   // Present tense while the turn is still running, and the count demoted to a
   // subordinate clause: this line describes the state of the WHOLE turn, the
   // live row below it being one detail of that state. Leading with "Completed"
@@ -903,15 +998,17 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   }
   const liveLabel = activityPreview(items, drafting)
   // Drafting keeps the live row alive past the end of thinking: an artifact is
-  // still being written, and that row is now the only place that says so (it
-  // used to be a row inside the collapsed body, where nobody saw it).
+  // still being written, and that row is now the only place that says so.
   const showLiveRow = thinking || !!drafting
-  // While a live row is showing, a summary line above it only earns its place
-  // once a countable action has actually finished. The reasoning that precedes
-  // the first tool call is not a step, so it doesn't get a row of its own
-  // ("Working · 0 steps completed" above the very first search would be noise)
-  // — it's still there in the body, under the live row's chevron.
-  const showCompletedRow = !showLiveRow || completedCount > 0
+  // A running turn shows its work. Every step that has finished stays on the
+  // card as it lands, with the live row at the bottom — watching the trace
+  // build is the whole point of showing one, and hiding it behind "Working ·
+  // 3 steps completed · View steps" turned the most interesting moment of the
+  // turn into a closed box. The summary line and the collapse are what a
+  // FINISHED trace gets, when the steps have become reference rather than
+  // news.
+  const isLive = showLiveRow
+  const showCompletedRow = !isLive
 
   // ── expand/collapse ────────────────────────────────────────────────────
   // Always starts collapsed, live turn or history alike — the header preview
@@ -920,28 +1017,13 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // user clicked, and yanking it shut when the turn finishes would pull the
   // text out from under someone mid-read.
   const [open, setOpen] = useState(false)
+  // Live turns are always expanded and have nothing to toggle; `open` only
+  // governs a finished trace.
+  const bodyOpen = isLive || open
 
-  // Animated collapse: the body stays mounted and its max-height is measured
-  // and transitioned, instead of conditionally unmounting — so toggling never
-  // snaps the layout or yanks the page's scroll position. `maxH === null`
-  // means "no cap", the steady state while expanded, so live-streamed content
-  // can keep growing the box freely without fighting a stale cached height.
-  const bodyRef = useRef<HTMLDivElement | null>(null)
-  const [maxH, setMaxH] = useState<string | null>(null)
-  const prevOpenRef = useRef(open)
-  useEffect(() => {
-    if (prevOpenRef.current === open) return
-    prevOpenRef.current = open
-    const el = bodyRef.current
-    if (!el) return
-    if (open) {
-      setMaxH('0px')
-      requestAnimationFrame(() => requestAnimationFrame(() => setMaxH(`${el.scrollHeight}px`)))
-    } else {
-      setMaxH(`${el.scrollHeight}px`)
-      requestAnimationFrame(() => requestAnimationFrame(() => setMaxH('0px')))
-    }
-  }, [open])
+  // The collapse is pure CSS now (`grid-template-rows: 0fr → 1fr` on the body
+  // below), so there is no height to measure, no ref, and no rAF dance — and
+  // no stale cached height for streaming content to fight.
 
   if (!thinking && !hasContent) return null
 
@@ -951,10 +1033,26 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // the text doesn't jump sideways into a gutter that suddenly exists.
   if (thinking && items.length === 0 && !drafting) {
     return (
-      // `pt-2` matches the gap the live row carries in every other phase, so
-      // the row doesn't shift up or down when the first step lands.
-      <div className="mb-3 pt-2">
-        <LiveRow label={liveLabel} Icon={null} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
+      // The same card, gap and row geometry as every later phase, so nothing
+      // shifts when the first step lands. The two bars stand in for the step
+      // text that is about to arrive — a skeleton of the shape, not a spinner
+      // in an empty box.
+      <div className="omni-trace mb-6 flex flex-col gap-4 px-5 py-[18px]">
+        <div className="omni-sweep-rail" />
+        <LiveRow label={liveLabel} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
+        <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-3" style={{ animation: 'omni-rise 240ms ease both' }}>
+          <span />
+          <div className="flex flex-col gap-2">
+            <div
+              className="h-[9px] w-[58%] rounded-full bg-[var(--line-strong)]"
+              style={{ animation: 'omni-soft-pulse 1300ms ease-in-out infinite' }}
+            />
+            <div
+              className="h-[9px] w-[34%] rounded-full bg-[var(--line-strong)]"
+              style={{ animation: 'omni-soft-pulse 1300ms ease-in-out 220ms infinite' }}
+            />
+          </div>
+        </div>
       </div>
     )
   }
@@ -967,9 +1065,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // the bottom of the body, and the live row now says that in the same place,
   // permanently visible and with the actual step name on it.
   const showDoneTail = !thinking && !drafting && hasContent
-  // Whatever visually follows the body's last row, and therefore whether that
-  // row still needs a connecting line under it.
-  const hasTail = showLiveRow || showDoneTail
   // The body is the timeline minus the live step, in order. Original indices
   // are carried through because "is this the item currently streaming" is a
   // question about position in `items` (it drives the reasoning typewriter),
@@ -982,7 +1077,15 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
     // BETWEEN the other two is what makes expansion feel like the list growing
     // out of the header rather than a second panel appearing — the live row
     // never moves relative to the steps above it, it just gets more of them.
-    <div className="mb-3">
+    /* ── The trace ────────────────────────────────────────────────────────
+       Everything the agent did, on a sand panel rather than on the page
+       ground. The panel is what separates "how the answer was reached" from
+       the answer itself, so it appears only when there is something in it:
+       while the turn is live, and when a finished trace is expanded. A
+       collapsed, finished trace is just its one-line summary — no empty box.
+       The sweep at the top is deliberately indeterminate; the agent cannot
+       report a percentage, so the bar must not imply one. */
+    <div className="mb-6">
       {showCompletedRow && (
         // Animated only on a live turn: a summary line appearing mid-run is an
         // event worth a beat, whereas on a history reload the row is just
@@ -995,84 +1098,66 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
         </div>
       )}
 
+      {/* The panel itself: the design's sand card, a flat 16px-gap column.
+          It appears only when there is something in it — while the turn is
+          live, and when a finished trace is expanded. A collapsed, finished
+          trace is just its summary line; an empty box under it would read as
+          a loading state that never resolves. */}
       <div
-        ref={bodyRef}
-        onTransitionEnd={(e) => {
-          if (e.propertyName !== 'max-height') return
-          if (open) setMaxH(null)
-        }}
-        style={{
-          // `{}` here (rather than a `0px` fallback for the closed steady
-          // state) was the bug: `maxH` starts `null` regardless of what
-          // `open` initializes to, and the measuring effect only runs when
-          // `open` *changes* — so a message that mounts already collapsed
-          // (history reload) rendered fully expanded anyway on first paint,
-          // and the first click had to "close" that accidental expansion
-          // before a second click could actually open/close it as expected.
-          ...(maxH !== null ? { maxHeight: maxH } : open ? {} : { maxHeight: '0px' }),
-          // Opacity fades out faster than the height collapses, so the row
-          // content (including any reasoning text still tail-revealing via
-          // its typewriter) is fully invisible well before the box finishes
-          // shrinking — a bare max-height transition let a still-updating
-          // last row visibly fight the collapsing box, which is what read as
-          // "生硬"/janky. Same easing as the rest of the app's step/row
-          // entrance animations (`omni-step-in`), instead of a plain
-          // `ease-in-out`, so opening and closing feel consistent with them.
-          opacity: open ? 1 : 0,
-          transition: 'max-height 380ms cubic-bezier(0.4,0,0.2,1), opacity 200ms cubic-bezier(0.4,0,0.2,1)',
-        }}
-        className="overflow-hidden"
+        className={
+          bodyOpen
+            ? `omni-trace flex flex-col gap-4 px-5 py-[18px] ${showCompletedRow ? 'mt-2' : ''}`
+            : ''
+        }
       >
-        {/* Padding lives INSIDE the collapsing box so it collapses with it:
-            closed, the live row sits one tight gap under the header; open, the
-            8px here plus the live row's own 8px add up to the same 16px that
-            separates every other pair of rows. */}
-        <div className="space-y-4 py-2">
-          {bodyItems.map(({ item, i }, pos) => {
-            // Two different questions, kept separate on purpose: "is this the
-            // item currently streaming" (drives the typewriter/pulsing dot,
-            // must depend only on position in `items`) vs "does a line need to
-            // connect this row to whatever follows" (must also account for the
-            // live/Done tail below the box). Folding both into one
-            // `!hasTail`-gated value used to mean isActive was permanently
-            // false for every row whenever a tail was showing — i.e. the
-            // entire time a turn was thinking — which made useSmoothReveal
-            // treat every reasoning step as already-historical right from its
-            // first render and never actually type it in.
-            const isActive = thinking && i === items.length - 1
-            const drawsLine = pos === bodyItems.length - 1 && !hasTail
-            return (
-              <TimelineRow
-                key={i}
-                item={item}
-                isActive={isActive}
-                isLast={drawsLine}
-                idPrefix={idPrefix}
-                onOpenScript={onOpenScript}
-              />
-            )
-          })}
+        {/* Indeterminate on purpose: the agent cannot report a percentage, so
+            the bar must not imply one. */}
+        {thinking && <div className="omni-sweep-rail" />}
 
-          {showDoneTail && <DoneTailRow />}
+        {/* The collapsing body. `grid-template-rows: 0fr → 1fr` rather than a
+            measured max-height: it animates to the row's real height with no
+            JS measurement, so a reasoning block still typing itself in mid-open
+            can't out-grow a height that was measured a frame ago. Opacity
+            fades faster than the height, so a still-updating last row is
+            invisible well before the box finishes closing. */}
+        <div
+          className="grid transition-[grid-template-rows,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+          style={{ gridTemplateRows: bodyOpen ? '1fr' : '0fr', opacity: bodyOpen ? 1 : 0 }}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="flex flex-col gap-4">
+              {bodyItems.map(({ item, i }) => (
+                <TimelineRow
+                  key={i}
+                  // "Is this the item currently streaming" is a question about
+                  // position in `items` — it drives the reasoning typewriter —
+                  // never about position in this filtered list.
+                  item={item}
+                  isActive={thinking && i === items.length - 1}
+                  isLast={false}
+                  idPrefix={idPrefix}
+                  onOpenScript={onOpenScript}
+                />
+              ))}
+              {showDoneTail && <DoneTailRow />}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {showLiveRow && (
-        <div className="pt-2">
+        {showLiveRow && (
           <LiveRow
             label={liveLabel}
-            Icon={liveIcon(items, drafting)}
             // The chevron always rides the topmost row, so the live row only
             // owns it before the first step has finished — the phase where it
             // IS the header. And only if the body has something in it: a first
             // tool call that arrived with no reasoning ahead of it would
             // otherwise offer a chevron that opens an empty box.
-            chevron={!showCompletedRow && bodyItems.length > 0}
+            chevron={false}
             open={open}
             onToggle={() => setOpen((v) => !v)}
           />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

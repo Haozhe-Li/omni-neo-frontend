@@ -54,7 +54,7 @@ function SourceCardHeader({ source }: { source: { url: string; title: string; cr
           />
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--muted-foreground)]">
+      <span className="omni-mono min-w-0 flex-1 truncate text-[11.5px] text-[var(--ink-muted)]">
         {isDocument ? truncateFilename(source.title, 30, true) : domainOf(source.url)}
       </span>
       <CredibilityTag credibility={source.credibility} />
@@ -67,14 +67,14 @@ function SourceCard({ source }: { source: Source }) {
   const body = (
     <>
       <SourceCardHeader source={source} />
-      <div className="text-[13px] font-medium leading-snug text-[var(--foreground)] line-clamp-2">{source.title}</div>
+      <div className="line-clamp-2 text-[13.5px] leading-[1.4] text-[var(--ink)]">{source.title}</div>
       {source.content && (
-        <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-3">{source.content}</p>
+        <p className="mt-1.5 line-clamp-3 text-[12.5px] leading-[1.55] text-[var(--ink-muted)]">{source.content}</p>
       )}
     </>
   )
   const className =
-    'block rounded-lg border border-[var(--border-subtle)] bg-[var(--card)] p-3 transition-colors hover:bg-[var(--secondary)]/60'
+    'block rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] px-3.5 py-3 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)]'
 
   if (isDocument) {
     return (
@@ -152,11 +152,11 @@ function CheckSourceCardSkeleton({ delay }: { delay: number }) {
 function CheckSourceView({ state }: { state: CheckSourceState }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] px-3 py-2.5">
-        <p className="line-clamp-4 text-[13px] leading-relaxed text-[var(--foreground)]/90">{state.claim}</p>
+      <div className="rounded-[14px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-3.5 py-3">
+        <p className="line-clamp-4 text-[13.5px] leading-[1.55] text-[var(--ink-body)]">{state.claim}</p>
       </div>
 
-      <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+      <p className="omni-eyebrow px-0.5">
         {state.status === 'loading' ? 'Checking sources' : 'Sources that support this claim'}
       </p>
 
@@ -206,7 +206,7 @@ function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumber
     <>
       {used.length > 0 && (
         <>
-          <p className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+          <p className="omni-eyebrow px-0.5">
             {used.length} source{used.length === 1 ? '' : 's'} used
           </p>
           {sortLabeledByTrust(used).map(({ source, label }) => (
@@ -219,7 +219,7 @@ function SourcesList({ sources, citedNumbers }: { sources: Source[]; citedNumber
           <button
             type="button"
             onClick={() => setShowUnused((v) => !v)}
-            className="flex w-full items-center gap-1.5 px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            className="omni-eyebrow flex w-full items-center gap-1.5 px-0.5 transition-colors hover:text-[var(--teal)]"
           >
             <ChevronDown size={12} className={`shrink-0 transition-transform duration-200 ${showUnused ? 'rotate-180' : ''}`} />
             {unused.length} source{unused.length === 1 ? '' : 's'} read but not used
@@ -254,18 +254,18 @@ interface SourcesPanelProps {
 function PanelHeaderTitle({ sources, checkSource }: { sources: Source[]; checkSource?: CheckSourceState | null }) {
   if (checkSource) {
     return checkSource.status === 'loading' ? (
-      <span className="flex items-center gap-1.5 text-[15px] font-medium text-[var(--foreground)] opacity-90">
-        <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />
+      <span className="flex items-center gap-2 text-[14px] text-[var(--ink)]">
+        <Loader2 size={14} className="animate-spin text-[var(--teal)]" />
         Checking sources…
       </span>
     ) : (
-      <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
+      <span className="text-[14px] text-[var(--ink)]">
         {checkSource.matches.length} source{checkSource.matches.length === 1 ? '' : 's'} found
       </span>
     )
   }
   return (
-    <span className="text-[15px] font-medium text-[var(--foreground)] opacity-90">
+    <span className="text-[14px] text-[var(--ink)]">
       {sources.length} source{sources.length === 1 ? '' : 's'}
     </span>
   )
@@ -290,9 +290,9 @@ export function SourcesPanel({ sources, citedNumbers, open, onClose, checkSource
       {/* Mobile: Full-screen overlay */}
       {open && (
         <div className="fixed inset-0 z-50 bg-[var(--background)] flex flex-col sm:hidden animate-in fade-in slide-in-from-bottom-8 duration-300">
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
+          <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-[var(--line)] px-4">
             <PanelHeaderTitle sources={sources} checkSource={checkSource} />
-            <button onClick={onClose} className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Close">
+            <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]" title="Close">
               <X size={18} />
             </button>
           </div>
@@ -304,13 +304,13 @@ export function SourcesPanel({ sources, citedNumbers, open, onClose, checkSource
       <div
         className={`
           hidden sm:block relative z-auto translate-x-0 shadow-none transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] flex-shrink-0 overflow-hidden bg-transparent h-full
-          ${open ? 'w-[320px] lg:w-[360px] border-l border-[var(--border-subtle)]' : 'w-0 border-transparent'}
+          ${open ? 'w-[320px] lg:w-[360px] border-l border-[var(--line)]' : 'w-0 border-transparent'}
         `}
       >
-        <div className="flex h-full w-[320px] lg:w-[360px] flex-col bg-[var(--background)]">
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border-subtle)] px-4">
+        <div className="flex h-full w-[320px] lg:w-[360px] flex-col bg-[var(--paper-rail)]">
+          <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-[var(--line)] px-4">
             <PanelHeaderTitle sources={sources} checkSource={checkSource} />
-            <button onClick={onClose} className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors" title="Close">
+            <button onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]" title="Close">
               <X size={18} />
             </button>
           </div>

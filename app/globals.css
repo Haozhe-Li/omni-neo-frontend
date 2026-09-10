@@ -4,108 +4,216 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
-  --bg-primary: #f3f3ee;
-  --text-main: #1a1a1a;
-  --accent-color: #20B2AA;
-  --border-subtle: rgba(0, 0, 0, 0.05);
+/* ══════════════════════════════════════════════════════════════════════════
+   Omni Answer Engine — design tokens
+   ──────────────────────────────────────────────────────────────────────────
+   The palette is paper, not screen: a warm off-white ground with a 3px dot
+   texture, ink-brown type, a single teal for anything actionable and a rust
+   accent used sparingly for provenance (source kinds, list bullets, the
+   second ring in the mark). Everything below is expressed twice — the shadcn
+   names the app already reaches for (--background, --card, --accent, …) and
+   the Omni names (--paper, --sand, --ink, --teal, …) that the reskinned
+   components use directly. They point at the same colors on purpose: a
+   component styled either way stays in the system.
 
-  --background: #f3f3ee;
-  --foreground: #1a1a1a;
-  --card: #ffffff;
-  --card-foreground: #1a1a1a;
-  --popover: #ffffff;
-  --popover-foreground: #1a1a1a;
-  --primary: #1a1a1a;
-  --primary-foreground: #f3f3ee;
-  --secondary: #eaeae5;
-  --secondary-foreground: #1a1a1a;
-  --muted: #eaeae5;
-  --muted-foreground: #6b6b6b;
-  --accent: #20B2AA;
-  --accent-foreground: #ffffff;
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
+   Dark mode is not in the source design. It is derived here rather than
+   inverted: the ground becomes warm ink (never neutral grey, which would
+   read as a different product), the teal lifts two stops to clear 4.5:1 on
+   it, and the paper texture drops to a fifth of its light-mode strength
+   because light dots on dark read as noise long before dark dots on light
+   do. ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Omni surfaces ── */
+  --paper: #FAF6EF;
+  --paper-rail: #F6F1E8;
+  --paper-raised: #FFFDF9;
+  --sand: #F1EADC;
+  --sand-deep: #EFE8DB;
+  --trace: #F4EEE3;
+  --paper-texture: rgba(43, 39, 36, 0.045);
+
+  /* ── Omni ink ── */
+  --ink: #2B2724;
+  --ink-body: #3A342E;
+  --ink-soft: #5A5247;
+  --ink-muted: #6C6357;
+  --ink-faint: #A79A87;
+  --ink-fainter: #C6BBA9;
+
+  /* ── Omni lines ── */
+  --line: #E8DFD2;
+  --line-strong: #E2D8C9;
+  --line-hair: #F1EADC;
+
+  /* ── Omni accents ── */
+  --teal: #26696B;
+  --teal-hover: #1D5456;
+  --teal-tint: #E4EFEC;
+  --teal-tint-deep: #E9F2F0;
+  --teal-line: #CFE3DE;
+  --rust: #C0673C;
+  --rust-tint: #F6E7DE;
+
+  /* Avatar / initials chip — the one place a third hue appears. */
+  --clay: #DCC9AE;
+  --clay-ink: #6B5B45;
+
+  /* Modal scrim. Warm, not neutral black: a cold grey wash over paper reads
+     as a screenshot of a different app sitting behind the dialog. */
+  --scrim: rgba(43, 39, 36, 0.38);
+
+  /* ── Legacy aliases still referenced across the app ── */
+  --bg-primary: var(--paper);
+  --text-main: var(--ink);
+  --accent-color: var(--teal);
+  --border-subtle: var(--line);
+  /* A dozen call sites ask for the brand face by this name; it now resolves
+     to the display serif rather than IBM Plex Sans. */
+  --font-plex: var(--font-instrument), 'Instrument Serif', Georgia, serif;
+
+  /* ── shadcn/tailwind token surface ── */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--sand);
+  --secondary-foreground: var(--ink);
+  --muted: var(--sand);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--teal);
+  --accent-foreground: #FAF6EF;
+  --destructive: #B3452C;
+  --destructive-foreground: #B3452C;
   /* "running low" amber — the usage meter turns this at 80%. Deliberately
      not `--destructive`: that red reads as "something broke", and in dark
-     mode it's dark enough to disappear into the meter's own track. */
-  --warning: #f59e0b;
-  --border: rgba(0, 0, 0, 0.08);
-  --input: rgba(0, 0, 0, 0.08);
-  --ring: #20B2AA;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+     mode it's dark enough to disappear into the meter's own track. Pulled
+     toward the paper palette's rust so it sits in the same family. */
+  --warning: #C08A2E;
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--teal);
+  --chart-1: #26696B;
+  --chart-2: #C0673C;
+  --chart-3: #6B8F70;
+  --chart-4: #8A6E9E;
+  --chart-5: #B3A791;
+  /* The design's geometry runs 12px (code blocks, chips) → 20px (cards) →
+     999px (every button). This sets the middle of that range: the shadcn
+     scale derives sm/md/lg/xl from it, and anything that should be a pill
+     asks for `rounded-full` or `.omni-pill` explicitly rather than being
+     forced there by an inflated base radius. */
+  --radius: 0.875rem;
+  --sidebar: var(--paper-rail);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--teal);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--sand-deep);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--teal);
 
   /* Flash Animation - Light Mode */
-  --flash-start: inset 0 0 30px 5px rgba(32, 178, 170, 0.05);
-  --flash-end: inset 0 0 100px 30px rgba(32, 178, 170, 0.15);
+  --flash-start: inset 0 0 30px 5px rgba(38, 105, 107, 0.05);
+  --flash-end: inset 0 0 100px 30px rgba(38, 105, 107, 0.14);
   --flash-opacity-start: 0.2;
   --flash-opacity-end: 0.6;
 }
 
 .dark {
-  --bg-primary: #191A1A;
-  --text-main: #ffffff;
-  --accent-color: #20B2AA;
-  --border-subtle: rgba(255, 255, 255, 0.05);
+  /* ── Omni surfaces ── */
+  --paper: #191614;
+  --paper-rail: #141210;
+  --paper-raised: #201C19;
+  --sand: #262119;
+  --sand-deep: #2B251D;
+  --trace: #221E19;
+  --paper-texture: rgba(250, 246, 239, 0.028);
 
-  --background: #191A1A;
-  --foreground: #ffffff;
-  --card: #222323;
-  --card-foreground: #ffffff;
-  --popover: #222323;
-  --popover-foreground: #ffffff;
-  --primary: #ffffff;
-  --primary-foreground: #191A1A;
-  --secondary: #2a2b2b;
-  --secondary-foreground: #ffffff;
-  --muted: #2a2b2b;
-  --muted-foreground: #8b8b8b;
-  --accent: #20B2AA;
-  --accent-foreground: #ffffff;
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  /* Lifted a stop against the dark background — see the light-mode note. */
-  --warning: #fbbf24;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: #20B2AA;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  /* ── Omni ink ── */
+  --ink: #F2EBE0;
+  --ink-body: #DED5C8;
+  --ink-soft: #C2B7A7;
+  --ink-muted: #9E9382;
+  --ink-faint: #7C7263;
+  --ink-fainter: #5F5749;
+
+  /* ── Omni lines ── */
+  --line: #332D26;
+  --line-strong: #40382E;
+  --line-hair: #2A241E;
+
+  /* ── Omni accents ── */
+  --teal: #6FB4AF;
+  --teal-hover: #8ECCC7;
+  --teal-tint: #17302F;
+  --teal-tint-deep: #14312F;
+  --teal-line: #27524F;
+  --rust: #DC8B5C;
+  --rust-tint: #332116;
+
+  --clay: #4A3F31;
+  --clay-ink: #E4D5BE;
+
+  --scrim: rgba(8, 6, 5, 0.62);
+
+  /* ── Legacy aliases ── */
+  --bg-primary: var(--paper);
+  --text-main: var(--ink);
+  --accent-color: var(--teal);
+  --border-subtle: var(--line);
+
+  /* ── shadcn/tailwind token surface ── */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-raised);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-raised);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--sand);
+  --secondary-foreground: var(--ink);
+  --muted: var(--sand);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--teal);
+  --accent-foreground: #14100D;
+  --destructive: #E0705A;
+  --destructive-foreground: #E0705A;
+  /* Lifted a stop against the dark ground — see the light-mode note. */
+  --warning: #E0AE58;
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--teal);
+  --chart-1: #6FB4AF;
+  --chart-2: #DC8B5C;
+  --chart-3: #93B497;
+  --chart-4: #AE94C0;
+  --chart-5: #8A7F6C;
+  --sidebar: var(--paper-rail);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--teal);
+  --sidebar-primary-foreground: #14100D;
+  --sidebar-accent: var(--sand-deep);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--teal);
 
   /* Flash Animation - Dark Mode (Softer) */
-  --flash-start: inset 0 0 30px 5px rgba(32, 178, 170, 0.05);
-  --flash-end: inset 0 0 100px 30px rgba(32, 178, 170, 0.15);
+  --flash-start: inset 0 0 30px 5px rgba(111, 180, 175, 0.05);
+  --flash-end: inset 0 0 100px 30px rgba(111, 180, 175, 0.13);
   --flash-opacity-start: 0.2;
   --flash-opacity-end: 0.6;
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Geist', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --font-sans: var(--font-hanken), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--font-instrument), 'Instrument Serif', Georgia, serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -396,13 +504,20 @@
     @apply border-border outline-ring/50;
   }
 
+  /* The paper grain. A 1px dot on a 3px grid, drawn in the ink color at ~4%
+     — invisible as a pattern at reading distance, but it stops the large
+     empty areas of the home and thread screens from reading as flat #FFF.
+     Fixed attachment so it does not crawl when a panel scrolls over it. */
   body {
     @apply bg-background text-foreground;
+    background-image: radial-gradient(var(--paper-texture) 1px, transparent 1px);
+    background-size: 3px 3px;
+    background-attachment: fixed;
+    font-feature-settings: 'kern' 1;
   }
 
   ::selection {
-    background-color: rgba(32, 178, 170, 0.2);
-    /* Low saturation cyan */
+    background-color: var(--teal-line);
     color: inherit;
   }
 }
@@ -437,115 +552,121 @@
   animation: shimmer-bar 1.8s ease-in-out infinite;
 }
 
-/* ── highlight.js code theme ── */
+/* ── highlight.js code theme ──────────────────────────────────────────────
+   A low-contrast, warm syntax palette rather than the usual rainbow: code in
+   an answer is prose the reader is skimming, not a file they are editing, so
+   the highlighting only needs to separate the four things that matter —
+   keywords, strings, numbers, comments — and should never out-shout the
+   sentence explaining it. Every hue is drawn from the paper palette's own
+   family (teal, rust, sage, plum) at reading contrast. */
 .hljs {
-  color: #4a4c50;
+  color: var(--ink-body);
 }
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-built_in {
-  color: #637792;
+  color: #2F6E70;
 }
 .hljs-string,
 .hljs-attr {
-  color: #728470;
+  color: #6B8F70;
 }
 .hljs-number,
 .hljs-literal {
-  color: #9c7b64;
+  color: #A9663E;
 }
 .hljs-comment {
-  color: #9ca0a6;
+  color: var(--ink-faint);
   font-style: italic;
 }
 .hljs-function .hljs-title,
 .hljs-title.function_ {
-  color: #85748f;
+  color: #8A6E9E;
 }
 .hljs-variable,
 .hljs-params {
-  color: #68707a;
+  color: var(--ink-soft);
 }
 .hljs-type,
 .hljs-class .hljs-title {
-  color: #658585;
+  color: #4A7F7C;
 }
 .hljs-meta,
 .hljs-tag {
-  color: #946969;
+  color: #A9663E;
 }
 .hljs-punctuation,
 .hljs-operator {
-  color: #858990;
+  color: var(--ink-muted);
 }
 .hljs-property {
-  color: #68707a;
+  color: var(--ink-soft);
 }
 .hljs-regexp {
-  color: #966b7a;
+  color: #9E6579;
 }
 .hljs-deletion {
-  color: #946969;
-  background: rgba(148, 105, 105, 0.1);
+  color: #B3452C;
+  background: color-mix(in srgb, #B3452C 10%, transparent);
 }
 .hljs-addition {
-  color: #728470;
-  background: rgba(114, 132, 112, 0.1);
+  color: #4F7A55;
+  background: color-mix(in srgb, #4F7A55 12%, transparent);
 }
 
 .dark .hljs {
-  color: #c1c5cc;
+  color: var(--ink-body);
 }
 .dark .hljs-keyword,
 .dark .hljs-selector-tag,
 .dark .hljs-built_in {
-  color: #94a7c2;
+  color: #7FC0BB;
 }
 .dark .hljs-string,
 .dark .hljs-attr {
-  color: #9db09a;
+  color: #9FBFA3;
 }
 .dark .hljs-number,
 .dark .hljs-literal {
-  color: #c7a791;
+  color: #E09A6E;
 }
 .dark .hljs-comment {
-  color: #787d85;
+  color: var(--ink-faint);
   font-style: italic;
 }
 .dark .hljs-function .hljs-title,
 .dark .hljs-title.function_ {
-  color: #b5a4bf;
+  color: #BCA3CC;
 }
 .dark .hljs-variable,
 .dark .hljs-params {
-  color: #a4abb5;
+  color: var(--ink-soft);
 }
 .dark .hljs-type,
 .dark .hljs-class .hljs-title {
-  color: #91b5b5;
+  color: #92CBC6;
 }
 .dark .hljs-meta,
 .dark .hljs-tag {
-  color: #bd9595;
+  color: #E09A6E;
 }
 .dark .hljs-punctuation,
 .dark .hljs-operator {
-  color: #8c929c;
+  color: var(--ink-muted);
 }
 .dark .hljs-property {
-  color: #a4abb5;
+  color: var(--ink-soft);
 }
 .dark .hljs-regexp {
-  color: #c09ba8;
+  color: #CE9AAB;
 }
 .dark .hljs-deletion {
-  color: #bd9595;
-  background: rgba(189, 149, 149, 0.1);
+  color: #E0705A;
+  background: color-mix(in srgb, #E0705A 12%, transparent);
 }
 .dark .hljs-addition {
-  color: #9db09a;
-  background: rgba(157, 176, 154, 0.1);
+  color: #9FBFA3;
+  background: color-mix(in srgb, #9FBFA3 12%, transparent);
 }
 
 /* ── Markdown body utilities ── */
@@ -593,12 +714,12 @@
 
 /* ── Modal backdrop ── */
 .cl-modalBackdrop {
-  background: rgba(0, 0, 0, 0.4) !important;
+  background: color-mix(in srgb, #2B2724 42%, transparent) !important;
   backdrop-filter: blur(4px) !important;
 }
 
 .cl-modalContent {
-  border-radius: 1rem !important;
+  border-radius: 24px !important;
 }
 
 /* ── Hide Clerk branding footer ── */
@@ -608,13 +729,13 @@
 
 /* ── Smooth card border ── */
 .cl-card {
-  border-radius: 1rem !important;
+  border-radius: 24px !important;
 }
 
 /* ── Primary action buttons ── */
 .cl-formButtonPrimary {
-  border-radius: 0.75rem !important;
-  font-weight: 500 !important;
+  border-radius: 999px !important;
+  font-weight: 400 !important;
   transition: opacity 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -624,35 +745,35 @@
 
 /* ── Input fields ── */
 .cl-formFieldInput {
-  border-radius: 0.75rem !important;
+  border-radius: 14px !important;
   transition: border-color 200ms !important;
 }
 
 /* ── Social login buttons ── */
 .cl-socialButtonsBlockButton {
-  border-radius: 0.75rem !important;
+  border-radius: 999px !important;
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 /* ── Navbar inside UserProfile ── */
 .cl-navbarButton {
-  border-radius: 0.5rem !important;
+  border-radius: 999px !important;
   transition: all 200ms !important;
 }
 
 /* ── OTP input ── */
 .cl-otpCodeFieldInput {
-  border-radius: 0.5rem !important;
+  border-radius: 12px !important;
 }
 
 /* ── Alert ── */
 .cl-alert {
-  border-radius: 0.75rem !important;
+  border-radius: 16px !important;
 }
 
 /* ── Identity preview row ── */
 .cl-identityPreview {
-  border-radius: 0.75rem !important;
+  border-radius: 999px !important;
 }
 
 .blog-shell {
@@ -665,34 +786,46 @@
   color: var(--foreground);
 }
 
+/* Published pages and reports read in the same voice as an answer: display
+   serif for structure, weight 400, no underline rules — the space above a
+   heading is the separator. */
 .blog-markdown h1,
 .blog-markdown h2,
 .blog-markdown h3,
 .blog-markdown h4 {
-  color: var(--foreground);
+  font-family: var(--font-instrument), 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  color: var(--ink);
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .blog-markdown h2 {
   margin-top: 2.2rem;
-  margin-bottom: 0.9rem;
-  padding-bottom: 0.45rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  font-size: 1.55rem;
-  font-weight: 600;
+  margin-bottom: 0.85rem;
+  font-size: 1.6rem;
 }
 
 .blog-markdown h3 {
   margin-top: 1.7rem;
-  margin-bottom: 0.6rem;
-  font-size: 1.2rem;
-  font-weight: 600;
+  margin-bottom: 0.55rem;
+  font-size: 1.3rem;
 }
 
 .blog-markdown p {
-  margin: 0 0 1.1rem;
-  color: var(--foreground);
+  margin: 0 0 1.25rem;
+  font-size: 1.0625rem;
+  line-height: 1.75;
+  color: var(--ink-body);
   text-wrap: pretty;
+}
+
+.blog-markdown li {
+  color: var(--ink-body);
+}
+
+.blog-markdown ul li::marker {
+  color: var(--rust);
 }
 
 .blog-markdown ul,
@@ -717,9 +850,9 @@
   width: 100%;
   max-height: 520px;
   object-fit: cover;
-  border-radius: 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
-  margin: 1.25rem 0;
+  border-radius: 1.25rem;
+  border: 1px solid var(--line);
+  margin: 1.5rem 0;
 }
 
 .blog-markdown pre,
@@ -909,17 +1042,19 @@
    not the order they appear in the className string. Real selectors here
    settle both deterministically instead of relying on either. */
 .reasoning-markdown {
-  font-size: 13px !important;
-  line-height: 1.625 !important;
-  color: var(--muted-foreground);
+  font-size: 14.5px !important;
+  line-height: 1.65 !important;
+  color: var(--ink-muted);
+  text-wrap: pretty;
 }
 .reasoning-markdown p,
 .reasoning-markdown li,
 .reasoning-markdown h1,
 .reasoning-markdown h2,
 .reasoning-markdown h3 {
-  font-size: 13px;
-  line-height: 1.625;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink-muted);
 }
 .reasoning-markdown h1,
 .reasoning-markdown h2,
@@ -947,3 +1082,364 @@
   padding-left: 1.1em;
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Omni primitives
+   ──────────────────────────────────────────────────────────────────────────
+   The design repeats a small number of shapes across every screen — a serif
+   display line, a mono eyebrow, an outlined pill, a raised card, a sand
+   "trace" panel, a citation marker. They live here as classes rather than as
+   copies of a ten-property Tailwind string, so a change to the pill's
+   geometry reaches the composer, the nav, the source chips and the report
+   header at once.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── Type ─────────────────────────────────────────────────────────────── */
+
+/* The display voice. Instrument Serif is drawn small-on-the-body, so it
+   needs negative tracking and a tight leading to sit right at headline
+   sizes; both are baked in here rather than re-specified per heading. */
+.omni-display {
+  font-family: var(--font-instrument), 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  text-wrap: pretty;
+}
+
+.omni-display em {
+  font-style: italic;
+  color: var(--teal);
+}
+
+/* Eyebrow labels: SOURCES, REFERENCES, MODEL, the date over Discover. */
+.omni-eyebrow {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  line-height: 1.4;
+}
+
+.omni-mono {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────── */
+
+.omni-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+}
+
+/* The agent's working surface — steps, tool calls, reasoning. Sand rather
+   than raised paper, so a trace reads as scaffolding beside the answer
+   instead of competing with it for the same "this is the content" weight. */
+.omni-trace {
+  background: var(--trace);
+  border-radius: 18px;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+
+.omni-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  padding: 6px 13px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.omni-pill:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.omni-pill-solid {
+  border-color: transparent;
+  background: var(--teal);
+  color: var(--accent-foreground);
+}
+
+.omni-pill-solid:hover {
+  background: var(--teal-hover);
+  border-color: transparent;
+  color: var(--accent-foreground);
+}
+
+.omni-pill-tint {
+  border-color: var(--teal-line);
+  background: var(--teal-tint);
+  color: var(--teal);
+}
+
+/* Mono micro-pill: model name, focus mode, "5 sources · 4 min". */
+.omni-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 5px 11px;
+  color: var(--ink-muted);
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.omni-tag:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+/* Suggestion chips under the home composer and in "keep pulling the thread".
+   `max-width: 100%` matters more than it looks: these hold whole questions,
+   and on a phone a chip wider than the column pushes the whole page into a
+   horizontal scroll. It wraps to two lines instead. */
+.omni-chip {
+  max-width: 100%;
+  background: var(--sand);
+  border: 1px solid transparent;
+  border-radius: 22px;
+  padding: 9px 15px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.omni-chip:hover {
+  background: var(--paper-raised);
+  border-color: var(--line-strong);
+  color: var(--teal);
+}
+
+/* The round teal send button, at both composer sizes. */
+.omni-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: var(--teal);
+  color: var(--accent-foreground);
+  cursor: pointer;
+  transition: background 160ms ease, transform 120ms ease;
+}
+
+.omni-send:hover:not(:disabled) {
+  background: var(--teal-hover);
+}
+
+.omni-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.omni-send:disabled {
+  background: var(--sand-deep);
+  color: var(--ink-faint);
+  cursor: not-allowed;
+}
+
+/* ── Citations ────────────────────────────────────────────────────────── */
+
+.omni-cite {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--teal);
+  background: var(--teal-tint);
+  border-radius: 5px;
+  padding: 2px 5px;
+  margin-left: 3px;
+  cursor: pointer;
+  vertical-align: super;
+  line-height: 1;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.omni-cite:hover {
+  background: var(--teal);
+  color: var(--accent-foreground);
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────── */
+
+@keyframes omni-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes omni-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The indeterminate progress sweep on a live trace card. A short bright
+   segment crossing a dim rail — it says "working" without implying a
+   percentage the agent cannot actually report. */
+@keyframes omni-sweep {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(360%); }
+}
+
+@keyframes omni-soft-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes omni-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* The two out-of-frame color washes behind the home screen. Slow enough
+   (22s / 28s, offset) that the movement is felt rather than watched. */
+@keyframes omni-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-2%, 2%) scale(1.06); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.omni-rise { animation: omni-rise 260ms ease both; }
+.omni-drift { animation: omni-drift 22s ease-in-out infinite; }
+.omni-drift-slow { animation: omni-drift 28s ease-in-out infinite reverse; }
+
+.omni-sweep-rail {
+  position: relative;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.omni-sweep-rail::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 28%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--teal), transparent);
+  animation: omni-sweep 1500ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Streaming caret, parked at the end of the answer's last block. `.omni-caret`
+   puts it on the element you name; `.omni-streaming` puts it on whichever
+   child happens to be last right now, which is what a live answer needs —
+   the last block changes with every paragraph that lands. */
+.omni-caret::after,
+.omni-streaming > *:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 0.9em;
+  background: var(--teal);
+  vertical-align: -0.12em;
+  margin-left: 3px;
+  animation: omni-caret 900ms steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omni-drift,
+  .omni-drift-slow,
+  .omni-rise,
+  .omni-sweep-rail::after,
+  .omni-caret::after,
+  .omni-streaming > *:last-child::after {
+    animation: none;
+  }
+}
+
+/* ── Scrollbar, restyled for paper ────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink) 32%, transparent);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+}
+
+/* ── Thread column + sources rail ──────────────────────────────────────────
+   The rail's breakpoint has to be a CONTAINER query, not a media query. The
+   thread column is squeezed by two things the viewport knows nothing about:
+   the sidebar expanding, and the report panel sliding open over 62% of the
+   window. A viewport-width rule kept the 248px rail alongside a column that
+   had collapsed to ~40px, which set the question heading one character per
+   line. 1050px is the narrowest the container can be and still hold the
+   760px reading measure, the 44px gutter and the rail. */
+.omni-thread-scroll {
+  container-type: inline-size;
+  container-name: omni-thread;
+}
+
+.omni-thread-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 44px;
+}
+
+.omni-thread-rail {
+  display: none;
+}
+
+@container omni-thread (min-width: 1050px) {
+  .omni-thread-grid {
+    grid-template-columns: minmax(0, 1fr) 248px;
+  }
+
+  .omni-thread-col {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .omni-thread-rail {
+    display: flex;
+  }
+}
+
+/* The narrow-width counterpart to `.omni-thread-rail`: the same source list,
+   stacked under the answer once the rail's column no longer fits. Exactly one
+   of the two is ever visible. */
+.omni-thread-inline-sources {
+  display: flex;
+}
+
+@container omni-thread (min-width: 1050px) {
+  .omni-thread-inline-sources {
+    display: none;
+  }
+}
+
+/* ── Scrollbars that don't draw ────────────────────────────────────────────
+   For panels whose scroll is incidental to their layout rather than part of
+   it — the sources rail above all. A classic scrollbar there lays a grey
+   track down the right edge of the card column, which reads as a border on
+   the cards and cuts the rail off from the page. Content still scrolls by
+   wheel, trackpad, touch and keyboard; only the chrome is gone. */
+.omni-hide-scrollbar {
+  scrollbar-width: none;          /* Firefox */
+  -ms-overflow-style: none;       /* legacy Edge */
+}
+
+.omni-hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

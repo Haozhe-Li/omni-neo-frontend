@@ -124,6 +124,13 @@ export interface ToolStep {
   tool: string
   args: any
   timestamp: number
+  /**
+   * Human-readable outcome of the call, rendered under it on the trace — a
+   * search's `"12 results · a.gov, b.org"` becomes host chips, anything else
+   * becomes one muted line. Optional because the stream currently emits only
+   * `tool_call` and no matching `tool_result`; the UI is already wired for it.
+   */
+  result?: string
 }
 
 /**

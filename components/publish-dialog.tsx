@@ -44,7 +44,7 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/20 dark:bg-black/40 animate-in fade-in duration-200"
+                className="absolute inset-0 bg-[var(--scrim)] animate-in fade-in duration-200"
                 onClick={onClose}
             />
 
@@ -58,7 +58,7 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                             <Globe className="w-4 h-4 text-accent" />
                         </div>
                         <div>
-                            <h3 className="text-[15px] font-semibold text-foreground leading-tight">Share Report</h3>
+                            <h3 className="omni-display text-[22px] leading-tight text-[var(--ink)]">Share report</h3>
                             <p className="text-[12px] text-muted-foreground">Share your research</p>
                         </div>
                     </div>
@@ -96,14 +96,14 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                                         }
                                     `}
                                 >
-                                    <span className={`p-1.5 rounded-md transition-colors ${selected === opt.id ? 'bg-accent text-white' : 'bg-muted text-muted-foreground'}`}>
+                                    <span className={`p-1.5 rounded-md transition-colors ${selected === opt.id ? 'bg-accent text-[var(--accent-foreground)]' : 'bg-muted text-muted-foreground'}`}>
                                         {opt.icon}
                                     </span>
                                     <span className="text-[12px] font-semibold leading-tight">{opt.label}</span>
                                     <span className="text-[10px] text-muted-foreground leading-tight">{opt.desc}</span>
                                     {selected === opt.id && (
                                         <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-accent flex items-center justify-center">
-                                            <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                                            <Check className="h-2.5 w-2.5 text-[var(--accent-foreground)]" strokeWidth={3} />
                                         </span>
                                     )}
                                 </button>
@@ -128,7 +128,7 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
                                 className="peer sr-only"
                             />
                             <div className="w-4 h-4 rounded border border-border bg-background peer-checked:bg-accent peer-checked:border-accent transition-colors"></div>
-                            <Check className="w-3 h-3 text-white absolute inset-0 m-auto opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
+                            <Check className="absolute inset-0 m-auto h-3 w-3 text-[var(--accent-foreground)] opacity-0 transition-opacity peer-checked:opacity-100" strokeWidth={3} />
                         </div>
                         <span className="text-[13px] font-medium text-foreground group-hover:text-foreground/80 transition-colors">
                             Publish to Pages Home
@@ -137,7 +137,7 @@ export function PublishDialog({ isOpen, onClose, onConfirm, title }: PublishDial
 
                     <Button
                         onClick={() => onConfirm(selected, publishToPages)}
-                        className="w-full h-10 rounded-lg bg-accent text-white font-semibold text-sm hover:bg-accent/90 transition-colors"
+                        className="h-10 w-full rounded-full bg-[var(--teal)] text-sm text-[var(--accent-foreground)] transition-colors hover:bg-[var(--teal-hover)]"
                     >
                         Generate Link
                     </Button>

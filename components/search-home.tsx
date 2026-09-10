@@ -935,7 +935,30 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           </div>
         </div>
       )}
-      {/* Mouse-following glow — sits behind everything via z-0 */}
+      {/* ── Ambient field ────────────────────────────────────────────────
+          Two out-of-frame washes drifting on long, offset cycles (22s and
+          28s, one reversed) plus a slower teal bloom that follows the
+          cursor. All three are far below the text in contrast — the point is
+          that the empty half of a blank home screen is never quite still,
+          not that anyone notices a gradient.
+
+          The clipping wrapper is load-bearing, not decoration. These are
+          deliberately positioned past the edges, and an absolutely positioned
+          box that hangs off the BOTTOM of a scroll container still counts
+          toward its scrollable area — so the lower wash was adding exactly
+          its own 200px of overshoot to the page and letting the home screen
+          scroll down past its own footer. `overflow-hidden` here contains
+          them; `inset-0` keeps them pinned to the visible frame. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div
+          className="omni-drift absolute -top-[180px] -right-[140px] h-[620px] w-[620px] rounded-full"
+          style={{ background: 'radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--teal) 13%, transparent), transparent 68%)' }}
+        />
+        <div
+          className="omni-drift-slow absolute -bottom-[200px] -left-[120px] h-[520px] w-[520px] rounded-full"
+          style={{ background: 'radial-gradient(circle at 60% 50%, color-mix(in srgb, var(--rust) 12%, transparent), transparent 68%)' }}
+        />
+      </div>
       <div
         ref={glowRef}
         aria-hidden="true"
@@ -944,34 +967,34 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           width: '600px',
           height: '600px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(32,178,170,0.12) 0%, rgba(32,178,170,0.04) 40%, transparent 70%)',
+          background: 'radial-gradient(circle, color-mix(in srgb, var(--teal) 10%, transparent) 0%, color-mix(in srgb, var(--teal) 3%, transparent) 40%, transparent 70%)',
           filter: 'blur(40px)',
         }}
       />
 
-      {/* Spacer for centering content properly */}
-      <div className="flex-1 w-full flex flex-col md:justify-center">
+      {/* Two different jobs, one column. On desktop the hero and composer sit
+          together in the middle of the page. On mobile the hero takes the
+          slack instead, which pins the composer to the bottom of the
+          viewport where the thumb already is — the composer is the only
+          thing you came here to touch. */}
+      <div className="flex w-full flex-1 flex-col md:justify-center">
         {/* Content — sits above the glow */}
 
-        {/* Brand */}
-        <div className="flex-1 md:flex-none flex flex-col items-center justify-center relative z-10 w-full md:mb-12">
-          <div className="animate-fade-up">
-            <h1 className="flex items-center justify-center gap-3 text-[2.5rem] sm:text-5xl font-[450] tracking-tight text-foreground font-[family-name:var(--font-plex)]">
-              <span className="relative block h-[1em] w-[1em] shrink-0">
-                <Image
-                  src="/omni-logo-light.png"
-                  alt=""
-                  fill
-                  className="object-contain dark:hidden"
-                />
-                <Image
-                  src="/omni-logo-dark.png"
-                  alt=""
-                  fill
-                  className="object-contain hidden dark:block"
-                />
-              </span>
-              {greeting ?? 'Meet Omni'}
+        {/* ── Hero ────────────────────────────────────────────────────────
+            The question is asked in the display serif and left-aligned to the
+            composer below it, so the headline, the input and the suggestion
+            chips read as one column rather than a centered banner sitting on
+            top of a form. A returning name appears as a mono eyebrow instead
+            of replacing the headline — the greeting is a courtesy, the
+            question is the screen. */}
+        <div className="relative z-10 flex w-full flex-1 flex-col justify-center md:flex-none">
+          <div className="animate-fade-up w-full max-w-[720px] mx-auto">
+            {greeting && (
+              <p className="omni-eyebrow mb-4">{greeting}</p>
+            )}
+            <h1 className="omni-display text-[clamp(34px,5.2vw,62px)] text-[var(--ink)] mb-8 md:mb-9">
+              What are you<br />
+              <em>curious</em> about today?
             </h1>
           </div>
         </div>
@@ -980,7 +1003,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         <div className="w-full flex flex-col items-center relative z-10 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-0 md:mt-0">
           {/* Sign-in prompt for MOBILE (above search) */}
           {isSignedIn === false && (
-            <div className="md:hidden w-full max-w-[680px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2 mb-3">
+            <div className="md:hidden w-full max-w-[720px] flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2 mb-3">
               <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
                 10X usage and sync chats across devices for a smoother experience.
               </span>
@@ -998,7 +1021,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           {/* Search Input */}
           <form
             onSubmit={handleSubmit}
-            className="w-full max-w-[680px] animate-fade-up"
+            className="w-full max-w-[720px] animate-fade-up"
             style={{ animationDelay: '150ms' }}
           >
             <div
@@ -1006,12 +1029,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               className={`
-                relative rounded-2xl transition-all duration-300 flex flex-col
+                relative flex flex-col rounded-[28px] bg-[var(--paper-raised)] transition-all duration-300
                 ${isFocused || isDragging
-                  ? 'shadow-[0_0_0_1px_var(--accent),0_4px_24px_rgba(32,178,170,0.08)] bg-[var(--card)]'
-                  : 'shadow-[0_0_0_1px_var(--border),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_var(--border),0_4px_16px_rgba(0,0,0,0.06)] bg-card'
+                  ? 'shadow-[0_0_0_1px_var(--teal),0_14px_40px_-28px_color-mix(in_srgb,var(--ink)_45%,transparent)]'
+                  : 'shadow-[0_0_0_1px_var(--line-strong),0_14px_40px_-28px_color-mix(in_srgb,var(--ink)_35%,transparent)] hover:shadow-[0_0_0_1px_var(--line-strong),0_16px_44px_-26px_color-mix(in_srgb,var(--ink)_42%,transparent)]'
                 }
-                ${isDragging ? 'ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--background)]' : ''}
               `}
             >
               {(attachedFiles.length > 0 || sourceUrls.length > 0) && (
@@ -1056,19 +1078,19 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   onKeyDown={handleKeyDown}
                   onPaste={onPaste}
                   placeholder={(isRecording || !!sstPrompt) ? (sstPrompt || 'listening...') : ''}
-                  className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-5 pb-2'} text-base text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 focus:outline-none leading-relaxed disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
+                  className={`w-full resize-none bg-transparent px-6 ${attachedFiles.length > 0 ? 'pt-3 pb-2' : 'pt-[18px] pb-2'} text-[19px] text-[var(--ink)] placeholder:text-[var(--ink-faint)] focus:outline-none leading-[1.5] disabled:opacity-50 disabled:cursor-not-allowed custom-scrollbar max-h-[300px]`}
                   style={{ minHeight: '52px' }}
                 />
                 {fillAnim ? (
                   <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
                     {/* Ghost base text */}
-                    <div className={`absolute inset-0 px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed text-[var(--muted-foreground)]/50`}>
+                    <div className={`absolute inset-0 px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-[18px]'} pb-2 text-[19px] leading-[1.5] text-[var(--ink-faint)]`}>
                       {fillAnim.text}
                     </div>
                     {/* Shimmer fill layer — background updated each rAF frame */}
                     <div
                       ref={fillDivRef}
-                      className={`absolute inset-0 px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-5'} pb-2 text-base leading-relaxed`}
+                      className={`absolute inset-0 px-6 ${attachedFiles.length > 0 ? 'pt-3' : 'pt-[18px]'} pb-2 text-[19px] leading-[1.5]`}
                       style={{
                         backgroundClip: 'text',
                         WebkitBackgroundClip: 'text',
@@ -1080,10 +1102,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   </div>
                 ) : !query && !isRecording && !sstPrompt && (attachedFiles.length > 0 || sourceUrls.length > 0) ? (
                   <div
-                    className="absolute inset-0 pointer-events-none px-6 pt-3 pb-2 text-base leading-relaxed overflow-hidden"
+                    className="absolute inset-0 pointer-events-none px-6 pt-3 pb-2 text-[19px] leading-[1.5] overflow-hidden"
                     aria-hidden="true"
                   >
-                    <span className="text-[var(--muted-foreground)]/50">
+                    <span className="text-[var(--ink-faint)]">
                       {attachedFiles.length > 1 ? 'Please read these files'
                         : attachedFiles.length === 1 ? 'Please read this file'
                         : sourceUrls.length > 1 ? 'Please read these sources'
@@ -1096,11 +1118,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                     : SUGGESTED_QUERIES
                   return (
                     <div
-                      className="absolute inset-0 pointer-events-none px-6 pt-5 pb-2 text-base leading-relaxed overflow-hidden"
+                      className="absolute inset-0 pointer-events-none px-6 pt-[18px] pb-2 text-[19px] leading-[1.5] overflow-hidden"
                       aria-hidden="true"
                     >
                       <span
-                        className="text-[var(--muted-foreground)]/50"
+                        className="text-[var(--ink-faint)]"
                         style={{
                           opacity: suggestionVisible ? 1 : 0,
                           transition: 'opacity 0.4s ease-in-out',
@@ -1114,7 +1136,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
               </div>
 
               {/* Bottom bar — separate row, never overlaps text */}
-              <div className="flex items-center justify-between px-3 pb-3 pt-1">
+              <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-1">
                 {/* Left side: + menu + active skill pill */}
                 <div ref={plusMenuRef} className="flex items-center gap-1.5">
                   {/* + button — intentionally not `relative`, so the dropdown anchors to the composer box below */}
@@ -1122,7 +1144,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                     <button
                       type="button"
                       onClick={() => setPlusMenuOpen(p => !p)}
-                      className="flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200 bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
                       aria-label="Add"
                     >
                       <Plus className="h-4 w-4" />
@@ -1205,7 +1227,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                           {/* Mobile bottom sheet */}
                           <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
                             <div
-                              className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+                              className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-sm animate-in fade-in duration-200"
                               onClick={() => { setPlusMenuOpen(false); setAddUrlOpen(false) }}
                             />
                             <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
@@ -1275,12 +1297,12 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                     onClick={handleSst}
                     disabled={isSstPending}
                     className={`
-                      relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      relative flex h-9 w-9 items-center justify-center rounded-full transition-colors
                       ${!isSstPending
                         ? isRecording
-                          ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
-                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                          ? 'border border-transparent bg-[var(--teal)] text-[var(--accent-foreground)]'
+                          : 'border border-[var(--line-strong)] text-[var(--ink-muted)] hover:border-[var(--teal)] hover:text-[var(--teal)]'
+                        : 'border border-[var(--line)] text-[var(--ink-faint)] cursor-not-allowed'
                       }
                     `}
                     aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
@@ -1294,13 +1316,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                   <button
                     type="submit"
                     disabled={(!!isRecording || !!sstPrompt) ? !query.trim() : false}
-                    className={`
-                    flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                    ${(!isRecording && !sstPrompt) || query.trim()
-                        ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed'
-                      }
-                  `}
+                    className="omni-send h-[38px] w-[38px]"
                     aria-label="Submit search"
                   >
                     <ArrowRight className="h-4 w-4" />
@@ -1343,7 +1359,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
           {/* Sign-in prompt for DESKTOP (below search) */}
           {isSignedIn === false && (
-            <div className="hidden md:flex mt-3 w-full max-w-[680px] items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
+            <div className="hidden md:flex mt-3 w-full max-w-[720px] items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/20 px-3 py-2">
               <span className="text-[11px] text-[var(--muted-foreground)] tracking-[0.01em]">
                 10X usage and sync chats across devices for a smoother experience.
               </span>

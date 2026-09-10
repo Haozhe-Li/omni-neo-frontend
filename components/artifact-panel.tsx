@@ -217,26 +217,27 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   <style type="text/tailwindcss">
     @layer base {
       :root {
-        --background: #f3f3ee;
-        --foreground: #1a1a1a;
-        --card: #ffffff;
-        --secondary: #eaeae5;
-        --border: rgba(0,0,0,0.08);
-        --border-subtle: rgba(0,0,0,0.05);
-        --accent: #20B2AA;
-        --muted: #eaeae5;
-        --muted-foreground: #6b6b6b;
+        --background: #FAF6EF;
+        --foreground: #2B2724;
+        --card: #FFFDF9;
+        --secondary: #F1EADC;
+        --border: #E8DFD2;
+        --border-subtle: #E8DFD2;
+        --accent: #26696B;
+        --muted: #F1EADC;
+        --muted-foreground: #6C6357;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --background: #191A1A;
-          --foreground: #ffffff;
-          --card: #222323;
-          --secondary: #2a2b2b;
-          --border: rgba(255,255,255,0.08);
-          --border-subtle: rgba(255,255,255,0.05);
-          --muted: #2a2b2b;
-          --muted-foreground: #8b8b8b;
+          --background: #191614;
+          --foreground: #F2EBE0;
+          --card: #201C19;
+          --secondary: #262119;
+          --border: #332D26;
+          --border-subtle: #332D26;
+          --accent: #6FB4AF;
+          --muted: #262119;
+          --muted-foreground: #9E9382;
         }
       }
       body {
@@ -251,9 +252,10 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         margin: 0 auto;
       }
       .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
-      h1 { @apply text-3xl font-bold mb-4 mt-8; }
-      h2 { @apply text-2xl font-semibold mt-8 mb-4 border-b border-[var(--border-subtle)] pb-2; }
-      h3 { @apply text-xl font-semibold mt-6 mb-3; }
+      h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
+      h1 { @apply text-4xl mb-4 mt-8; }
+      h2 { @apply text-3xl mt-9 mb-4; }
+      h3 { @apply text-2xl mt-6 mb-3; }
       p { @apply mb-4 leading-relaxed; }
       ul { @apply list-disc pl-6 mb-4; }
       ol { @apply list-decimal pl-6 mb-4; }
@@ -305,16 +307,21 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             <head>
               <title>${title}</title>
               <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #1a1a18; padding: 20mm; }
+                /* Print is always the light palette — dark ink on dark paper is
+                   not a thing, and a reader's printer would fight it. */
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.7; color: #3A342E; padding: 20mm; }
                 .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
-                h1 { font-size: 24pt; margin-bottom: 10pt; color: #1a1a18; }
-                h2 { font-size: 18pt; margin-top: 20pt; border-bottom: 1px solid #eee; padding-bottom: 5pt; }
+                h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; color: #2B2724; }
+                h1 { font-size: 26pt; margin-bottom: 10pt; }
+                h2 { font-size: 19pt; margin-top: 20pt; }
+                h3 { font-size: 15pt; margin-top: 14pt; }
                 img { max-width: 100%; height: auto; border-radius: 8px; margin: 10pt 0; }
-                pre { background: #f5f4ef; padding: 10pt; border-radius: 5pt; overflow-x: auto; font-family: monospace; font-size: 10pt; }
-                blockquote { border-left: 4px solid #20B2AA; padding-left: 10pt; font-style: italic; color: #666; }
+                pre { background: #F1EADC; padding: 10pt; border-radius: 6pt; overflow-x: auto; font-family: monospace; font-size: 10pt; color: #3A342E; }
+                blockquote { border-left: 2px solid #C0673C; padding-left: 10pt; font-style: italic; color: #6C6357; }
                 table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
-                th, td { border: 1px solid #eee; padding: 8pt; text-align: left; }
-                a { color: #20B2AA; text-decoration: none; }
+                th, td { border: 1px solid #E8DFD2; padding: 8pt; text-align: left; }
+                th { background: #F6F1E8; font-weight: 500; }
+                a { color: #26696B; text-decoration: none; }
                 @page { size: A4; margin: 0; }
                 @media print { body { padding: 15mm; } .page-break { page-break-before: always; } }
               </style>
@@ -373,17 +380,21 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[var(--background)] border-l border-[var(--border)] relative">
+    /* ── The report reader ────────────────────────────────────────────────
+        Raised paper, not the page ground: a report is a document handed to
+        you, and lifting its surface above the thread it came from is what
+        makes the slide-over read as "opened" rather than "another column". */
+    <div className="relative flex h-full w-full flex-col border-l border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[-30px_0_60px_-40px_color-mix(in_srgb,var(--ink)_45%,transparent)]">
       {/* Header */}
-      <div className="flex items-center h-14 px-4 border-b border-[var(--border-subtle)] bg-[var(--background)] shrink-0 z-20 relative gap-3">
+      <div className="relative z-20 flex h-[52px] shrink-0 items-center gap-3 border-b border-[var(--line-hair)] px-5">
         {/* Title — takes all remaining space, truncates */}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {active.kind === 'chart' ? (
-            <BarChart3 size={16} strokeWidth={1.5} className="text-[var(--foreground)] opacity-60 shrink-0" />
+            <BarChart3 size={15} strokeWidth={1.4} className="shrink-0 text-[var(--teal)]" />
           ) : (
-            <FileText size={16} strokeWidth={1.5} className="text-[var(--foreground)] opacity-60 shrink-0" />
+            <FileText size={15} strokeWidth={1.4} className="shrink-0 text-[var(--teal)]" />
           )}
-          <span className="text-[14px] font-medium text-[var(--foreground)] truncate opacity-90">
+          <span className="truncate text-[14px] text-[var(--ink)]">
             {active.title}
           </span>
         </div>
@@ -391,11 +402,11 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         {/* Controls — fixed width, never wrap */}
         <div className="flex items-center gap-1.5 shrink-0">
           {/* View / Code Toggle */}
-          <div className="hidden sm:flex items-center p-0.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/50">
+          <div className="hidden items-center rounded-full border border-[var(--line-strong)] p-0.5 sm:flex">
             <button 
               disabled={drafting}
               onClick={() => setViewMode('view')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${viewMode === 'view' ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-[var(--border-subtle)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'}`}
+              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${viewMode === 'view' ? 'bg-[var(--teal-tint)] text-[var(--teal)]' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}
             >
               <Eye size={13} strokeWidth={2} />
               View
@@ -403,7 +414,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             <button 
               disabled={drafting}
               onClick={() => setViewMode('code')}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${viewMode === 'code' ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-[var(--border-subtle)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent'}`}
+              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${viewMode === 'code' ? 'bg-[var(--teal-tint)] text-[var(--teal)]' : 'text-[var(--ink-muted)] hover:text-[var(--ink)]'}`}
             >
               <Code2 size={13} strokeWidth={2} />
               Code
@@ -422,19 +433,19 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             <button 
               disabled={drafting}
               onClick={() => setShareOpen(!shareOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-[var(--background)] bg-[var(--foreground)] hover:opacity-90 transition-all relative z-50 shadow-[0_1px_2px_rgba(0,0,0,0.05)] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="omni-pill omni-pill-solid relative z-50 gap-1.5 px-3.5 py-1.5 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Share size={12} strokeWidth={2} />
               Share
             </button>
             {/* Share dropdown */}
             {shareOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] py-1.5 z-50 overflow-hidden transform origin-top-right transition-all animate-in fade-in zoom-in-95">
+              <div className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] py-2 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] transform origin-top-right transition-all animate-in fade-in zoom-in-95">
                 <button 
                   onClick={() => { handleCopy(); setShareOpen(false); }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                 >
-                  {copied ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
+                  {copied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
                   {copied ? 'Copied!' : 'Copy full text'}
                 </button>
                 <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
@@ -449,9 +460,9 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                     setShareOpen(false)
                     handleDownload('markdown')
                   }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                 >
-                  <Download size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                  <Download size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
                   Download Markdown
                 </button>
                 <button 
@@ -460,9 +471,9 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                     handleDownload('html')
                   }}
                   disabled={isPdfLoading}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left disabled:opacity-50"
+                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
                 >
-                  <Code2 size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                  <Code2 size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
                   Download HTML
                 </button>
                 <button 
@@ -471,9 +482,9 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                     handleDownload('pdf')
                   }}
                   disabled={isPdfLoading}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left disabled:opacity-50"
+                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
                 >
-                  <FileText size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                  <FileText size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
                   Download PDF
                 </button>
               </div>
@@ -481,23 +492,27 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
           </div>
 
           {/* Close */}
-          <button onClick={onClose} className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors" title="Close panel">
-            <X size={18} strokeWidth={1.5} />
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
+            title="Close panel"
+          >
+            <X size={14} strokeWidth={1.5} />
           </button>
         </div>
       </div>
 
       {/* Optional sub-header for multiple items (tabs) */}
       {items.length > 1 && (
-        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--secondary)]/20 overflow-x-auto shrink-0 custom-scrollbar">
+        <div className="custom-scrollbar flex shrink-0 items-center gap-2 overflow-x-auto border-b border-[var(--line-hair)] px-5 py-2.5">
           {items.map((it) => (
             <button
               key={it.id}
               onClick={() => onSelect(it.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[12.5px] transition-colors ${
                 it.id === active.id
-                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[0_1px_2px_rgba(0,0,0,0.04)] border border-[var(--border-subtle)]'
-                  : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60 border border-transparent hover:text-[var(--foreground)]'
+                  ? 'border-[var(--teal-line)] bg-[var(--teal-tint)] text-[var(--teal)]'
+                  : 'border-transparent text-[var(--ink-muted)] hover:bg-[var(--sand)] hover:text-[var(--ink)]'
               }`}
             >
               {it.kind === 'chart' ? <BarChart3 size={12} strokeWidth={1.5} /> : <FileText size={12} strokeWidth={1.5} />}
@@ -508,21 +523,21 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
       )}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+      <div className="custom-scrollbar flex-1 overflow-y-auto px-6 pb-16 pt-9 md:px-11">
         {active.kind === 'chart' && active.chart ? (
           <div className="h-full min-h-[360px] max-w-4xl mx-auto">
-            <h2 className="text-[18px] font-semibold text-[var(--foreground)] mb-6 opacity-90">{active.chart.title}</h2>
+            <h2 className="omni-display mb-6 text-[22px] leading-[1.25] text-[var(--ink)]">{active.chart.title}</h2>
             <EChartsChart option={active.chart.spec} />
           </div>
         ) : active.report ? (
           <article
             ref={containerRef}
-            className="max-w-3xl mx-auto"
+            className="mx-auto max-w-[68ch]"
             data-message-index={viewMode === 'view' ? reportMessageIndex(active.report.id) ?? undefined : undefined}
           >
             {viewMode === 'view' ? (
               <>
-                <h1 className="text-[28px] leading-tight font-semibold text-[var(--foreground)] mb-8 tracking-tight opacity-90">{active.report.title}</h1>
+                <h1 className="omni-display mb-7 text-[38px] leading-[1.1] text-[var(--ink)]">{active.report.title}</h1>
                 {active.report.content ? (
                   <MarkdownMessage
                     content={active.report.content}
@@ -539,7 +554,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
               </>
             ) : (
               <div className="w-full">
-                <pre className="text-[14px] leading-relaxed text-[var(--foreground)] opacity-90 whitespace-pre-wrap font-mono pb-12">
+                <pre className="whitespace-pre-wrap pb-12 font-mono text-[13px] leading-[1.7] text-[var(--ink-body)]">
                   {`# ${active.report.title}\n\n${active.report.content || ''}`}
                 </pre>
               </div>

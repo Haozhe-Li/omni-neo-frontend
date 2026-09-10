@@ -122,7 +122,14 @@ function Typewriter({ content, animate, sources, verifiedClaims, onVerifiedClaim
   // isn't settled until the turn is done, so there's nothing correct to
   // show mid-reveal anyway; they all appear together once it settles.
   return !settled ? (
-    <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} hideCitations />
+    /* The blinking caret rides the last paragraph of the revealed slice — the
+       one place in an answer where "still writing" has to be legible without
+       reading. `.omni-streaming` puts an ::after on whichever child is
+       currently last, so the caret sits at the end of the text rather than
+       on a line of its own, and follows the answer as it grows. */
+    <div className="omni-streaming">
+      <MarkdownMessage content={trimDanglingFence(slice)} sources={sources} hideCitations />
+    </div>
   ) : (
     <MarkdownMessage
       content={contentRef.current}

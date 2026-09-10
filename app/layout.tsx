@@ -1,5 +1,5 @@
-import type { Metadata } from 'next'
-import { Inter, Geist_Mono, IBM_Plex_Sans } from 'next/font/google'
+import type { Metadata, Viewport } from 'next'
+import { Hanken_Grotesk, Instrument_Serif, IBM_Plex_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ClerkProvider } from '@clerk/nextjs'
 import { AuthListener } from '@/components/auth-listener'
@@ -7,13 +7,42 @@ import { ClerkThemeProvider } from '@/components/clerk-theme-provider'
 import './globals.css'
 import 'katex/dist/katex.min.css'
 
-const _inter = Inter({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600", "700"],
-  variable: "--font-plex",
-});
+/* ── Omni type system ─────────────────────────────────────────────────────
+   Three faces, three jobs. Hanken Grotesk is the UI voice (everything you
+   read to operate the product); Instrument Serif is the display voice —
+   headlines, questions, the wordmark, the big numbers in a widget — and is
+   the single strongest signal that a screen is Omni's; IBM Plex Mono carries
+   labels, source hosts, code and anything that should read as machine
+   output. `--font-plex` is kept as an alias for the display face because a
+   dozen call sites already reach for it by that name. */
+const hankenGrotesk = Hanken_Grotesk({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  variable: '--font-hanken',
+  display: 'swap',
+})
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  weight: ['400'],
+  style: ['normal', 'italic'],
+  variable: '--font-instrument',
+  display: 'swap',
+})
+const plexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-plex-mono',
+  display: 'swap',
+})
+
+/* Mobile browser chrome takes the paper ground in each theme, so the address
+   bar blends into the page instead of framing it in white or black. */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#FAF6EF' },
+    { media: '(prefers-color-scheme: dark)', color: '#191614' },
+  ],
+}
 
 export const metadata: Metadata = {
   title: {
@@ -82,7 +111,11 @@ export default function Rootlayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={ibmPlexSans.variable}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${hankenGrotesk.variable} ${instrumentSerif.variable} ${plexMono.variable}`}
+    >
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"

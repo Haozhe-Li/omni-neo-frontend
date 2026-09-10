@@ -23,8 +23,8 @@ export function ResearchProgress({ todos, isComplete }: ResearchProgressProps) {
       <div className="animate-fade-up py-2 space-y-3">
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-[var(--border-subtle)] animate-pulse" />
-            <div className="h-2 rounded-full bg-[var(--border-subtle)]/50 animate-pulse" style={{ width: `${60 - i * 15}%` }} />
+            <div className="h-2 w-2 rounded-full bg-[var(--line-strong)] animate-pulse" />
+            <div className="h-2 rounded-full bg-[var(--line)] animate-pulse" style={{ width: `${60 - i * 15}%` }} />
           </div>
         ))}
       </div>
@@ -48,8 +48,8 @@ function TodoItemRow({ todo }: { todo: TodoItem }) {
 
   return (
     <div className={`
-            group flex items-start gap-3 p-2 rounded-lg transition-all duration-200
-            ${isInProgress ? 'bg-[var(--secondary)]/50' : 'hover:bg-[var(--secondary)]/30'}
+            group flex items-start gap-3 rounded-[14px] p-2 transition-all duration-200
+            ${isInProgress ? 'bg-[var(--trace)]' : 'hover:bg-[var(--sand)]'}
         `}>
       <div className={`mt-0.5 flex-shrink-0 transition-colors duration-300 ${isInProgress ? 'text-[var(--accent)]' : (isCompleted ? 'text-[var(--muted-foreground)]' : 'text-[var(--border)]')}`}>
         <StatusIcon status={todo.status} />

@@ -30,7 +30,7 @@ function AttachmentThumbnail({ file }: { file: AttachedFile }) {
         return (
             <div className="shrink-0 relative w-8 h-8 rounded overflow-hidden border border-[var(--border-subtle)]">
                 <img src={previewUrl} alt={file.name} className="absolute inset-0 h-full w-full object-cover" />
-                <div className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${file.status === 'ready' ? 'opacity-0' : 'opacity-100'}`} />
+                <div className={`absolute inset-0 bg-[var(--scrim)] transition-opacity duration-300 ${file.status === 'ready' ? 'opacity-0' : 'opacity-100'}`} />
                 <Loader2 className={`absolute inset-0 m-auto h-4 w-4 text-white animate-spin transition-opacity duration-300 ${file.status === 'uploading' ? 'opacity-100' : 'opacity-0'}`} />
                 <AlertCircle className={`absolute inset-0 m-auto h-4 w-4 text-white transition-opacity duration-300 ${file.status === 'error' ? 'opacity-100' : 'opacity-0'}`} />
             </div>

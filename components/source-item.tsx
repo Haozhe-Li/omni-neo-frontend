@@ -32,15 +32,15 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
     return (
         <div
             onClick={() => source.content && setIsExpanded(!isExpanded)}
-            className={`flex flex-col gap-2 rounded-lg border border-border/40 bg-card p-3 transition-colors hover:bg-accent/5 ${source.content ? 'cursor-pointer' : ''}`}
+            className={`flex flex-col gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] px-3.5 py-3 transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)] ${source.content ? 'cursor-pointer' : ''}`}
         >
             <div className="flex items-center gap-3">
                 {showNumber && (
-                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-accent/10 text-[10px] font-mono font-medium text-accent">
+                    <span className="flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center rounded-[6px] bg-[var(--teal-tint)] font-mono text-[11px] text-[var(--teal)]">
                         {label ?? index + 1}
                     </span>
                 )}
-                <div className="h-4 w-4 flex-shrink-0 overflow-hidden rounded-sm bg-secondary flex items-center justify-center">
+                <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[var(--sand)]">
                     {isDocument ? (
                         <FileText className="h-2.5 w-2.5 text-muted-foreground" />
                     ) : (
@@ -53,7 +53,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                     )}
                 </div>
                 <span
-                    className="flex-1 min-w-0 text-sm text-foreground hover:text-accent transition-colors line-clamp-1 font-medium"
+                    className="line-clamp-1 min-w-0 flex-1 text-[14px] text-[var(--ink)] transition-colors"
                 >
                     {source.title}
                 </span>
@@ -65,7 +65,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                                 e.stopPropagation()
                                 setIsExpanded(!isExpanded)
                             }}
-                            className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+                            className="text-[12px] text-[var(--ink-muted)] underline underline-offset-2 transition-colors hover:text-[var(--teal)]"
                         >
                             {isExpanded ? 'Less' : 'More'}
                         </button>
@@ -76,7 +76,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                                 e.stopPropagation()
                                 toast.info('This is a document you uploaded — it can\'t be opened as a link.')
                             }}
-                            className="text-muted-foreground/40 hover:text-accent transition-colors"
+                            className="text-[var(--ink-fainter)] transition-colors hover:text-[var(--teal)]"
                         >
                             <ExternalLink className="h-3.5 w-3.5" />
                         </button>
@@ -85,7 +85,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                             href={source.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-muted-foreground/40 hover:text-accent transition-colors"
+                            className="text-[var(--ink-fainter)] transition-colors hover:text-[var(--teal)]"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <ExternalLink className="h-3.5 w-3.5" />
@@ -98,7 +98,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                 className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0'}`}
             >
                 <div className="overflow-hidden">
-                    <div className="text-xs text-muted-foreground bg-muted/30 rounded-md p-3 font-mono leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar border border-border/20">
+                    <div className="custom-scrollbar max-h-60 overflow-y-auto whitespace-pre-wrap rounded-[12px] border border-[var(--line)] bg-[var(--sand)] p-3 font-mono text-[12px] leading-[1.65] text-[var(--ink-soft)]">
                         {source.content}
                     </div>
                 </div>

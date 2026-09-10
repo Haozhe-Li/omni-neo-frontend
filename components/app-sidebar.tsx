@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageSquare, Plus, Settings, Trash2, Sidebar as SidebarIcon, PanelLeftClose, PanelLeftOpen, Menu, ArrowLeft, Palette, Bot, Info, History, Zap, Telescope, Database, Search, X, LogIn, LogOut, Loader2, User, Globe, Library, SquarePen, CalendarClock, Lock, BarChart3, ArrowUpRight } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, type LucideIcon } from 'lucide-react'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
@@ -33,6 +33,68 @@ interface StoredChat {
     isExpiring?: boolean
     /** Locked for safety (core/stream.py's SAFETY_TERMINATED path) — no more sends/regenerates on this thread. */
     isLocked?: boolean
+}
+
+/* ── The mark ──────────────────────────────────────────────────────────────
+   Three rings, offset and shrinking: the whole answer engine in one glyph —
+   a question, its narrowing, the thing found. Drawn rather than imported so
+   it takes ink and teal from the theme and needs no second file for dark
+   mode. */
+export function OmniMark({ size = 22 }: { size?: number }) {
+    return (
+        <span
+            aria-hidden="true"
+            className="relative block shrink-0"
+            style={{ width: size, height: size }}
+        >
+            <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)]" />
+            <span
+                className="absolute inset-0 rounded-full border-[1.5px] border-[var(--rust)] opacity-85"
+                style={{ transform: `translate(${size * 0.227}px, ${size * 0.09}px) scale(0.72)` }}
+            />
+            <span
+                className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)] opacity-50"
+                style={{ transform: `translate(${-size * 0.045}px, ${size * 0.273}px) scale(0.5)` }}
+            />
+        </span>
+    )
+}
+
+/* Real icons, not the abstract glyph set this rail shipped with first.
+   Distinguishable shapes are not the same thing as recognizable ones: six
+   9px outlines differing only in corner radius told you the rows were
+   different from each other but never what any of them did. These say it. */
+function NavRow({
+    icon: Icon,
+    label,
+    active,
+    expanded,
+    onClick,
+}: {
+    icon: LucideIcon
+    label: string
+    active: boolean
+    expanded: boolean
+    onClick: () => void
+}) {
+    return (
+        <button
+            onClick={onClick}
+            title={label}
+            className={`
+                flex items-center gap-3 rounded-full px-3.5 py-2.5 text-[15px] whitespace-nowrap transition-colors
+                ${active
+                    ? 'bg-[var(--teal-tint)] text-[var(--teal)]'
+                    : 'text-[var(--ink-muted)] hover:bg-[var(--sand-deep)] hover:text-[var(--ink)]'}
+                ${expanded ? '' : 'justify-center'}
+            `}
+        >
+            {/* 1.5 stroke, not lucide's default 2 — the heavier weight reads
+                as a toolbar and fights the hairlines everywhere else here. */}
+            <Icon size={17} strokeWidth={1.5} className="shrink-0" />
+            {expanded && <span>{label}</span>}
+        </button>
+    )
 }
 
 interface AppSidebarProps {
@@ -541,78 +603,38 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
 
     const SidebarContent = (
         <>
-            {/* Header / Toggle */}
-            <div className={`
-                flex items-center p-4 
-                ${isExpanded ? 'h-16 justify-between' : 'flex-col gap-4 py-4'}
-            `}>
-                {isExpanded ? (
-                    <>
-                        <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity group">
-                            <div className="relative w-8 h-8 shrink-0">
-                                <Image
-                                    src="/omni-logo-light.png"
-                                    alt="Omni Logo"
-                                    fill
-                                    className="object-contain dark:hidden"
-                                />
-                                <Image
-                                    src="/omni-logo-dark.png"
-                                    alt="Omni Logo"
-                                    fill
-                                    className="object-contain hidden dark:block"
-                                />
-                            </div>
-                        </Link>
-                        {!isMobile && (
-                            <div className="flex items-center gap-1">
-                                {isSyncing && (
-                                    <span title="Syncing…" className="flex items-center px-1">
-                                        <Loader2 size={13} className="animate-spin text-[var(--muted-foreground)]" />
-                                    </span>
-                                )}
-                                <button
-                                    onClick={onToggle}
-                                    className="p-1.5 hover:bg-[var(--secondary)] rounded-md transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
-                                    title="Collapse sidebar"
-                                >
-                                    <PanelLeftClose size={18} />
-                                </button>
-                            </div>
+            {/* ── Mark ───────────────────────────────────────────────────────
+                Three offset rings — the same drawing at 22px here and at 20px
+                on mobile — rather than a raster logo, so it takes the ink and
+                teal from the theme instead of needing a second file for dark
+                mode. The expand control lives only at the foot of the rail:
+                one toggle, in one place, whichever state the rail is in. */}
+            <div className={`flex items-center px-5 pt-6 pb-1 ${isExpanded ? 'justify-between gap-3' : 'justify-center'}`}>
+                <Link
+                    href="/"
+                    className="flex items-center gap-2.5 min-h-[28px] group"
+                    aria-label="Omni — home"
+                >
+                    <OmniMark size={22} />
+                    {isExpanded && (
+                        <span className="font-[family-name:var(--font-plex)] text-[25px] leading-none pt-[2px] tracking-[-0.01em] text-[var(--ink)] group-hover:text-[var(--teal)] transition-colors">
+                            omni
+                        </span>
+                    )}
+                </Link>
+                {isExpanded && !isMobile && (
+                    <div className="flex items-center gap-1">
+                        {isSyncing && (
+                            <span title="Syncing…" className="flex items-center px-1">
+                                <Loader2 size={13} className="animate-spin text-[var(--ink-faint)]" />
+                            </span>
                         )}
-                        {/* Mobile close button is usually handled by clicking outside, but we can add an X if needed.
-                            For now, let's keep the desktop approach or just hide the toggle on mobile since it's a drawer. 
-                        */}
-                    </>
-                ) : (
-                    <button
-                        onClick={onToggle}
-                        className="relative w-8 h-8 shrink-0 group transition-all"
-                        title="Expand sidebar"
-                    >
-                        <div className="absolute inset-0 transition-opacity duration-200 group-hover:opacity-0">
-                            <Image
-                                src="/omni-logo-light.png"
-                                alt="Omni Logo"
-                                fill
-                                className="object-contain dark:hidden"
-                            />
-                            <Image
-                                src="/omni-logo-dark.png"
-                                alt="Omni Logo"
-                                fill
-                                className="object-contain hidden dark:block"
-                            />
-                        </div>
-                        <div className="absolute inset-0 flex items-center justify-center bg-[var(--secondary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-[var(--foreground)]">
-                            <PanelLeftOpen size={18} />
-                        </div>
-                    </button>
+                    </div>
                 )}
             </div>
 
-            {/* Main Action Button (New Chat) */}
-            <div className="px-3 pb-2 space-y-2">
+            {/* ── New thread ─────────────────────────────────────────────── */}
+            <div className="px-3.5 pt-5">
                 <button
                     onClick={() => {
                         setLoadingAction('new-chat')
@@ -621,300 +643,239 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                         if (isMobile && onToggle) onToggle()
                     }}
                     className={`
-                    flex items-center gap-3 w-full p-2 rounded-lg
-                    hover:bg-[var(--secondary)]
-                    text-[var(--foreground)]
-                    transition-all duration-200
-                    ${!isExpanded ? 'justify-center' : ''}
-                `}
-                    title="New Chat"
+                        flex w-full items-center gap-3 rounded-full border border-[var(--line-strong)]
+                        bg-[var(--paper-raised)] px-3.5 py-2.5 text-[15px] text-[var(--ink)]
+                        whitespace-nowrap transition-colors
+                        hover:border-[var(--teal)] hover:text-[var(--teal)]
+                        ${isExpanded ? '' : 'justify-center px-0'}
+                    `}
+                    title="New thread"
                 >
-                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <Plus size={18} />
-                    </div>
+                    <span className="text-[18px] leading-none -mt-0.5">+</span>
                     {isExpanded && (
-                        <div className="flex items-center justify-between flex-1 min-w-0 pr-1">
-                            <span className="text-sm font-medium">New Thread</span>
-                            {loadingAction === 'new-chat' && <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />}
-                        </div>
+                        <span className="flex flex-1 items-center justify-between min-w-0">
+                            <span>New thread</span>
+                            {loadingAction === 'new-chat' && (
+                                <Loader2 size={14} className="animate-spin text-[var(--ink-faint)]" />
+                            )}
+                        </span>
                     )}
                 </button>
+            </div>
 
-                {/* Pages */}
-                <button
+            {/* ── Destinations ───────────────────────────────────────────────
+                "Ask" is gone: the mark and "New thread" directly above it both
+                already lead there, so it was a third control for the same
+                destination sitting at the top of a list of five. */}
+            <nav className="flex flex-col gap-0.5 px-3.5 pt-6">
+                <NavRow
+                    icon={Newspaper}
+                    label="Pages"
+                    active={pagesActive}
+                    expanded={isExpanded}
                     onClick={() => {
                         if (pathname !== '/pages') router.push('/pages')
                         if (isMobile && onToggle) onToggle()
                     }}
-                    className={`
-                        flex items-center gap-3 w-full p-2 rounded-lg
-                        hover:bg-[var(--secondary)]
-                        transition-all duration-200
-                        ${!isExpanded ? 'justify-center' : ''}
-                        ${pagesActive
-                            ? 'bg-[var(--secondary)] text-[var(--foreground)]'
-                            : 'text-[var(--foreground)]'}
-                    `}
-                    title="Pages"
-                >
-                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <Library size={18} />
-                    </div>
-                    {isExpanded && (
-                        <div className="flex items-center justify-between flex-1 min-w-0">
-                            <span className="text-sm font-medium">Pages</span>
-                        </div>
-                    )}
-                </button>
-
-                {/* Benchmarks — an anchor rather than a router push, because it
-                    opens in its own tab: the section is a separate destination
-                    (and is meant to become a separate site), so following it
-                    should not tear down the thread you were in the middle of. */}
-                <a
-                    href="/benchmark"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => {
-                        if (isMobile && onToggle) onToggle()
-                    }}
-                    className={`
-                        group flex items-center gap-3 w-full p-2 rounded-lg
-                        hover:bg-[var(--secondary)]
-                        transition-all duration-200
-                        ${!isExpanded ? 'justify-center' : ''}
-                        text-[var(--foreground)]
-                    `}
-                    title="Benchmarks — opens in a new tab"
-                >
-                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <BarChart3 size={18} />
-                    </div>
-                    {isExpanded && (
-                        <div className="flex items-center justify-between gap-2 flex-1 min-w-0">
-                            <span className="flex items-center gap-1.5 min-w-0">
-                                <span className="text-sm font-medium">Benchmarks</span>
-                                <span className="shrink-0 rounded-full bg-[var(--accent)]/12 px-1.5 py-px text-[10px] font-medium leading-[1.4] text-[var(--accent)]">
-                                    New
-                                </span>
-                            </span>
-                            <ArrowUpRight
-                                size={14}
-                                className="shrink-0 text-[var(--muted-foreground)] transition-colors group-hover:text-[var(--foreground)]"
-                            />
-                        </div>
-                    )}
-                </a>
-
-                {/* Scheduled — jumps straight into Settings' Scheduled Research tab */}
-                <button
+                />
+                <NavRow
+                    icon={CalendarClock}
+                    label="Scheduled"
+                    active={false}
+                    expanded={isExpanded}
                     onClick={() => {
                         openSettings('scheduled')
                         if (isMobile && onToggle) onToggle()
                     }}
+                />
+                <NavRow
+                    icon={History}
+                    label="History"
+                    active={false}
+                    expanded={isExpanded}
+                    onClick={() => setIsSearchVisible(true)}
+                />
+                {/* Benchmarks is a destination of its own — a separate section
+                    meant to become a separate site — so it stays an anchor
+                    that opens in a new tab rather than a router push that
+                    would tear down a thread mid-stream. */}
+                <a
+                    href="/benchmark"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => { if (isMobile && onToggle) onToggle() }}
                     className={`
-                        flex items-center gap-3 w-full p-2 rounded-lg
-                        hover:bg-[var(--secondary)]
-                        transition-all duration-200
-                        ${!isExpanded ? 'justify-center' : ''}
-                        text-[var(--foreground)]
+                        group flex items-center gap-3 rounded-full px-3.5 py-2.5 text-[15px]
+                        whitespace-nowrap text-[var(--ink-muted)] transition-colors
+                        hover:bg-[var(--sand-deep)] hover:text-[var(--ink)]
+                        ${isExpanded ? '' : 'justify-center'}
                     `}
-                    title="Scheduled"
+                    title="Benchmarks — opens in a new tab"
                 >
-                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <CalendarClock size={18} />
-                    </div>
+                    <BarChart3 size={17} strokeWidth={1.5} className="shrink-0" />
                     {isExpanded && (
-                        <div className="flex items-center justify-between flex-1 min-w-0">
-                            <span className="text-sm font-medium">Scheduled</span>
-                        </div>
+                        <span className="flex flex-1 items-center justify-between gap-2 min-w-0">
+                            <span>Benchmarks</span>
+                            <ArrowUpRight
+                                size={13}
+                                className="shrink-0 text-[var(--ink-fainter)] transition-colors group-hover:text-[var(--teal)]"
+                            />
+                        </span>
                     )}
-                </button>
-
-                {/* History Toggle Button */}
-                <button
-                    onClick={() => {
-                        setIsSearchVisible(true)
-                    }}
-                    className={`
-                        flex items-center gap-3 w-full p-2 rounded-lg 
-                        hover:bg-[var(--secondary)] 
-                        transition-all duration-200
-                        ${!isExpanded ? 'justify-center' : ''}
-                        text-[var(--foreground)]
-                    `}
-                    title="History"
-                >
-                    <div className="flex items-center justify-center p-1 rounded-md bg-[var(--background)] border border-[var(--border-subtle)] text-[var(--foreground)]">
-                        <History size={18} />
-                    </div>
-                    {isExpanded && <span className="text-sm font-medium">History</span>}
-                </button>
-            </div>
-
-            {/* List Content (History) */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-3 space-y-1 custom-scrollbar">
-                {isExpanded && (
-                    <>
-                        {filteredHistory.map((chat) => (
-                            <button
-                                key={chat.thread_id}
-                                onClick={() => {
-                                    if (currentThreadId !== chat.thread_id) {
-                                        setLoadingAction(`thread_${chat.thread_id}`)
-                                        if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
-                                    }
-                                    if (isMobile && onToggle) onToggle()
-                                }}
-                                className={`
-                      group relative flex items-start gap-3 w-full p-2 rounded-lg text-left transition-all duration-200
-                      ${currentThreadId === chat.thread_id
-                                        ? 'bg-[var(--secondary)] text-[var(--foreground)]'
-                                        : 'text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]'
-                                    }
-                    `}
-                                title={chat.query}
-                            >
-                                <div className="mt-0.5">
-                                    {chat.model === 'canvas' ? (
-                                        <Telescope size={16} className="min-w-[16px]" />
-                                    ) : (
-                                        <MessageSquare size={16} className="min-w-[16px]" />
-                                    )}
-                                </div>
-                                <div className="flex flex-col min-w-0 flex-1 pr-5">
-                                    <div className="flex items-center gap-1.5 w-full min-w-0">
-                                        <span className="text-sm truncate flex-1">
-                                            {chat.query}
-                                        </span>
-                                        {chat.isLocked && (
-                                            <Lock size={11} className="shrink-0 opacity-70" aria-label="Locked" />
-                                        )}
-                                        {generatingThreadIds.has(chat.thread_id) && (
-                                            <span className="relative flex h-2 w-2 shrink-0">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
-                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-400" />
-                                            </span>
-                                        )}
-                                        {loadingAction === `thread_${chat.thread_id}` && (
-                                            <Loader2 size={12} className="animate-spin text-[var(--muted-foreground)] shrink-0" />
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[10px] opacity-60">
-                                            {formatDistanceToNow(chat.timestamp, { addSuffix: true })}
-                                        </span>
-                                        {chat.isExpiring && (
-                                            <span className="text-[10px] text-amber-500 font-medium flex items-center gap-1" title="Will disappear if unused for 3 days">
-                                                Expires soon
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div
-                                    onClick={(e) => onSingleDeleteClick(e, chat.thread_id)}
-                                    className={`absolute right-2 top-2 p-1 hover:bg-[var(--background)] rounded text-[var(--muted-foreground)] hover:text-red-500 transition-all ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                                    role="button"
-                                    aria-label="Delete chat"
-                                >
-                                    <Trash2 size={12} />
-                                </div>
-                            </button>
-                        ))}
-                        {filteredHistory.length === 0 && (
-                            <div className="px-2 py-4 text-center text-xs text-[#A1A1A1]">
-                                No history yet
-                            </div>
-                        )}
-                    </>
-                )
-                }
-            </div >
-
-            {/* Footer / Settings + User */}
-            < div className="p-3 border-t border-[var(--border-subtle)] space-y-1" >
-                <button
+                </a>
+                <NavRow
+                    icon={Settings}
+                    label="Settings"
+                    active={isSettingsOpen}
+                    expanded={isExpanded}
                     onClick={() => {
                         openSettings('general')
                         if (isMobile && onToggle) onToggle()
                     }}
-                    className={`
-                flex items-center gap-3 w-full p-2 rounded-lg
-                text-[var(--muted-foreground)]
-                hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
-                transition-all duration-200
-                ${!isExpanded ? 'justify-center' : ''}
-                ${isSettingsOpen ? 'bg-[var(--secondary)] text-[var(--foreground)]' : ''}
-            `}
-                >
-                    <Settings size={18} />
-                    {isExpanded && (
-                        <div className="flex items-center justify-between flex-1 min-w-0 pr-1">
-                            <span className="text-sm">Settings</span>
-                        </div>
-                    )}
-                </button>
+                />
+            </nav>
 
-                {/* Auth row — only render after mount to avoid SSR/client hydration mismatch */}
-                {
-                    mounted && (
-                        isSignedIn ? (
-                            <div className={`
-                            flex items-center gap-3 w-full p-2 rounded-lg
-                            text-[var(--muted-foreground)]
-                            ${!isExpanded ? 'justify-center' : ''}
-                        `}>
-                                {user?.imageUrl ? (
-                                    <img
-                                        src={user.imageUrl}
-                                        alt=""
-                                        className="w-[22px] h-[22px] rounded-full shrink-0 ring-1 ring-[var(--border-subtle)]"
-                                    />
-                                ) : (
-                                    <div className="w-[22px] h-[22px] rounded-full bg-[var(--accent)]/15 flex items-center justify-center shrink-0">
-                                        <User size={12} className="text-[var(--accent)]" />
-                                    </div>
-                                )}
-                                {isExpanded && (
-                                    <>
-                                        <span className="text-sm truncate flex-1">
-                                            {user?.firstName || 'Account'}
-                                        </span>
+            {/* ── Recent ─────────────────────────────────────────────────────
+                Titles only, separated by hairlines rather than sat in their
+                own hover cards. A thread you can already see is one line of
+                text; the affordances (delete, live dot) surface on hover so
+                the resting state stays a readable list. */}
+            {/* Same treatment as the sources rail: a classic scrollbar in a
+                narrow column of hairline-separated text lands a grey track
+                right where the titles end and reads as a second border. */}
+            <div className="omni-hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-5 pt-7 pb-2">
+                {isExpanded && (
+                    <>
+                        <div className="omni-eyebrow pb-2">Recent</div>
+                        <div className="flex flex-col">
+                            {filteredHistory.map((chat) => {
+                                const isCurrent = currentThreadId === chat.thread_id
+                                return (
+                                    <div
+                                        key={chat.thread_id}
+                                        className="group relative border-b border-[var(--line-hair)] last:border-b-0"
+                                    >
                                         <button
-                                            onClick={async () => {
-                                                await clerk.signOut()
-                                                if (typeof window !== 'undefined') {
-                                                    window.location.reload()
+                                            onClick={() => {
+                                                if (!isCurrent) {
+                                                    setLoadingAction(`thread_${chat.thread_id}`)
+                                                    if (onSelectThread) onSelectThread(chat.thread_id, chat.query)
                                                 }
+                                                if (isMobile && onToggle) onToggle()
                                             }}
-                                            className="p-1 rounded-md hover:bg-red-500/10 hover:text-red-500 transition-colors shrink-0"
-                                            title="Sign Out"
+                                            className={`
+                                                w-full py-[7px] pr-6 text-left text-[14px] leading-[1.45] transition-colors
+                                                ${isCurrent ? 'text-[var(--teal)]' : 'text-[var(--ink-muted)] hover:text-[var(--teal)]'}
+                                            `}
+                                            title={chat.query}
                                         >
-                                            <LogOut size={14} />
+                                            <span className="flex items-center gap-1.5 min-w-0">
+                                                <span className="truncate">{chat.query}</span>
+                                                {chat.isLocked && (
+                                                    <Lock size={10} className="shrink-0 opacity-70" aria-label="Locked" />
+                                                )}
+                                                {generatingThreadIds.has(chat.thread_id) && (
+                                                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--teal)] opacity-75" />
+                                                        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[var(--teal)]" />
+                                                    </span>
+                                                )}
+                                                {loadingAction === `thread_${chat.thread_id}` && (
+                                                    <Loader2 size={11} className="shrink-0 animate-spin text-[var(--ink-faint)]" />
+                                                )}
+                                                {chat.isExpiring && (
+                                                    <span
+                                                        className="shrink-0 h-1 w-1 rounded-full bg-[var(--warning)]"
+                                                        title="Will disappear if unused for 3 days"
+                                                    />
+                                                )}
+                                            </span>
                                         </button>
-                                    </>
-                                )}
-                            </div>
-                        ) : (
-                            <SignUpButton mode="modal">
-                                <button
-                                    className={`
-                                    flex items-center gap-3 w-full p-2 rounded-lg
-                                    text-[var(--muted-foreground)]
-                                    hover:bg-[var(--secondary)] hover:text-[var(--foreground)]
-                                    transition-all duration-200
-                                    ${!isExpanded ? 'justify-center' : ''}
-                                `}
-                                    title="Get started to sync your history and settings"
-                                >
-                                    <User size={18} />
-                                    {isExpanded && <span className="text-sm">Sign In</span>}
-                                </button>
-                            </SignUpButton>
-                        )
+                                        <div
+                                            onClick={(e) => onSingleDeleteClick(e, chat.thread_id)}
+                                            className={`absolute right-0 top-1.5 rounded-full p-1 text-[var(--ink-fainter)] transition-all hover:text-[var(--destructive)] ${isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                            role="button"
+                                            aria-label="Delete chat"
+                                        >
+                                            <Trash2 size={11} />
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                            {filteredHistory.length === 0 && (
+                                <p className="py-3 text-[13.5px] leading-relaxed text-[var(--ink-faint)]">
+                                    Nothing yet. Your threads collect here.
+                                </p>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* ── Rail footer ────────────────────────────────────────────── */}
+            <div className="mt-auto flex flex-col gap-1 px-3.5 pb-5 pt-3">
+                {!isMobile && (
+                    <button
+                        onClick={onToggle}
+                        className={`flex items-center gap-3 rounded-full px-3.5 py-2 text-[14px] whitespace-nowrap text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)] ${isExpanded ? '' : 'justify-center'}`}
+                        title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                    >
+                        <span
+                            className="h-[11px] w-[11px] shrink-0 border-l-[1.5px] border-t-[1.5px] border-current transition-transform"
+                            style={{ transform: `rotate(${isExpanded ? -45 : 135}deg)` }}
+                        />
+                        {isExpanded && <span>Collapse</span>}
+                    </button>
+                )}
+
+                {/* Auth row — only after mount, to avoid an SSR/client mismatch */}
+                {mounted && (
+                    isSignedIn ? (
+                        <div className={`group flex items-center gap-2.5 px-2 pt-1.5 ${isExpanded ? '' : 'justify-center'}`}>
+                            {user?.imageUrl ? (
+                                <img
+                                    src={user.imageUrl}
+                                    alt=""
+                                    className="h-[26px] w-[26px] shrink-0 rounded-full ring-1 ring-[var(--line-strong)]"
+                                />
+                            ) : (
+                                <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--clay)] text-[12px] text-[var(--clay-ink)]">
+                                    {(user?.firstName?.[0] ?? 'A').toUpperCase()}
+                                </div>
+                            )}
+                            {isExpanded && (
+                                <>
+                                    <span className="flex-1 truncate text-[14px] text-[var(--ink-muted)]">
+                                        {user?.firstName || 'Account'}
+                                    </span>
+                                    <button
+                                        onClick={async () => {
+                                            await clerk.signOut()
+                                            if (typeof window !== 'undefined') window.location.reload()
+                                        }}
+                                        className="shrink-0 rounded-full p-1 text-[var(--ink-fainter)] opacity-0 transition-all hover:text-[var(--destructive)] group-hover:opacity-100"
+                                        title="Sign out"
+                                    >
+                                        <LogOut size={13} />
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <SignUpButton mode="modal">
+                            <button
+                                className={`flex items-center gap-2.5 px-2 pt-1.5 text-[14px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)] ${isExpanded ? '' : 'justify-center'}`}
+                                title="Get started to sync your history and settings"
+                            >
+                                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--clay)] text-[var(--clay-ink)]">
+                                    <User size={12} />
+                                </span>
+                                {isExpanded && <span>Sign in</span>}
+                            </button>
+                        </SignUpButton>
                     )
-                }
-            </div >
+                )}
+            </div>
 
             {/* Settings Dialog */}
             <SettingsDialog
@@ -934,7 +895,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
             }}>
                 <DialogContent
                     showCloseButton={false}
-                    overlayClassName="bg-black/5 dark:bg-black/40"
+                    overlayClassName="bg-[var(--scrim)]"
                     className="p-0 border-0 sm:border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0 w-[100vw] h-[100dvh] max-w-none rounded-none !top-0 !left-0 !translate-x-0 !translate-y-0 sm:!top-[50%] sm:!left-[50%] sm:!-translate-x-1/2 sm:!-translate-y-1/2 sm:w-full sm:h-auto sm:max-h-[85vh] sm:max-w-[700px] sm:rounded-2xl"
                 >
                     <DialogTitle className="sr-only">History</DialogTitle>
@@ -1138,9 +1099,8 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
 
                 <aside
                     className={cn(
-                        "fixed inset-y-0 left-0 z-50 flex flex-col h-full w-64 shadow-xl",
-                        "bg-[rgba(243,243,238,0.95)] dark:bg-[rgba(25,26,26,0.95)] backdrop-blur-md",
-                        "border-r border-[rgba(0,0,0,0.05)] dark:border-[rgba(255,255,255,0.05)]",
+                        "fixed inset-y-0 left-0 z-50 flex h-full w-[272px] flex-col shadow-[18px_0_44px_-32px_rgba(43,39,36,0.5)]",
+                        "bg-[var(--paper-rail)] border-r border-[var(--line)]",
                         "transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
                         isOpen ? "translate-x-0" : "-translate-x-full"
                     )}
@@ -1156,11 +1116,10 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
         <>
             <aside
                 className={cn(
-                    "relative flex flex-col h-full",
-                    "bg-[rgba(243,243,238,0.8)] dark:bg-[rgba(25,26,26,0.8)] backdrop-blur-md",
-                    "border-r border-[rgba(0,0,0,0.05)] dark:border-[rgba(255,255,255,0.05)]",
-                    "transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]",
-                    isExpanded ? 'w-64' : 'w-16',
+                    "relative flex h-full flex-col overflow-x-hidden",
+                    "bg-[var(--paper-rail)] border-r border-[var(--line)]",
+                    "transition-[width] duration-[260ms] ease-[cubic-bezier(0.4,0,0.2,1)]",
+                    isExpanded ? 'w-[264px]' : 'w-[76px]',
                     className
                 )}
             >

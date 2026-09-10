@@ -246,7 +246,7 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  const triggerClassName = `mx-0.5 inline-flex max-w-[140px] items-center rounded-md bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] px-1.5 py-0.5 align-middle font-mono text-[11.5px] font-medium leading-none text-[var(--muted-foreground)] no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)] hover:text-[var(--foreground)] transition-colors transition-opacity duration-300 ease-out ${revealed ? 'opacity-100' : 'opacity-0'}`
+  const triggerClassName = `mx-0.5 inline-flex max-w-[150px] items-center rounded-[5px] bg-[var(--teal-tint)] px-1.5 py-[3px] align-middle font-mono text-[11px] leading-none text-[var(--teal)] no-underline transition-colors transition-opacity duration-300 ease-out hover:bg-[var(--teal)] hover:text-[var(--accent-foreground)] ${revealed ? 'opacity-100' : 'opacity-0'}`
 
   return (
     <HoverCard openDelay={150} closeDelay={100} onOpenChange={(open) => { if (!open) setIdx(0) }}>
@@ -423,7 +423,7 @@ const baseMarkdownComponents: Omit<Components, 'a'> = {
     if (className?.includes('language-map')) return <InlineMap source={String(children)} />
     if (!className) {
       return (
-        <code className="bg-secondary px-1.5 py-0.5 rounded text-[13px] font-mono text-accent" {...props}>
+        <code className="rounded-[5px] border border-[var(--line)] bg-[var(--sand)] px-1.5 py-0.5 font-mono text-[13px] text-[var(--ink-body)]" {...props}>
           {children}
         </code>
       )
@@ -435,26 +435,38 @@ const baseMarkdownComponents: Omit<Components, 'a'> = {
     )
   },
   table: ({ children }) => (
-    <div className="my-6 overflow-x-auto rounded-lg border border-border">
-      <table className="w-full text-sm">{children}</table>
+    <div className="my-6 overflow-x-auto rounded-2xl border border-[var(--line)] custom-scrollbar">
+      <table className="w-full text-[14.5px]">{children}</table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-secondary/50 border-b border-border">{children}</thead>,
-  th: ({ children }) => <th className="px-4 py-2.5 text-left font-medium text-foreground text-xs uppercase tracking-wider">{children}</th>,
-  td: ({ children }) => <td className="px-4 py-2.5 text-foreground border-b border-border/50">{children}</td>,
-  blockquote: ({ children }) => (
-    <blockquote className="my-4 border-l-3 border-accent/50 bg-accent/5 rounded-r-lg pl-4 pr-3 py-3 text-muted-foreground italic">{children}</blockquote>
+  thead: ({ children }) => <thead className="border-b border-[var(--line)] bg-[var(--paper-rail)]">{children}</thead>,
+  th: ({ children }) => (
+    <th className="omni-eyebrow px-4 py-2.5 text-left" style={{ letterSpacing: '0.08em' }}>
+      {children}
+    </th>
   ),
-  hr: () => <hr className="my-8 border-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />,
-  h1: ({ children }) => <h1 className="text-2xl font-semibold tracking-tight text-foreground mt-8 mb-4 first:mt-0">{children}</h1>,
-  h2: ({ children }) => <h2 className="text-xl font-semibold tracking-tight text-foreground mt-8 mb-3 pb-2 border-b border-border/50">{children}</h2>,
-  h3: ({ children }) => <h3 className="text-lg font-medium text-foreground mt-6 mb-2">{children}</h3>,
-  ul: ({ children }) => <ul className="my-3 ml-1 space-y-1.5 list-disc list-inside">{children}</ul>,
-  ol: ({ children }) => <ol className="my-3 ml-1 space-y-1.5 list-decimal list-inside">{children}</ol>,
-  li: ({ children }) => <li className="text-foreground leading-[1.7]">{children}</li>,
-  p: ({ children }) => <p className="text-foreground leading-[1.8] mb-4 text-pretty">{children}</p>,
-  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-  em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
+  td: ({ children }) => <td className="border-b border-[var(--line-hair)] px-4 py-3 leading-[1.45] text-[var(--ink-body)]">{children}</td>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-5 border-l-2 border-[var(--rust)] py-1 pl-4 text-[16.5px] italic leading-[1.7] text-[var(--ink-muted)]">{children}</blockquote>
+  ),
+  hr: () => <hr className="my-9 h-px border-0 bg-[var(--line)]" />,
+  /* Headings in the display serif, weight 400 — the size and the shape of the
+     face carry the hierarchy, so there is no bold anywhere in an answer's
+     structure and the prose underneath stays the loudest thing on the page.
+     No underline rule on h2: the whitespace above it already separates. */
+  h1: ({ children }) => <h1 className="omni-display text-[28px] leading-[1.15] text-[var(--ink)] mt-9 mb-4 first:mt-0">{children}</h1>,
+  h2: ({ children }) => <h2 className="omni-display text-[24px] leading-[1.2] text-[var(--ink)] mt-8 mb-3.5 first:mt-0">{children}</h2>,
+  h3: ({ children }) => <h3 className="omni-display text-[20px] leading-[1.25] text-[var(--ink)] mt-6 mb-2">{children}</h3>,
+  /* `list-outside` with an explicit indent, not `list-inside`: inside-markers
+     make a wrapped bullet's second line start under the marker instead of
+     under the text, which is the single most common way a long answer reads
+     as sloppy. Rust markers tie the list to the provenance accent. */
+  ul: ({ children }) => <ul className="my-4 list-disc list-outside space-y-2 pl-5 marker:text-[var(--rust)]">{children}</ul>,
+  ol: ({ children }) => <ol className="my-4 list-decimal list-outside space-y-2 pl-5 marker:text-[var(--ink-faint)] marker:font-normal">{children}</ol>,
+  li: ({ children }) => <li className="text-[16.5px] leading-[1.7] text-[var(--ink-body)] pl-1">{children}</li>,
+  p: ({ children }) => <p className="mb-5 text-[17px] leading-[1.75] text-[var(--ink-body)] text-pretty">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-[var(--ink)]">{children}</strong>,
+  em: ({ children }) => <em className="italic">{children}</em>,
   img: ({ src, alt, ...props }) => (
     <figure className="my-6 w-full sm:w-fit sm:max-w-[80%] mx-auto flex flex-col items-center gap-2">
       <div className="group relative rounded-lg overflow-hidden w-full">

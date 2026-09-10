@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { Cloud, TrendingUp, TrendingDown, ExternalLink, Droplets, Wind } from 'lucide-react'
+import { Cloud, ExternalLink } from 'lucide-react'
 import type { WidgetData } from '@/lib/types'
 
 const CurrencyWidget = dynamic(
@@ -9,14 +9,10 @@ const CurrencyWidget = dynamic(
   { ssr: false }
 )
 
-// ── helpers (ported from the old light-chat view) ──────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────
 function toCelsius(temp?: number) {
   if (typeof temp !== 'number' || Number.isNaN(temp)) return null
   return temp > 170 ? temp - 273.15 : temp // backend returns Kelvin
-}
-function formatTemp(temp?: number) {
-  const c = toCelsius(temp)
-  return c == null ? '--' : `${Math.round(c)}°C`
 }
 function num(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v
@@ -39,7 +35,34 @@ function weatherLocation(data: any): string {
   return ''
 }
 
-// ── Weather sub-components ─────────────────────────────────────────────────
+/**
+ * The shell every widget sits in: raised paper, a mono eyebrow naming the kind
+ * of thing it is, and a right-aligned meta line for where the number came from
+ * or when. Identical geometry across all three so a turn that returns two
+ * widgets reads as two rows of one system rather than two unrelated cards.
+ */
+function WidgetShell({
+  label,
+  meta,
+  children,
+}: {
+  label: string
+  meta?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="w-full min-w-0 rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)] px-[18px] pb-[17px] pt-[15px]">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="omni-eyebrow">{label}</span>
+        {meta && (
+          <span className="min-w-0 truncate text-[11.5px] text-[var(--ink-faint)]">{meta}</span>
+        )}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function WeatherIcon({ icon, status, size = 32 }: { icon?: string; status?: string; size?: number }) {
   if (icon) {
     return (
@@ -53,189 +76,251 @@ function WeatherIcon({ icon, status, size = 32 }: { icon?: string; status?: stri
       />
     )
   }
-  return <Cloud size={Math.round(size * 0.7)} strokeWidth={1.5} className="text-[var(--foreground)] opacity-70 shrink-0" />
+  return <Cloud size={Math.round(size * 0.7)} strokeWidth={1.4} className="shrink-0 text-[var(--teal)]" />
 }
 
 function getDayLabel(dateStr?: string): string {
-  if (!dateStr) return 'Day after'
+  if (!dateStr) return 'Later'
   try {
-    const d = new Date(dateStr + 'T12:00:00Z')
-    return d.toLocaleDateString(undefined, { weekday: 'long' })
+    return new Date(dateStr + 'T12:00:00Z').toLocaleDateString(undefined, { weekday: 'short' })
   } catch {
-    return 'Day after'
+    return 'Later'
   }
 }
 
-function HourlySlot({ slot }: { slot: any }) {
-  const pop = num(slot?.pop)
-  const hasPop = pop != null && pop > 0
-  return (
-    <div className="flex flex-col items-center gap-0.5 min-w-[52px] shrink-0 py-0.5">
-      <div className="text-[11px] text-[var(--muted-foreground)] tabular-nums">{str(slot?.time) || '--'}</div>
-      <WeatherIcon icon={str(slot?.icon)} status={str(slot?.status)} size={36} />
-      <div className="text-[13px] font-medium text-[var(--foreground)] tabular-nums">
-        {slot?.temp_c != null ? `${Math.round(Number(slot.temp_c))}°` : '--'}
-      </div>
-      <div className={`text-[10px] tabular-nums font-medium ${hasPop ? 'text-sky-500 dark:text-sky-400' : 'text-transparent select-none'}`}>
-        {hasPop ? `${pop}%` : '·'}
-      </div>
-    </div>
-  )
-}
-
-function DailyRow({ label, data }: { label: string; data: any }) {
-  const pop = num(data?.pop)
-  const maxC = num(data?.temp_max_c)
-  const minC = num(data?.temp_min_c)
-  const hasPop = pop != null && pop > 0
-  return (
-    <div className="flex items-center gap-2.5 py-1">
-      <div className="w-[76px] text-[13px] font-medium text-[var(--foreground)] shrink-0 truncate">{label}</div>
-      <WeatherIcon icon={str(data?.icon)} status={str(data?.status)} size={28} />
-      <div className="flex-1 text-[12px] text-[var(--muted-foreground)] capitalize truncate min-w-0">
-        {str(data?.status) || '--'}
-      </div>
-      {hasPop && (
-        <div className="text-[11px] text-sky-500 dark:text-sky-400 shrink-0 tabular-nums font-medium">{pop}%</div>
-      )}
-      <div className="text-[13px] shrink-0 tabular-nums ml-1">
-        <span className="font-semibold text-[var(--foreground)]">{maxC != null ? `${Math.round(maxC)}°` : '--'}</span>
-        <span className="text-[var(--border-subtle)] mx-1">/</span>
-        <span className="text-[var(--muted-foreground)]">{minC != null ? `${Math.round(minC)}°` : '--'}</span>
-      </div>
-    </div>
-  )
+interface ForecastDay {
+  label: string
+  lo: number
+  hi: number
+  pop?: number
 }
 
 // ── individual cards ───────────────────────────────────────────────────────
+
+/**
+ * Weather as a temperature range chart, not a stack of icon rows.
+ *
+ * Each day is one bar spanning its low to its high, all of them scaled to the
+ * same axis — so "Thursday is the cold one" and "the swing is widening" are
+ * legible without reading a single number. Icon-per-row layouts can't show
+ * either: they put five identical cloud glyphs in a column and make the reader
+ * compare digits.
+ */
 function WeatherCard({ data }: { data: any }) {
-  // Support both old (flat) format and new (current + forecast) format
   const isEnhanced = !!data?.current
   const current = isEnhanced ? data.current : data
 
-  const location = weatherLocation(data)
-  const temp = formatTemp(current?.temperature?.temp)
-  const feelsLike = toCelsius(current?.temperature?.feels_like)
-  const status = str(current?.detailed_status) || str(current?.status) || 'Weather'
-  const humidity = num(current?.humidity)
-  const wind = num(current?.wind?.speed)
+  const place = weatherLocation(data)
+  const tempC = toCelsius(current?.temperature?.temp)
+  const cond = str(current?.detailed_status) || str(current?.status) || ''
   const icon = str(current?.weather_icon_name)
 
   const todayHourly: any[] = isEnhanced ? (data.today_hourly ?? []) : []
   const tomorrow = isEnhanced && data.tomorrow && Object.keys(data.tomorrow).length > 0 ? data.tomorrow : null
-  const dayAfter = isEnhanced && data.day_after_tomorrow && Object.keys(data.day_after_tomorrow).length > 0 ? data.day_after_tomorrow : null
-  const hasForecast = todayHourly.length > 0 || !!tomorrow || !!dayAfter
+  const dayAfter =
+    isEnhanced && data.day_after_tomorrow && Object.keys(data.day_after_tomorrow).length > 0
+      ? data.day_after_tomorrow
+      : null
+
+  const days: ForecastDay[] = []
+  // Today's range comes from the hourly series when there is one; otherwise
+  // the current reading is the only point we have and the bar collapses to it.
+  const hourTemps = todayHourly.map((s) => num(s?.temp_c)).filter((n): n is number => n != null)
+  const todayLo = hourTemps.length ? Math.min(...hourTemps) : toCelsius(current?.temperature?.temp_min)
+  const todayHi = hourTemps.length ? Math.max(...hourTemps) : toCelsius(current?.temperature?.temp_max)
+  if (todayLo != null && todayHi != null) days.push({ label: 'Today', lo: todayLo, hi: todayHi })
+  for (const [d, fallback] of [
+    [tomorrow, 'Tue'],
+    [dayAfter, 'Wed'],
+  ] as const) {
+    if (!d) continue
+    const lo = num(d.temp_min_c)
+    const hi = num(d.temp_max_c)
+    if (lo == null || hi == null) continue
+    days.push({
+      label: d === tomorrow ? 'Tomorrow' : getDayLabel(str(d.date)) || fallback,
+      lo,
+      hi,
+      pop: num(d.pop),
+    })
+  }
+
+  const lo = days.length ? Math.min(...days.map((d) => d.lo)) : 0
+  const hi = days.length ? Math.max(...days.map((d) => d.hi)) : 1
+  const span = hi - lo || 1
 
   return (
-    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
-
-      {/* ── Current weather ── */}
-      <div className="p-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {icon
-            ? <WeatherIcon icon={icon} status={status} size={48} />
-            : <div className="p-3 bg-[var(--secondary)]/50 rounded-xl shrink-0"><Cloud size={22} strokeWidth={1.5} className="text-[var(--foreground)] opacity-80" /></div>
-          }
-          <div className="min-w-0">
-            <div className="text-[15px] font-semibold text-[var(--foreground)] truncate leading-tight">{location || 'Weather'}</div>
-            <div className="text-[13px] text-[var(--muted-foreground)] mt-0.5 capitalize truncate">{status}</div>
-          </div>
-        </div>
-        <div className="flex flex-col items-end shrink-0">
-          <div className="text-[2.25rem] font-light tracking-tight text-[var(--foreground)] leading-none">{temp}</div>
-          {feelsLike != null && (
-            <div className="text-[11px] text-[var(--muted-foreground)] mt-1 opacity-75">
-              Feels like {Math.round(feelsLike)}°C
-            </div>
-          )}
-          <div className="text-[11px] text-[var(--muted-foreground)] mt-1 flex items-center gap-2 opacity-80">
-            {humidity != null && (
-              <span className="flex items-center gap-0.5">
-                <Droplets size={10} strokeWidth={2} />
-                {humidity}%
-              </span>
-            )}
-            {wind != null && (
-              <span className="flex items-center gap-0.5">
-                <Wind size={10} strokeWidth={2} />
-                {wind.toFixed(1)} m/s
-              </span>
-            )}
-          </div>
-        </div>
+    <WidgetShell label="Weather" meta={cond ? cond.replace(/^\w/, (c) => c.toUpperCase()) : undefined}>
+      <div className="mb-1 flex items-baseline gap-3">
+        <span className="omni-display text-[40px] leading-none text-[var(--ink)]">
+          {tempC != null ? `${Math.round(tempC)}°` : '--'}
+        </span>
+        {icon && <WeatherIcon icon={icon} status={cond} size={34} />}
+      </div>
+      <div className="mb-3.5 text-[13px] text-[var(--ink-muted)]">
+        {[place, days.length ? `H ${Math.round(hi)}°` : null, days.length ? `L ${Math.round(lo)}°` : null]
+          .filter(Boolean)
+          .join(' · ')}
       </div>
 
-      {/* ── Today's hourly strips ── */}
-      {todayHourly.length > 0 && (
-        <>
-          <div className="h-px bg-[var(--border-subtle)]" />
-          <div className="px-5 pt-3.5 pb-3">
-            <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Today</div>
-            <div
-              className="flex gap-0.5 overflow-x-auto"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {todayHourly.map((slot: any, i: number) => (
-                <HourlySlot key={i} slot={slot} />
-              ))}
+      {days.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {days.map((d) => (
+            <div key={d.label} className="grid grid-cols-[58px_30px_minmax(0,1fr)_34px] items-center gap-2.5">
+              <span className="omni-mono truncate text-[11px] text-[var(--ink-muted)]">{d.label}</span>
+              <span className="text-right text-[12.5px] text-[var(--ink-faint)]">{Math.round(d.lo)}°</span>
+              <span className="relative block h-1 rounded-full bg-[var(--sand)]">
+                <span
+                  className="absolute inset-y-0 block rounded-full bg-[var(--teal)]"
+                  style={{
+                    left: `${(((d.lo - lo) / span) * 100).toFixed(1)}%`,
+                    // A day with no swing would otherwise render a zero-width
+                    // bar and read as missing data rather than a flat day.
+                    width: `${Math.max(4, ((d.hi - d.lo) / span) * 100).toFixed(1)}%`,
+                  }}
+                />
+              </span>
+              <span className="text-[12.5px] text-[var(--ink-body)]">{Math.round(d.hi)}°</span>
             </div>
-          </div>
-        </>
+          ))}
+        </div>
       )}
 
-      {/* ── Multi-day forecast ── */}
-      {(tomorrow || dayAfter) && (
-        <>
-          <div className="h-px bg-[var(--border-subtle)]" />
-          <div className="px-5 pt-3.5 pb-4">
-            <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-widest mb-1">Forecast</div>
-            {tomorrow && <DailyRow label="Tomorrow" data={tomorrow} />}
-            {dayAfter && <DailyRow label={getDayLabel(dayAfter?.date)} data={dayAfter} />}
+      {/* Hourly is not in the source design, which stops at daily ranges — but
+          the data is here and it answers "do I need a coat this afternoon",
+          which the daily bars can't. Same idiom: mono times, teal for rain. */}
+      {todayHourly.length > 0 && (
+        <div className="mt-4 border-t border-[var(--line-hair)] pt-3.5">
+          <div className="omni-eyebrow mb-2">Hourly</div>
+          <div className="omni-hide-scrollbar flex gap-1 overflow-x-auto">
+            {todayHourly.map((slot: any, i: number) => {
+              const pop = num(slot?.pop)
+              return (
+                <div key={i} className="flex min-w-[50px] shrink-0 flex-col items-center gap-1 py-0.5">
+                  <span className="omni-mono text-[10.5px] tabular-nums text-[var(--ink-faint)]">
+                    {str(slot?.time) || '--'}
+                  </span>
+                  <WeatherIcon icon={str(slot?.icon)} status={str(slot?.status)} size={30} />
+                  <span className="text-[12.5px] tabular-nums text-[var(--ink-body)]">
+                    {slot?.temp_c != null ? `${Math.round(Number(slot.temp_c))}°` : '--'}
+                  </span>
+                  <span
+                    className={`omni-mono text-[10px] tabular-nums ${
+                      pop != null && pop > 0 ? 'text-[var(--teal)]' : 'select-none text-transparent'
+                    }`}
+                  >
+                    {pop != null && pop > 0 ? `${pop}%` : '·'}
+                  </span>
+                </div>
+              )
+            })}
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </WidgetShell>
   )
 }
 
+/**
+ * A quote, a sparkline, and the day's four numbers.
+ *
+ * Direction is teal-up / rust-down rather than the usual green/red: the
+ * palette has exactly two accents, and borrowing a third pair for one widget
+ * would make it the loudest thing in the answer.
+ */
 function StockCard({ data }: { data: any }) {
   const d = data?.data && typeof data.data === 'object' ? data.data : data
-  const symbol = str(d?.symbol) || str(d?.companyName) || 'Stock'
+  const symbol = str(d?.symbol) || 'Stock'
+  const name = str(d?.companyName) || str(d?.name)
   const price = num(d?.currentPrice ?? d?.price)
   const change = num(d?.change)
   const changePct = num(d?.changePercent)
   const currency = str(d?.currency) || 'USD'
   const up = (change ?? 0) >= 0
+
   const priceStr =
     price != null
-      ? (() => {
-          try {
-            return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(price)
-          } catch {
-            return `${currency} ${price.toFixed(2)}`
-          }
-        })()
+      ? price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '--'
+
+  // The sparkline and the stat row render only when the backend actually sent
+  // the data — an empty axis or a row of dashes says less than nothing.
+  const series = (Array.isArray(d?.series) ? d.series : Array.isArray(d?.history) ? d.history : [])
+    .map((v: unknown) => (typeof v === 'object' && v !== null ? num((v as any).close ?? (v as any).price) : num(v)))
+    .filter((n: number | undefined): n is number => n != null)
+
+  let spark: string | null = null
+  if (series.length > 1) {
+    const sLo = Math.min(...series)
+    const sHi = Math.max(...series)
+    const sSpan = sHi - sLo || 1
+    spark = series
+      .map((v: number, i: number) =>
+        `${((i / (series.length - 1)) * 120).toFixed(1)},${(32 - ((v - sLo) / sSpan) * 28).toFixed(1)}`
+      )
+      .join(' ')
+  }
+
+  const stats = [
+    ['Open', num(d?.open ?? d?.openPrice)],
+    ['High', num(d?.dayHigh ?? d?.high)],
+    ['Low', num(d?.dayLow ?? d?.low)],
+    ['Prev', num(d?.previousClose ?? d?.prevClose)],
+  ].filter(([, v]) => v != null) as [string, number][]
+
   return (
-    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div className="flex items-center gap-4">
-        <div className={`p-3.5 rounded-xl shrink-0 ${up ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
-          {up ? <TrendingUp size={24} strokeWidth={1.5} className="text-emerald-600 dark:text-emerald-400" /> : <TrendingDown size={24} strokeWidth={1.5} className="text-rose-600 dark:text-rose-400" />}
-        </div>
-        <div className="min-w-0">
-          <div className="text-[15px] font-medium text-[var(--foreground)] opacity-90 truncate">{symbol}</div>
-          <div className="text-[13px] text-[var(--muted-foreground)] mt-0.5 truncate">Stock Quote</div>
-        </div>
+    <WidgetShell label="Stock" meta={name}>
+      <div className="mb-0.5 flex items-baseline gap-2">
+        <span className="omni-mono text-[13px] tracking-[0.04em] text-[var(--ink)]">{symbol}</span>
       </div>
-      <div className="flex flex-col sm:items-end shrink-0">
-        <div className="text-3xl font-medium tracking-tight text-[var(--foreground)]">{priceStr}</div>
+      <div className="mb-3 flex items-baseline gap-2.5">
+        <span className="omni-display text-[34px] leading-[1.1] text-[var(--ink)]">{priceStr}</span>
+        <span className="omni-mono text-[12px] text-[var(--ink-faint)]">{currency}</span>
         {change != null && changePct != null && (
-          <div className={`text-[12px] font-medium mt-1 flex items-center gap-1.5 opacity-90 ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-            {up ? '+' : ''}{change.toFixed(2)} ({up ? '+' : ''}{changePct.toFixed(2)}%)
-          </div>
+          <span
+            className={`ml-auto rounded-full px-2.5 py-1 text-[12.5px] ${
+              up ? 'bg-[var(--teal-tint)] text-[var(--teal)]' : 'bg-[var(--rust-tint)] text-[var(--rust)]'
+            }`}
+          >
+            {up ? '+' : ''}
+            {change.toFixed(2)} ({up ? '+' : ''}
+            {changePct.toFixed(2)}%)
+          </span>
         )}
       </div>
-    </div>
+
+      {spark && (
+        <svg viewBox="0 0 120 34" preserveAspectRatio="none" className="mb-3 block h-[46px] w-full">
+          <polygon
+            points={`${spark} 120,34 0,34`}
+            fill={up ? 'var(--teal-tint)' : 'var(--rust-tint)'}
+          />
+          <polyline
+            points={spark}
+            fill="none"
+            stroke={up ? 'var(--teal)' : 'var(--rust)'}
+            strokeWidth="1.4"
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+
+      {stats.length > 0 && (
+        <div className="flex gap-2 border-t border-[var(--line-hair)] pt-2.5">
+          {stats.map(([k, v]) => (
+            <div key={k} className="min-w-0 flex-1">
+              <div className="omni-eyebrow mb-1" style={{ fontSize: 9.5, letterSpacing: '0.08em' }}>
+                {k}
+              </div>
+              <div className="text-[13px] tabular-nums text-[var(--ink-body)]">
+                {v.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </WidgetShell>
   )
 }
 
@@ -250,21 +335,19 @@ function EntityCard({ data }: { data: any }) {
       href={sourceLink || undefined}
       target="_blank"
       rel="noopener noreferrer"
-      className={`w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex items-center gap-4 p-4 ${sourceLink ? 'hover:bg-[var(--secondary)]/30 transition-colors cursor-pointer' : ''}`}
+      className={`flex w-full items-center gap-4 overflow-hidden rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-4 ${sourceLink ? 'cursor-pointer transition-colors hover:border-[var(--teal)]' : ''}`}
     >
       {imageUrl && (
-        <div className="shrink-0 w-[56px] h-[56px] rounded-xl overflow-hidden bg-[var(--secondary)]/40">
+        <div className="h-[56px] w-[56px] shrink-0 overflow-hidden rounded-[14px] bg-[var(--sand)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
+          <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
         </div>
       )}
-      <div className="flex-1 min-w-0">
-        <div className="text-[15px] font-semibold text-[var(--foreground)] leading-tight truncate">{title}</div>
-        {type && <div className="text-[12px] text-[var(--muted-foreground)] mt-0.5 truncate">{type}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="omni-display truncate text-[19px] leading-tight text-[var(--ink)]">{title}</div>
+        {type && <div className="omni-eyebrow mt-1 truncate">{type}</div>}
       </div>
-      {sourceLink && (
-        <ExternalLink size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]/50" />
-      )}
+      {sourceLink && <ExternalLink size={14} strokeWidth={1.5} className="shrink-0 text-[var(--ink-fainter)]" />}
     </a>
   )
 }
@@ -287,7 +370,7 @@ function CurrencyCard({ data }: { data: any }) {
 export function WidgetCards({ widgets }: { widgets?: WidgetData[] }) {
   if (!widgets || widgets.length === 0) return null
   return (
-    <div className="flex flex-col gap-3 mb-3 w-full">
+    <div className="mb-6 flex w-full flex-col gap-3.5">
       {widgets.map((w, i) => {
         switch (w.widget) {
           case 'weather':
