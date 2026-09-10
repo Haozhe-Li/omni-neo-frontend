@@ -941,17 +941,19 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       />
 
       {/* Mobile Header */}
-      <header className="fixed top-0 left-0 right-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-center z-40 md:hidden">
+      <header className="fixed top-0 left-0 right-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center gap-1 px-4 z-40 md:hidden">
         <button
           onClick={onToggleSidebar}
-          className="absolute left-4 p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+          className="p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
         >
           <Menu size={20} />
         </button>
-        {/* The mark, centred — the bar was empty apart from the menu button,
-            and on mobile this header is the only place the product signs its
-            name at all. Not a link: this *is* home, so there is nowhere for it
-            to go. */}
+        {/* On mobile this header is the only place the product signs its name
+            at all, and the bar held nothing but the menu button. Sitting next
+            to that button rather than centred: the mark belongs with the other
+            chrome at the leading edge, the way it does in the rail this button
+            opens. Not a link — this header only exists on home, so there is
+            nowhere for it to go. */}
         <OmniMark size={22} />
       </header>
 
