@@ -54,7 +54,7 @@ export function ModelHeader({ row, run }: { row: LeaderboardRowWithIndex; run: E
             </div>
 
             <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-                <h1 className="min-w-0 text-[24px] font-semibold leading-tight tracking-tight text-[var(--foreground)] sm:text-[30px]">
+                <h1 className="omni-display min-w-0 text-[28px] text-[var(--ink)] sm:text-[36px]">
                     {row.model_label}
                 </h1>
                 <Link
@@ -174,7 +174,7 @@ export function RankTiles({
                             </span>
                         </div>
 
-                        <div className="mt-2.5 truncate text-[22px] font-semibold leading-none tabular-nums text-[var(--foreground)] sm:text-[24px]">
+                        <div className="omni-display mt-2.5 truncate text-[26px] leading-none tabular-nums text-[var(--ink)] sm:text-[28px]">
                             {rank ? METRICS[tile.key]?.format(rank.value) : 'n/a'}
                         </div>
                         <div className="mt-1 truncate text-[10px] text-[var(--muted-foreground)]">

@@ -76,7 +76,7 @@ function HourlySlot({ slot }: { slot: any }) {
       <div className="text-[13px] font-medium text-[var(--foreground)] tabular-nums">
         {slot?.temp_c != null ? `${Math.round(Number(slot.temp_c))}°` : '--'}
       </div>
-      <div className={`text-[10px] tabular-nums font-medium ${hasPop ? 'text-sky-500 dark:text-sky-400' : 'text-transparent select-none'}`}>
+      <div className={`text-[10px] tabular-nums font-medium ${hasPop ? 'text-[var(--teal)]' : 'text-transparent select-none'}`}>
         {hasPop ? `${pop}%` : '·'}
       </div>
     </div>
@@ -96,11 +96,11 @@ function DailyRow({ label, data }: { label: string; data: any }) {
         {str(data?.status) || '--'}
       </div>
       {hasPop && (
-        <div className="text-[11px] text-sky-500 dark:text-sky-400 shrink-0 tabular-nums font-medium">{pop}%</div>
+        <div className="text-[11px] text-[var(--teal)] shrink-0 tabular-nums font-medium">{pop}%</div>
       )}
       <div className="text-[13px] shrink-0 tabular-nums ml-1">
         <span className="font-semibold text-[var(--foreground)]">{maxC != null ? `${Math.round(maxC)}°` : '--'}</span>
-        <span className="text-[var(--border-subtle)] mx-1">/</span>
+        <span className="mx-1 text-[var(--ink-fainter)]">/</span>
         <span className="text-[var(--muted-foreground)]">{minC != null ? `${Math.round(minC)}°` : '--'}</span>
       </div>
     </div>
@@ -127,22 +127,22 @@ function WeatherCard({ data }: { data: any }) {
   const hasForecast = todayHourly.length > 0 || !!tomorrow || !!dayAfter
 
   return (
-    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
+    <div className="w-full overflow-hidden rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)]">
 
       {/* ── Current weather ── */}
       <div className="p-5 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           {icon
             ? <WeatherIcon icon={icon} status={status} size={48} />
-            : <div className="p-3 bg-[var(--secondary)]/50 rounded-xl shrink-0"><Cloud size={22} strokeWidth={1.5} className="text-[var(--foreground)] opacity-80" /></div>
+            : <div className="shrink-0 rounded-[14px] bg-[var(--sand)] p-3"><Cloud size={22} strokeWidth={1.4} className="text-[var(--teal)]" /></div>
           }
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold text-[var(--foreground)] truncate leading-tight">{location || 'Weather'}</div>
+            <div className="truncate text-[15px] leading-tight text-[var(--ink)]">{location || 'Weather'}</div>
             <div className="text-[13px] text-[var(--muted-foreground)] mt-0.5 capitalize truncate">{status}</div>
           </div>
         </div>
         <div className="flex flex-col items-end shrink-0">
-          <div className="text-[2.25rem] font-light tracking-tight text-[var(--foreground)] leading-none">{temp}</div>
+          <div className="omni-display text-[40px] leading-none text-[var(--ink)]">{temp}</div>
           {feelsLike != null && (
             <div className="text-[11px] text-[var(--muted-foreground)] mt-1 opacity-75">
               Feels like {Math.round(feelsLike)}°C
@@ -168,9 +168,9 @@ function WeatherCard({ data }: { data: any }) {
       {/* ── Today's hourly strips ── */}
       {todayHourly.length > 0 && (
         <>
-          <div className="h-px bg-[var(--border-subtle)]" />
-          <div className="px-5 pt-3.5 pb-3">
-            <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Today</div>
+          <div className="h-px bg-[var(--line-hair)]" />
+          <div className="px-5 pb-3 pt-3.5">
+            <div className="omni-eyebrow mb-2">Today</div>
             <div
               className="flex gap-0.5 overflow-x-auto"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -186,9 +186,9 @@ function WeatherCard({ data }: { data: any }) {
       {/* ── Multi-day forecast ── */}
       {(tomorrow || dayAfter) && (
         <>
-          <div className="h-px bg-[var(--border-subtle)]" />
-          <div className="px-5 pt-3.5 pb-4">
-            <div className="text-[10px] font-semibold text-[var(--muted-foreground)] uppercase tracking-widest mb-1">Forecast</div>
+          <div className="h-px bg-[var(--line-hair)]" />
+          <div className="px-5 pb-4 pt-3.5">
+            <div className="omni-eyebrow mb-1">Forecast</div>
             {tomorrow && <DailyRow label="Tomorrow" data={tomorrow} />}
             {dayAfter && <DailyRow label={getDayLabel(dayAfter?.date)} data={dayAfter} />}
           </div>
@@ -217,20 +217,25 @@ function StockCard({ data }: { data: any }) {
         })()
       : '--'
   return (
-    <div className="w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="flex w-full flex-col justify-between gap-4 rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)] px-[18px] py-[17px] sm:flex-row sm:items-center">
       <div className="flex items-center gap-4">
-        <div className={`p-3.5 rounded-xl shrink-0 ${up ? 'bg-emerald-500/10' : 'bg-rose-500/10'}`}>
-          {up ? <TrendingUp size={24} strokeWidth={1.5} className="text-emerald-600 dark:text-emerald-400" /> : <TrendingDown size={24} strokeWidth={1.5} className="text-rose-600 dark:text-rose-400" />}
+        {/* Direction reads as teal-up / rust-down rather than the usual
+            green/red: the palette has exactly two accents, and borrowing a
+            third pair for one widget would break the page. */}
+        <div className={`shrink-0 rounded-[14px] p-3.5 ${up ? 'bg-[var(--teal-tint)]' : 'bg-[var(--rust-tint)]'}`}>
+          {up
+            ? <TrendingUp size={22} strokeWidth={1.4} className="text-[var(--teal)]" />
+            : <TrendingDown size={22} strokeWidth={1.4} className="text-[var(--rust)]" />}
         </div>
         <div className="min-w-0">
-          <div className="text-[15px] font-medium text-[var(--foreground)] opacity-90 truncate">{symbol}</div>
-          <div className="text-[13px] text-[var(--muted-foreground)] mt-0.5 truncate">Stock Quote</div>
+          <div className="omni-mono truncate text-[13px] tracking-[0.04em] text-[var(--ink)]">{symbol}</div>
+          <div className="omni-eyebrow mt-1">Stock quote</div>
         </div>
       </div>
       <div className="flex flex-col sm:items-end shrink-0">
-        <div className="text-3xl font-medium tracking-tight text-[var(--foreground)]">{priceStr}</div>
+        <div className="omni-display text-[34px] leading-[1.1] text-[var(--ink)]">{priceStr}</div>
         {change != null && changePct != null && (
-          <div className={`text-[12px] font-medium mt-1 flex items-center gap-1.5 opacity-90 ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+          <div className={`mt-1.5 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] ${up ? 'bg-[var(--teal-tint)] text-[var(--teal)]' : 'bg-[var(--rust-tint)] text-[var(--rust)]'}`}>
             {up ? '+' : ''}{change.toFixed(2)} ({up ? '+' : ''}{changePct.toFixed(2)}%)
           </div>
         )}
@@ -250,17 +255,17 @@ function EntityCard({ data }: { data: any }) {
       href={sourceLink || undefined}
       target="_blank"
       rel="noopener noreferrer"
-      className={`w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex items-center gap-4 p-4 ${sourceLink ? 'hover:bg-[var(--secondary)]/30 transition-colors cursor-pointer' : ''}`}
+      className={`flex w-full items-center gap-4 overflow-hidden rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-4 ${sourceLink ? 'cursor-pointer transition-colors hover:border-[var(--teal)]' : ''}`}
     >
       {imageUrl && (
-        <div className="shrink-0 w-[56px] h-[56px] rounded-xl overflow-hidden bg-[var(--secondary)]/40">
+        <div className="h-[56px] w-[56px] shrink-0 overflow-hidden rounded-[14px] bg-[var(--sand)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <div className="text-[15px] font-semibold text-[var(--foreground)] leading-tight truncate">{title}</div>
-        {type && <div className="text-[12px] text-[var(--muted-foreground)] mt-0.5 truncate">{type}</div>}
+        <div className="omni-display truncate text-[19px] leading-tight text-[var(--ink)]">{title}</div>
+        {type && <div className="omni-eyebrow mt-1 truncate">{type}</div>}
       </div>
       {sourceLink && (
         <ExternalLink size={14} strokeWidth={1.75} className="shrink-0 text-[var(--muted-foreground)]/50" />

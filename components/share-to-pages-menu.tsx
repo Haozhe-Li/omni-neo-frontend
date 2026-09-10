@@ -152,7 +152,7 @@ export function ShareToPagesMenu({ title, content, sources, idSeed }: ShareToPag
                     className="peer sr-only"
                   />
                   <div className="w-4 h-4 rounded border border-[var(--border)] bg-[var(--card)] peer-checked:bg-[var(--accent)] peer-checked:border-[var(--accent)] transition-colors" />
-                  <Check className="w-3 h-3 text-white absolute inset-0 m-auto opacity-0 peer-checked:opacity-100 transition-opacity" strokeWidth={3} />
+                  <Check className="absolute inset-0 m-auto h-3 w-3 text-[var(--accent-foreground)] opacity-0 transition-opacity peer-checked:opacity-100" strokeWidth={3} />
                 </div>
                 <span className="text-[12px] text-[var(--foreground)] group-hover:opacity-80 transition-opacity">
                   List on Pages home
@@ -162,7 +162,7 @@ export function ShareToPagesMenu({ title, content, sources, idSeed }: ShareToPag
               <button
                 onClick={handlePublish}
                 disabled={publishing}
-                className="w-full h-8 rounded-md bg-[var(--accent)] text-white text-[12px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className="w-full h-8 rounded-md bg-[var(--accent)] text-[var(--accent-foreground)] text-[12px] font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {publishing ? <Loader2 size={13} className="animate-spin" /> : 'Publish & Copy Link'}
               </button>
@@ -177,7 +177,7 @@ export function ShareToPagesMenu({ title, content, sources, idSeed }: ShareToPag
                   onClick={() => { copyUrl(shareUrl); toast.success('Link copied') }}
                   className="flex-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--card)] hover:bg-[var(--secondary)] text-[11.5px] font-medium text-[var(--foreground)] flex items-center justify-center gap-1.5 transition-colors"
                 >
-                  {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} className="opacity-70" />}
+                  {copied ? <Check size={12} className="text-[var(--teal)]" /> : <Copy size={12} className="opacity-70" />}
                   Copy
                 </button>
                 <button

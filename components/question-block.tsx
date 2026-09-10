@@ -31,7 +31,7 @@ function OptionBadge({ id, selected }: { id: string; selected: boolean }) {
         flex h-[22px] min-w-[22px] shrink-0 items-center justify-center rounded-md
         text-[11px] font-semibold tracking-wide transition-colors duration-150
         ${selected
-          ? 'bg-accent text-white'
+          ? 'bg-accent text-[var(--accent-foreground)]'
           : 'bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] text-muted-foreground'
         }
       `}
@@ -244,7 +244,7 @@ export function QuestionBlock({ question, onSubmit, answered = false, answeredTe
             flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] font-medium
             transition-all duration-150
             ${canSubmit()
-              ? 'bg-accent text-white hover:opacity-90 cursor-pointer shadow-sm'
+              ? 'bg-accent text-[var(--accent-foreground)] hover:opacity-90 cursor-pointer shadow-sm'
               : 'bg-[color-mix(in_srgb,var(--foreground)_8%,transparent)] text-muted-foreground cursor-not-allowed'
             }
           `}

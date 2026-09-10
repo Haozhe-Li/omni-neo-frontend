@@ -36,7 +36,12 @@ function makeIcon(n: number, active: boolean) {
   const s = active ? 30 : 24
   return L.divIcon({
     className: '',
-    html: `<div style="width:${s}px;height:${s}px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:${active ? 13 : 11}px;font-weight:700;letter-spacing:-0.01em;color:#fff;background:${active ? 'var(--accent,#005a5a)' : '#1a1a1a'};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);pointer-events:auto;transition:all .15s ease">${n}</div>`,
+    // Leaflet builds markers from raw HTML strings outside React, so these
+    // pins can't take Tailwind classes — but they CAN read the page's own
+    // custom properties, so the pin follows the theme instead of freezing a
+    // literal. Active is teal, resting is ink, both ringed in raised paper so
+    // they stay legible over any map tile.
+    html: `<div style="width:${s}px;height:${s}px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-family:var(--font-plex-mono),monospace;font-size:${active ? 12 : 10.5}px;letter-spacing:-0.01em;color:var(--accent-foreground,#FAF6EF);background:${active ? 'var(--teal,#26696B)' : 'var(--ink,#2B2724)'};border:2px solid var(--paper-raised,#FFFDF9);box-shadow:0 1px 4px rgba(43,39,36,.28);pointer-events:auto;transition:all .15s ease">${n}</div>`,
     iconSize: [s, s],
     iconAnchor: [s / 2, s / 2],
   })
@@ -165,7 +170,7 @@ export function LightChatMiniMap({ points }: { points: LightChatMapPoint[] }) {
               <span
                 className={`flex-none w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center transition-colors ${
                   isActive
-                    ? 'bg-[var(--accent)] text-white'
+                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
                     : 'bg-[var(--foreground)]/80 text-[var(--background)]'
                 }`}
               >

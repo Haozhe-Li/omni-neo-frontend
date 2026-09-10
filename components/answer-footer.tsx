@@ -1,19 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Copy, Check, FileText, Share2, ThumbsUp, ThumbsDown, RotateCcw } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Source } from '@/lib/types'
 import { CHAT_MODELS, getModel, type ChatModelId } from '@/lib/models'
-import { extractCitedNumbers, partitionSources } from '@/lib/markdown'
-
-function domainOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
 
 function IconBtn({
   onClick,
@@ -30,8 +20,8 @@ function IconBtn({
     <button
       onClick={onClick}
       title={title}
-      className={`p-1.5 rounded-full hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95 ${
-        active ? 'text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+      className={`rounded-full p-1.5 transition-all duration-150 active:scale-95 hover:bg-[var(--sand)] ${
+        active ? 'text-[var(--teal)]' : 'text-[var(--ink-faint)] hover:text-[var(--ink)]'
       }`}
     >
       {children}
@@ -41,10 +31,6 @@ function IconBtn({
 
 interface AnswerFooterProps {
   content: string
-  sources?: Source[]
-  /** This message's own fetched sources (not the thread-wide merged list) — the only valid fallback when the answer cites nothing. */
-  ownSources?: Source[]
-  onOpenSources?: (sources: Source[], citedNumbers: Set<number>) => void
   onRegenerate?: (model: ChatModelId) => void
   regeneratedWith?: ChatModelId
   /** Guests can't regenerate on a signed-in-only model — those rows are hidden
@@ -52,37 +38,12 @@ interface AnswerFooterProps {
   isSignedIn?: boolean
 }
 
-export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRegenerate, regeneratedWith, isSignedIn = false }: AnswerFooterProps) {
+export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
   const [regenOpen, setRegenOpen] = useState(false)
   const regenRef = useRef<HTMLDivElement>(null)
-  // Which source numbers the answer text actually cites inline (`[n]`), so the
-  // sources panel can separate those from sources that were merely fetched.
-  const citedNumbers = useMemo(() => extractCitedNumbers(content), [content])
-  // "Used" resolves against the thread-wide list because a citation can reach
-  // an earlier turn's source (e.g. this answer cites [30], fetched two turns
-  // ago) — that's the one case where crossing turn boundaries is correct.
-  const { used: usedSources, split } = useMemo(
-    () => partitionSources(sources ?? [], citedNumbers),
-    [sources, citedNumbers]
-  )
-  // "Unused" ("fetched but not cited") must NOT cross turn boundaries — it's
-  // scoped to this message's OWN fetched sources only. Using the thread-wide
-  // list here would fold every earlier turn's uncited sources into this
-  // turn's "read but not used" section.
-  const unusedOwnSources = useMemo(
-    () => (ownSources ?? []).filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n))),
-    [ownSources, citedNumbers]
-  )
-  const badgeSources = split && usedSources.length > 0 ? usedSources.map((u) => u.source) : ownSources ?? []
-  // Panel gets exactly "cited (any turn) + this turn's own unused" — never the
-  // raw thread-wide list, which is what let earlier turns' sources leak in.
-  const sourcesForPanel =
-    split && usedSources.length > 0 ? [...usedSources.map((u) => u.source), ...unusedOwnSources] : ownSources ?? []
-  const hasSources = badgeSources.length > 0
-
   // Close regen dropdown on outside click
   useEffect(() => {
     if (!regenOpen) return
@@ -105,13 +66,16 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
   const handleDislike = () => { setDisliked(true); setLiked(false) }
 
   return (
-    <div className="mt-4">
+    /* A hairline over the action row rather than a card around it: the
+       footer belongs to the answer above it, and boxing it would make the
+       turn look like it ended twice. */
+    <div className="mt-7 border-t border-[var(--line)] pt-2">
       {regeneratedWith && (
-        <p className="mb-1.5 text-[11px] text-[var(--muted-foreground)]/60 select-none">
+        <p className="mb-1 pt-1 text-[11.5px] text-[var(--ink-faint)] select-none">
           Regenerated with {getModel(regeneratedWith).label}
         </p>
       )}
-      <div className="flex items-center gap-1 pt-2">
+      <div className="flex items-center gap-1">
         <IconBtn onClick={handleCopy} title="Copy">
           {copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}
         </IconBtn>
@@ -128,48 +92,23 @@ export function AnswerFooter({ content, sources, ownSources, onOpenSources, onRe
               <RotateCcw size={16} strokeWidth={1.75} />
             </IconBtn>
             {regenOpen && (
-              <div className="absolute left-0 bottom-full mb-2 w-52 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                <p className="px-3 pt-1 pb-2 text-[11px] font-medium text-[var(--muted-foreground)] uppercase tracking-wide">
-                  Regenerate with
-                </p>
+              <div className="absolute left-0 bottom-full z-50 mb-2 w-52 rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] py-2 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] animate-in fade-in slide-in-from-bottom-2 duration-150">
+                <p className="omni-eyebrow px-3.5 pb-2 pt-1">Regenerate with</p>
                 {CHAT_MODELS.filter((m) => isSignedIn || !m.requiresAuth).map((m) => (
                   <button
                     key={m.id}
                     onClick={() => { setRegenOpen(false); onRegenerate(m.id) }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-[var(--secondary)]/60 transition-colors"
+                    className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"
                   >
                     <div>
-                      <div className="text-[13px] font-medium text-[var(--foreground)] leading-none mb-0.5">{m.label}</div>
-                      <div className="text-[11px] text-[var(--muted-foreground)]">{m.desc}</div>
+                      <div className="mb-0.5 text-[13.5px] leading-none text-[var(--ink)]">{m.label}</div>
+                      <div className="text-[11.5px] text-[var(--ink-muted)]">{m.desc}</div>
                     </div>
                   </button>
                 ))}
               </div>
             )}
           </div>
-        )}
-
-        {hasSources && (
-          <button
-            onClick={() => onOpenSources?.(sourcesForPanel, citedNumbers)}
-            className="ml-1 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-200 active:scale-95"
-          >
-            <span className="flex -space-x-1.5">
-              {badgeSources.slice(0, 4).map((s, i) => (
-                <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--background)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
-                  {s.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <FileText size={9} className="text-[var(--muted-foreground)]" />
-                  )}
-                </span>
-              ))}
-            </span>
-            <span>
-              {badgeSources.length} source{badgeSources.length > 1 ? 's' : ''}
-            </span>
-          </button>
         )}
 
         <div className="ml-auto flex items-center gap-1">

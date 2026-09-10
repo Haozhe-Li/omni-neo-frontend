@@ -262,7 +262,7 @@ export function ScheduledResearchSection() {
                         <button
                             onClick={handleQuickSubmit}
                             disabled={!quickPrompt.trim() || atLimit || isParsing}
-                            className="h-8 w-8 flex items-center justify-center rounded-full bg-[var(--accent)] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shrink-0"
+                            className="h-8 w-8 flex items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shrink-0"
                             title="Create scheduled research"
                         >
                             {isParsing ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={15} />}
@@ -401,7 +401,7 @@ function TaskDetail({
                 >
                     <ChevronLeft size={17} />
                 </button>
-                <h2 className="text-lg font-semibold text-[var(--foreground)] truncate flex-1">
+                <h2 className="omni-display flex-1 truncate text-[24px] leading-tight text-[var(--ink)]">
                     {task.name || 'Untitled schedule'}
                 </h2>
             </div>
@@ -559,7 +559,7 @@ function TaskFormDialog({
         <Dialog open onOpenChange={(open) => !open && onClose()}>
             <DialogContent
                 showCloseButton={false}
-                overlayClassName="bg-black/5 dark:bg-black/40"
+                overlayClassName="bg-[var(--scrim)]"
                 className="p-0 border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0
                     w-[94vw] max-w-[520px] max-h-[85dvh] rounded-2xl z-[110]"
             >
@@ -685,7 +685,7 @@ function TaskCreatedConfirmation({
         <Dialog open onOpenChange={(open) => !open && onDone()}>
             <DialogContent
                 showCloseButton={false}
-                overlayClassName="bg-black/5 dark:bg-black/40"
+                overlayClassName="bg-[var(--scrim)]"
                 className="p-0 border border-[var(--border-subtle)] bg-[var(--background)] shadow-2xl overflow-hidden flex flex-col gap-0
                     w-[94vw] max-w-[440px] rounded-2xl z-[110]"
             >

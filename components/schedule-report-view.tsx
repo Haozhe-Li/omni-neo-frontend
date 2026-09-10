@@ -94,16 +94,19 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
 <meta charset="UTF-8">
 <title>${title}</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #1a1a18; padding: 2rem; max-width: 48rem; margin: 0 auto; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.7; color: #3A342E; background: #FAF6EF; padding: 2rem; max-width: 48rem; margin: 0 auto; }
   button, [role="menuitem"] { display: none !important; }
-  h1 { font-size: 1.8rem; margin-bottom: 0.6rem; }
-  h2 { font-size: 1.4rem; margin-top: 1.6rem; border-bottom: 1px solid #eee; padding-bottom: 0.3rem; }
-  img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.6rem 0; }
-  pre { background: #f5f4ef; padding: 0.6rem; border-radius: 5px; overflow-x: auto; font-family: monospace; font-size: 0.85rem; }
-  blockquote { border-left: 4px solid #20B2AA; padding-left: 0.6rem; font-style: italic; color: #666; }
-  table { width: 100%; border-collapse: collapse; margin: 0.6rem 0; }
-  th, td { border: 1px solid #eee; padding: 0.5rem; text-align: left; }
-  a { color: #20B2AA; text-decoration: none; }
+  h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; color: #2B2724; letter-spacing: -0.01em; }
+  h1 { font-size: 2.1rem; margin-bottom: 0.6rem; }
+  h2 { font-size: 1.55rem; margin-top: 1.8rem; }
+  h3 { font-size: 1.25rem; margin-top: 1.4rem; }
+  img { max-width: 100%; height: auto; border-radius: 12px; margin: 0.9rem 0; }
+  pre { background: #F1EADC; padding: 0.7rem 0.9rem; border-radius: 10px; overflow-x: auto; font-family: monospace; font-size: 0.85rem; color: #3A342E; }
+  blockquote { border-left: 2px solid #C0673C; padding-left: 0.8rem; font-style: italic; color: #6C6357; }
+  table { width: 100%; border-collapse: collapse; margin: 0.8rem 0; }
+  th, td { border: 1px solid #E8DFD2; padding: 0.55rem; text-align: left; }
+  th { background: #F6F1E8; font-weight: 500; }
+  a { color: #26696B; text-decoration: none; }
 </style>
 </head>
 <body>${contentHtml}</body>
@@ -195,7 +198,7 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
                     onClick={() => { handleCopy(); setShareOpen(false) }}
                     className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
                   >
-                    {copied ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
+                    {copied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
                     {copied ? 'Copied!' : 'Copy full text'}
                   </button>
                   <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />

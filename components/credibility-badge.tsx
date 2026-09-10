@@ -34,7 +34,7 @@ export function CredibilityTag({ credibility, className = '' }: { credibility?: 
   if (!meta) return null
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] px-1.5 py-0.5 text-[10.5px] font-medium leading-none text-[var(--muted-foreground)] ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--sand)] px-2 py-[3px] text-[10.5px] leading-none text-[var(--ink-muted)] ${className}`}
     >
       {meta.trusted && <ShieldCheck size={10} strokeWidth={2} className="shrink-0 opacity-80" />}
       {meta.label}
@@ -51,9 +51,9 @@ export function CredibilityExplanation({ credibility }: { credibility?: Credibil
   const meta = getCredibilityMeta(credibility)
   if (!meta || !credibility) return null
   return (
-    <div className="border-t border-[var(--border-subtle)] px-3 py-2">
-      <p className="text-[10.5px] leading-relaxed text-[var(--muted-foreground)]/80">
-        <span className="font-medium text-[var(--muted-foreground)]">{meta.label}:</span> {credibility.reason}
+    <div className="border-t border-[var(--line-hair)] px-3 py-2">
+      <p className="text-[11px] leading-relaxed text-[var(--ink-muted)]">
+        <span className="text-[var(--rust)]">{meta.label}:</span> {credibility.reason}
       </p>
     </div>
   )

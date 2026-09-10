@@ -104,7 +104,7 @@ export function PageHeading({
     return (
         <header className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
             <div className="min-w-0">
-                <h1 className="text-[24px] font-semibold tracking-tight text-[var(--foreground)] sm:text-[28px]">
+                <h1 className="omni-display text-[30px] text-[var(--ink)] sm:text-[38px]">
                     {title}
                 </h1>
                 {description && (

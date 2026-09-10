@@ -18,7 +18,6 @@
 
 import type { ReactNode } from 'react'
 import { Check, ChevronDown, Cpu, Lock, X } from 'lucide-react'
-import Image from 'next/image'
 import { SignUpButton } from '@clerk/nextjs'
 
 import { CHAT_MODELS, getModel, type ChatModelId } from '@/lib/models'
@@ -51,9 +50,10 @@ function OpenAIIcon({ className }: { className?: string }) {
 
 function OmniIcon({ className }: { className?: string }) {
   return (
-    <span className={cn('relative inline-block', className)}>
-      <Image src="/omni-logo-light.png" alt="" fill className="object-contain dark:hidden" />
-      <Image src="/omni-logo-dark.png" alt="" fill className="object-contain hidden dark:block" />
+    <span className={cn('relative inline-block', className)} aria-hidden>
+      <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)]" />
+      <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--rust)] opacity-85 [transform:translate(23%,9%)_scale(0.72)]" />
+      <span className="absolute inset-0 rounded-full border-[1.5px] border-[var(--teal)] opacity-50 [transform:translate(-4%,27%)_scale(0.5)]" />
     </span>
   )
 }
@@ -180,7 +180,7 @@ export function ModelPicker({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/60 transition-colors select-none"
+        className="omni-tag select-none"
       >
         {/* On the default, the collapsed control reads "Model" rather than
             "Best" — a lone "Best" gives no hint that the thing is a model
@@ -188,7 +188,7 @@ export function ModelPicker({
         <span>{model === 'best' ? 'Model' : selected.label}</span>
         {locked && (
           <>
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-[var(--border)] text-[var(--muted-foreground)] leading-none">
+            <span className="rounded-full border border-[var(--line-strong)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--ink-muted)]">
               Sign in
             </span>
             <Lock className="h-3 w-3" />
@@ -203,12 +203,12 @@ export function ModelPicker({
         <>
           {/* Desktop popover */}
           <div
-            className={`hidden md:block absolute right-0 ${popoverPosition} w-[300px] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xl py-1.5 z-50 animate-in fade-in duration-150`}
+            className={`hidden md:block absolute right-0 ${popoverPosition} w-[300px] bg-[var(--paper-raised)] border border-[var(--line-strong)] rounded-[20px] shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] py-2 z-50 animate-in fade-in duration-150`}
           >
             {rows.map((m) => (
               <Row key={m.id} m={m}>
                 <div
-                  className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--secondary)]/50 ${
+                  className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--sand)] ${
                     model === m.id ? 'text-[var(--accent)]' : 'text-[var(--foreground)]'
                   } ${m.authLocked ? 'opacity-60' : ''}`}
                 >
@@ -244,7 +244,7 @@ export function ModelPicker({
               trailing lock/check glyph instead of a filled/empty circle. */}
           <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
             <div
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+              className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-sm animate-in fade-in duration-200"
               onClick={() => setOpen(false)}
             />
             <div className="relative flex flex-col max-h-[85vh] bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
@@ -265,7 +265,7 @@ export function ModelPicker({
                     <Row m={m}>
                       <div
                         className={cn(
-                          'w-full flex items-center gap-3 px-3 py-3.5 text-left transition-colors active:bg-[var(--secondary)]/50',
+                          'w-full flex items-center gap-3 px-3 py-3.5 text-left transition-colors active:bg-[var(--sand)]',
                           m.authLocked && 'opacity-50',
                         )}
                       >

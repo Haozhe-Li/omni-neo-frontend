@@ -34,30 +34,34 @@ const clerkLocalization = {
     },
 } as const
 
+/* Clerk renders into a portal where this app's CSS custom properties don't
+   reliably cascade, so the paper palette has to be handed over as literals.
+   These are the same values as `--paper-raised`, `--ink`, `--teal` etc. in
+   globals.css — when those change, change these. */
 const lightVars = {
-    colorPrimary: '#20B2AA',
-    colorBackground: '#ffffff',
-    colorText: '#1a1a1a',
-    colorTextSecondary: '#6b6b6b',
-    colorInputBackground: '#f3f3ee',
-    colorInputText: '#1a1a1a',
-    colorNeutral: '#1a1a1a',
-    colorDanger: '#e54d2e',
-    borderRadius: '0.75rem',
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    colorPrimary: '#26696B',
+    colorBackground: '#FFFDF9',
+    colorText: '#2B2724',
+    colorTextSecondary: '#6C6357',
+    colorInputBackground: '#FAF6EF',
+    colorInputText: '#2B2724',
+    colorNeutral: '#2B2724',
+    colorDanger: '#B3452C',
+    borderRadius: '0.875rem',
+    fontFamily: "'Hanken Grotesk', system-ui, -apple-system, sans-serif",
 }
 
 const darkVars = {
-    colorPrimary: '#20B2AA',
-    colorBackground: '#222323',
-    colorText: '#ffffff',
-    colorTextSecondary: '#8b8b8b',
-    colorInputBackground: '#191A1A',
-    colorInputText: '#ffffff',
-    colorNeutral: '#ffffff',
-    colorDanger: '#e54d2e',
-    borderRadius: '0.75rem',
-    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+    colorPrimary: '#6FB4AF',
+    colorBackground: '#201C19',
+    colorText: '#F2EBE0',
+    colorTextSecondary: '#9E9382',
+    colorInputBackground: '#191614',
+    colorInputText: '#F2EBE0',
+    colorNeutral: '#F2EBE0',
+    colorDanger: '#E0705A',
+    borderRadius: '0.875rem',
+    fontFamily: "'Hanken Grotesk', system-ui, -apple-system, sans-serif",
 }
 
 export function ClerkThemeProvider({ children }: { children: React.ReactNode }) {
@@ -71,11 +75,15 @@ export function ClerkThemeProvider({ children }: { children: React.ReactNode }) 
                 variables: isDark ? darkVars : lightVars,
                 elements: {
                     card: 'shadow-lg',
-                    formButtonPrimary: 'bg-[#20B2AA] hover:opacity-90',
-                    footerActionLink: 'text-[#20B2AA] hover:text-[#1a9e97]',
-                    profileSectionPrimaryButton: 'text-[#20B2AA]',
-                    badge: 'bg-[#20B2AA] text-white',
-                    navbarButton: 'rounded-lg',
+                    formButtonPrimary: isDark
+                        ? 'bg-[#6FB4AF] text-[#14100D] hover:bg-[#8ECCC7]'
+                        : 'bg-[#26696B] text-[#FAF6EF] hover:bg-[#1D5456]',
+                    footerActionLink: isDark
+                        ? 'text-[#6FB4AF] hover:text-[#8ECCC7]'
+                        : 'text-[#26696B] hover:text-[#1D5456]',
+                    profileSectionPrimaryButton: isDark ? 'text-[#6FB4AF]' : 'text-[#26696B]',
+                    badge: isDark ? 'bg-[#6FB4AF] text-[#14100D]' : 'bg-[#26696B] text-[#FAF6EF]',
+                    navbarButton: 'rounded-full',
                     avatarBox: 'rounded-full',
                 },
             }}

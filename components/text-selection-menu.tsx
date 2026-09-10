@@ -181,7 +181,7 @@ export function TextSelectionMenu({ containerRef, showCheckSource = true, onChec
             onMouseDown={(e) => e.preventDefault()}
             role="dialog"
             aria-label="Text selection menu"
-            className="fixed top-0 left-0 z-40 flex items-center gap-1 p-1.5 rounded-xl bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-zinc-200/50 dark:shadow-black/50 backdrop-blur-sm transition-opacity duration-200"
+            className="fixed left-0 top-0 z-40 flex items-center gap-1 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 text-[var(--ink-muted)] shadow-[0_18px_40px_-24px_color-mix(in_srgb,var(--ink)_55%,transparent)] transition-opacity duration-200"
             style={{
                 willChange: 'transform, opacity',
                 opacity: 0 // Start invisible to prevent flash
@@ -194,7 +194,7 @@ export function TextSelectionMenu({ containerRef, showCheckSource = true, onChec
                         icon={<BookOpen className="w-3.5 h-3.5" />}
                         label="Check source"
                     />
-                    <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
+                    <div className="mx-1 h-4 w-px bg-[var(--line)]" />
                 </>
             )}
             <MenuButton
@@ -202,7 +202,7 @@ export function TextSelectionMenu({ containerRef, showCheckSource = true, onChec
                 icon={<MessageSquarePlus className="w-3.5 h-3.5" />}
                 label="Ask Omni"
             />
-            <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800 mx-1" />
+            <div className="mx-1 h-4 w-px bg-[var(--line)]" />
             <MenuButton
                 onClick={handleCopy}
                 icon={<Copy className="w-3.5 h-3.5" />}
@@ -223,7 +223,7 @@ function MenuButton({ onClick, icon, label }: { onClick: () => void; icon: React
                 e.stopPropagation()
                 onClick()
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50 rounded-lg transition-colors text-xs font-semibold whitespace-nowrap"
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] transition-colors hover:bg-[var(--teal-tint)] hover:text-[var(--teal)]"
         >
             {icon}
             <span>{label}</span>

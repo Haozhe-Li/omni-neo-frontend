@@ -16,18 +16,30 @@ interface EChartsChartProps {
  *
  * ECharts draws to a canvas, so a CSS custom property in an option object is
  * just an unparseable string — every colour has to be a literal. These are the
- * concrete values behind `--muted-foreground` / `--accent` in each theme, kept
+ * concrete values behind the paper palette's ink/teal/rust in each theme, kept
  * here so a chart can stay theme-aware without every caller re-deriving them.
+ *
+ * `series` is the categorical ramp: teal and rust first because they are the
+ * app's own two accents and a one- or two-series chart should look like it
+ * belongs to the page, then four muted hues spaced far enough apart in hue to
+ * stay separable, and finally the clay neutral for an "other" bucket. The
+ * order is identical to `--chart-1…5` in globals.css so a CSS-drawn chart and
+ * a canvas-drawn one agree.
  */
 export function useChartTheme() {
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme === 'dark'
   return {
     dark,
-    axis: dark ? '#8b8b8b' : '#6b6b6b',
-    grid: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-    accent: '#20B2AA',
-    surface: dark ? '#222323' : '#ffffff',
+    axis: dark ? '#9E9382' : '#6C6357',
+    grid: dark ? 'rgba(242,235,224,0.08)' : 'rgba(43,39,36,0.08)',
+    accent: dark ? '#6FB4AF' : '#26696B',
+    rust: dark ? '#DC8B5C' : '#C0673C',
+    ink: dark ? '#F2EBE0' : '#2B2724',
+    surface: dark ? '#201C19' : '#FFFDF9',
+    series: dark
+      ? ['#6FB4AF', '#DC8B5C', '#93B497', '#AE94C0', '#8A7F6C', '#C9A66B']
+      : ['#26696B', '#C0673C', '#6B8F70', '#8A6E9E', '#B3A791', '#8C7A4A'],
   }
 }
 

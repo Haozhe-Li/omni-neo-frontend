@@ -15,6 +15,7 @@ import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel } from '@/components/artifact-panel'
 import { SourcesPanel } from '@/components/sources-panel'
+import { SourceList } from '@/components/source-rail'
 import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
@@ -258,26 +259,27 @@ const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf
   <style type="text/tailwindcss">
     @layer base {
       :root {
-        --background: #f3f3ee;
-        --foreground: #1a1a1a;
-        --card: #ffffff;
-        --secondary: #eaeae5;
-        --border: rgba(0,0,0,0.08);
-        --border-subtle: rgba(0,0,0,0.05);
-        --accent: #20B2AA;
-        --muted: #eaeae5;
-        --muted-foreground: #6b6b6b;
+        --background: #FAF6EF;
+        --foreground: #2B2724;
+        --card: #FFFDF9;
+        --secondary: #F1EADC;
+        --border: #E8DFD2;
+        --border-subtle: #E8DFD2;
+        --accent: #26696B;
+        --muted: #F1EADC;
+        --muted-foreground: #6C6357;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --background: #191A1A;
-          --foreground: #ffffff;
-          --card: #222323;
-          --secondary: #2a2b2b;
-          --border: rgba(255,255,255,0.08);
-          --border-subtle: rgba(255,255,255,0.05);
-          --muted: #2a2b2b;
-          --muted-foreground: #8b8b8b;
+          --background: #191614;
+          --foreground: #F2EBE0;
+          --card: #201C19;
+          --secondary: #262119;
+          --border: #332D26;
+          --border-subtle: #332D26;
+          --accent: #6FB4AF;
+          --muted: #262119;
+          --muted-foreground: #9E9382;
         }
       }
       body {
@@ -292,9 +294,10 @@ const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf
         margin: 0 auto;
       }
       .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
-      h1 { @apply text-3xl font-bold mb-4 mt-8; }
-      h2 { @apply text-2xl font-semibold mt-8 mb-4 border-b border-[var(--border-subtle)] pb-2; }
-      h3 { @apply text-xl font-semibold mt-6 mb-3; }
+      h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; letter-spacing: -0.01em; }
+      h1 { @apply text-4xl mb-4 mt-8; }
+      h2 { @apply text-3xl mt-9 mb-4; }
+      h3 { @apply text-2xl mt-6 mb-3; }
       p { @apply mb-4 leading-relaxed; }
       ul { @apply list-disc pl-6 mb-4; }
       ol { @apply list-decimal pl-6 mb-4; }
@@ -347,16 +350,21 @@ const handleInlineDownload = async (r: ReportArtifact, format: 'markdown' | 'pdf
           <head>
             <title>${title}</title>
             <style>
-              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.6; color: #1a1a18; padding: 20mm; }
+              /* Print is always the light palette — dark ink on dark paper is
+                 not a thing, and a reader's printer would fight it. */
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.7; color: #3A342E; padding: 20mm; }
               .sticky, button, [role="menuitem"], .DropdownMenuContent, [title="Close Report"] { display: none !important; }
-              h1 { font-size: 24pt; margin-bottom: 10pt; color: #1a1a18; }
-              h2 { font-size: 18pt; margin-top: 20pt; border-bottom: 1px solid #eee; padding-bottom: 5pt; }
+              h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; color: #2B2724; }
+              h1 { font-size: 26pt; margin-bottom: 10pt; }
+              h2 { font-size: 19pt; margin-top: 20pt; }
+              h3 { font-size: 15pt; margin-top: 14pt; }
               img { max-width: 100%; height: auto; border-radius: 8px; margin: 10pt 0; }
-              pre { background: #f5f4ef; padding: 10pt; border-radius: 5pt; overflow-x: auto; font-family: monospace; font-size: 10pt; }
-              blockquote { border-left: 4px solid #20B2AA; padding-left: 10pt; font-style: italic; color: #666; }
+              pre { background: #F1EADC; padding: 10pt; border-radius: 6pt; overflow-x: auto; font-family: monospace; font-size: 10pt; color: #3A342E; }
+              blockquote { border-left: 2px solid #C0673C; padding-left: 10pt; font-style: italic; color: #6C6357; }
               table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
-              th, td { border: 1px solid #eee; padding: 8pt; text-align: left; }
-              a { color: #20B2AA; text-decoration: none; }
+              th, td { border: 1px solid #E8DFD2; padding: 8pt; text-align: left; }
+              th { background: #F6F1E8; font-weight: 500; }
+              a { color: #26696B; text-decoration: none; }
               @page { size: A4; margin: 0; }
               @media print { body { padding: 15mm; } .page-break { page-break-before: always; } }
             </style>
@@ -522,6 +530,21 @@ function ContinuedFromBanner({ urls }: { urls: string[] }) {
   )
 }
 
+/* ── Follow-up prompts ─────────────────────────────────────────────────────
+   A fixed set, not model-generated ones. Generated follow-ups cost a round
+   trip before the reader can act on them, and land after the moment they were
+   useful; these are the four moves that apply to almost any answer, so they
+   can be on screen the instant the answer finishes. Each is phrased as
+   something the reader would actually say, and they escalate: go deeper, get
+   concrete, get shorter, then check the work. */
+const FOLLOW_UP_PROMPTS = [
+  'Can you explain this in more depth?',
+  'Give me a concrete example.',
+  'Summarize this in three bullet points.',
+  'What are the strongest counterarguments?',
+  'What should I read next on this?',
+]
+
 export function ChatView({
   query,
   threadId,
@@ -627,18 +650,14 @@ export function ChatView({
   const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState<string | null>(null)
 
-  // Sources drawer (small right-hand panel, opened from an answer's footer,
-  // or repurposed to show `/check_source` results — see `checkSourceState`).
+  // The side panel is now ONLY the `/check_source` result view. Browsing the
+  // thread's sources used to open the same panel from a button in the answer
+  // footer; that button and this panel showed the same list at two different
+  // levels of detail, and both could be open at once over each other. The
+  // sources rail beside the answer is the single browse surface now, and it
+  // absorbed this panel's per-source detail — see components/source-rail.tsx.
   const [sourcesOpen, setSourcesOpen] = useState(false)
-  const [activeSources, setActiveSources] = useState<Source[]>([])
-  const [activeCitedNumbers, setActiveCitedNumbers] = useState<Set<number>>(new Set())
   const [checkSourceState, setCheckSourceState] = useState<CheckSourceState | null>(null)
-  const openSources = useCallback((s: Source[], citedNumbers: Set<number>) => {
-    setActiveSources(s)
-    setActiveCitedNumbers(citedNumbers)
-    setCheckSourceState(null)
-    setSourcesOpen(true)
-  }, [])
 
   // "Check source" from the text-selection menu: `turn` is the assistant
   // message index the highlighted claim came from (see data-message-index
@@ -748,40 +767,40 @@ export function ChatView({
         onClick={() => {
           if (!isReportStreaming) openPanel(r.id)
         }}
-        className={`group relative flex w-full max-w-[800px] flex-col rounded-xl border border-[var(--border)] bg-[var(--card)] text-left shadow-[0_1px_4px_rgba(0,0,0,0.02)] transition-all overflow-hidden ${isReportStreaming ? 'cursor-default' : 'cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]'}`}
+        className={`group relative flex w-full flex-col overflow-hidden rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)] text-left transition-colors ${isReportStreaming ? 'cursor-default' : 'cursor-pointer hover:border-[var(--teal)]'}`}
       >
         {/* Hover Overlay */}
         {!isReportStreaming && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-[var(--background)]/10 backdrop-blur-[1px] pointer-events-none">
-            <div className="bg-[var(--foreground)] text-[var(--background)] px-5 py-2.5 rounded-full text-[14px] font-medium shadow-lg pointer-events-auto transition-transform scale-95 group-hover:scale-100 duration-200">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[color-mix(in_srgb,var(--paper)_18%,transparent)] opacity-0 backdrop-blur-[1px] transition-opacity group-hover:opacity-100">
+            <div className="pointer-events-auto scale-95 rounded-full bg-[var(--teal)] px-5 py-2.5 text-[14px] text-[var(--accent-foreground)] shadow-lg transition-transform duration-200 group-hover:scale-100">
               {panelOpen && activeArtifactId === r.id ? 'Currently opened' : `Open ${r.title}`}
             </div>
           </div>
         )}
 
         {/* Top Action Bar (Perplexity style) */}
-        <div className="flex w-full items-center justify-between px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--background)]/40 relative z-20">
-          <div className="flex items-center gap-2.5 text-[var(--muted-foreground)] min-w-0 pr-4">
-            <FileText size={15} strokeWidth={1.75} className="shrink-0" />
-            <span className="text-[13px] font-medium truncate opacity-90">{r.title}</span>
+        <div className="relative z-20 flex w-full items-center justify-between border-b border-[var(--line-hair)] px-[18px] py-3">
+          <div className="flex min-w-0 items-center gap-3 pr-4">
+            <FileText size={16} strokeWidth={1.4} className="shrink-0 text-[var(--teal)]" />
+            <span className="truncate text-[15px] leading-[1.35] text-[var(--ink)]">{r.title}</span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               disabled={isReportStreaming}
-              className="flex items-center justify-center h-7 w-7 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--secondary)] transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--ink-faint)] opacity-0 transition-colors hover:bg-[var(--sand)] hover:text-[var(--teal)] group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-0"
             >
               <Maximize2 size={13} strokeWidth={2} />
             </button>
             <div className="relative" onClick={(e) => e.stopPropagation()}>
               {isReportStreaming ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] opacity-70">
-                  <Loader2 size={13} strokeWidth={2} className="animate-spin text-[var(--muted-foreground)]" />
+                <div className="flex h-7 items-center gap-1.5 rounded-full border border-[var(--line-strong)] px-3 text-[12.5px] text-[var(--ink-muted)]">
+                  <Loader2 size={12} strokeWidth={2} className="animate-spin text-[var(--teal)]" />
                   Generating
                 </div>
               ) : (
                 <button
                   onClick={() => setShareDropdownOpen(shareDropdownOpen === r.id ? null : r.id)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 h-7 rounded-md border border-[var(--border-subtle)] bg-[var(--background)] text-[12px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
+                  className="omni-pill h-7 gap-1.5 px-3 py-0 text-[12.5px]"
                 >
                   Share <ChevronDown size={13} strokeWidth={2} className="text-[var(--muted-foreground)]" />
                 </button>
@@ -789,7 +808,7 @@ export function ChatView({
               {shareDropdownOpen === r.id && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShareDropdownOpen(null)} />
-                  <div className="absolute right-0 top-full mt-1.5 w-64 bg-[var(--card)] border border-[var(--border-subtle)] rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] z-50 py-1.5 overflow-hidden">
+                  <div className="absolute right-0 top-full z-50 mt-1.5 w-64 overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] py-2 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)]">
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(`# ${r.title}\n\n${r.content}`)
@@ -798,9 +817,9 @@ export function ChatView({
                         setTimeout(() => setShareCopied(null), 1500)
                         setShareDropdownOpen(null)
                       }}
-                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                     >
-                      {shareCopied === r.id ? <Check size={14} className="text-emerald-500" strokeWidth={2} /> : <Copy size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />}
+                      {shareCopied === r.id ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
                       {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
                     </button>
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
@@ -811,9 +830,9 @@ export function ChatView({
                         setShareDropdownOpen(null)
                         handleInlineDownload(r, 'markdown')
                       }}
-                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                     >
-                      <Download size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                      <Download size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
                       Download Markdown
                     </button>
                     <button
@@ -821,9 +840,9 @@ export function ChatView({
                         setShareDropdownOpen(null)
                         handleInlineDownload(r, 'html')
                       }}
-                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                     >
-                      <Code2 size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                      <Code2 size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
                       Download HTML
                     </button>
                     <button
@@ -831,9 +850,9 @@ export function ChatView({
                         setShareDropdownOpen(null)
                         handleInlineDownload(r, 'pdf')
                       }}
-                      className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
                     >
-                      <FileText size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
+                      <FileText size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
                       Download PDF
                     </button>
                   </div>
@@ -848,17 +867,17 @@ export function ChatView({
             descendant inside the markdown (e.g. a table wrapper) sets its own
             z-index — without it, mobile browsers were rendering the text on
             top of the fade instead of fading under it. */}
-        <div id={`inline-report-${r.id}`} className="relative isolate p-5 sm:p-7 pb-10 max-h-[360px] overflow-hidden w-full bg-[var(--background)]">
-          <h1 className="relative z-0 text-[24px] leading-tight font-semibold text-[var(--foreground)] mb-5 tracking-tight opacity-90">
+        <div id={`inline-report-${r.id}`} className="relative isolate max-h-[320px] w-full overflow-hidden bg-[var(--paper-raised)] px-[18px] pb-10 pt-[18px] sm:px-7">
+          <h1 className="omni-display relative z-0 mb-4 text-[22px] leading-[1.3] text-[var(--ink)]">
             {r.title}
           </h1>
 
-          <div className="relative z-0 text-[15px] leading-relaxed text-[var(--foreground)] opacity-90">
+          {/* A lede, not the whole report: the card exists to be opened. */}
+          <div className="relative z-0">
             <MarkdownMessage content={stripInteractiveBlocks(r.content || 'Drafting report...')} sources={r.sources} />
           </div>
 
-          {/* Gradient Fade-out at the bottom */}
-          <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent pointer-events-none z-10" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[92px] bg-[linear-gradient(to_top,var(--paper-raised)_30%,transparent)]" />
         </div>
       </div>
     )
@@ -901,6 +920,23 @@ export function ChatView({
   // (streaming only ever appends), so an element-wise comparison against the
   // previous result lets us keep the old identity until a source is actually
   // added.
+  // The thread's opening question gets the larger display size; every
+  // follow-up sits a step down, so scrolling up always finds the top.
+  const firstUserIndex = useMemo(() => messages.findIndex((m) => m.role === 'user'), [messages])
+  const isFirstQuestion = useCallback((i: number) => i === firstUserIndex, [firstUserIndex])
+
+  // The thread is idle when the last message is a completed assistant turn —
+  // the only moment where offering a next question is help rather than noise.
+  const threadIdle = useMemo(() => {
+    if (isLoading || isLocked) return false
+    const last = messages[messages.length - 1]
+    return !!last && last.role === 'assistant' && !!last.content?.trim()
+  }, [isLoading, isLocked, messages])
+
+  // Turns, not messages: the header counts questions asked, which is what
+  // "Thread · 3" means to someone scrolled halfway down it.
+  const turnCount = useMemo(() => messages.filter((m) => m.role === 'user').length, [messages])
+
   const prevMergedSourcesRef = useRef<Source[]>([])
   const mergedSources = useMemo(() => {
     const byNumber = new Map<number, Source>()
@@ -1835,6 +1871,26 @@ export function ChatView({
     [messages, runQuery, requestPin]
   )
 
+  /**
+   * Send one of the follow-up prompts offered under a finished answer.
+   *
+   * Same path as `handleQuestionSubmit` rather than typing into the composer
+   * and calling `handleSend`: the composer's state is the user's own draft,
+   * and a suggestion should not overwrite half-typed text.
+   */
+  const askFollowUp = useCallback(
+    async (text: string) => {
+      if (isLoading || isLocked) return
+      const userMsg: ChatMessage = { role: 'user', content: text }
+      const baseHistory = [...messages, userMsg]
+      setMessages([...baseHistory, { role: 'assistant', content: '' }])
+      setStreamingIndex(baseHistory.length)
+      requestPin()
+      await runQuery(text, baseHistory)
+    },
+    [isLoading, isLocked, messages, runQuery, requestPin]
+  )
+
   // ── rewind: regenerate or edit-and-resend ─────────────────────────────
   // `targetIndex` is the index (in `messages`) of the message being redone —
   // an assistant message for regenerate, the user message being replaced for
@@ -2085,25 +2141,29 @@ export function ChatView({
           allowedSelectors={ASSISTANT_MESSAGE_SELECTORS}
         />
         {/* Header */}
-        <header className="flex-shrink-0 h-14 border-b border-[var(--border-subtle)] bg-[var(--background)]/80 backdrop-blur-md flex items-center justify-between px-4 z-30 sticky top-0">
-          <div className="flex items-center gap-2">
-            {isMobile && (
-              <button onClick={onToggleSidebar} className="p-2 -ml-2 rounded-md text-muted-foreground hover:bg-[var(--secondary)]">
-                <Menu size={20} />
-              </button>
-            )}
-          </div>
-          <div className="absolute left-1/2 -translate-x-1/2 max-w-[min(42rem,60%)] flex items-center gap-1 group">
-            <span className="min-w-0 truncate text-sm font-medium text-foreground/90">{title || query}</span>
+        {/* ── Thread bar ───────────────────────────────────────────────────
+            A left-aligned rail rather than a centered title: the mono turn
+            count anchors the left edge, the thread's own question runs beside
+            it as the one line of context you need while scrolled deep into an
+            answer, and the title stays editable in place on hover. */}
+        <header className="sticky top-0 z-30 flex h-[52px] flex-shrink-0 items-center gap-4 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_93%,transparent)] px-4 backdrop-blur-[8px] sm:px-10">
+          {isMobile && (
+            <button onClick={onToggleSidebar} className="-ml-2 rounded-full p-2 text-[var(--ink-muted)] hover:bg-[var(--sand)]">
+              <Menu size={20} />
+            </button>
+          )}
+          <span className="omni-eyebrow shrink-0 hidden sm:block">
+            Thread · {turnCount}
+          </span>
+          <div className="group flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="min-w-0 truncate text-[14px] text-[var(--ink-muted)]">{title || query}</span>
             <button
               title="Edit title"
               onClick={startEditingTitle}
-              className="shrink-0 p-1 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] opacity-0 group-hover:opacity-100 transition-all duration-150 active:scale-95"
+              className="shrink-0 rounded-full p-1 text-[var(--ink-fainter)] opacity-0 transition-all duration-150 hover:text-[var(--teal)] group-hover:opacity-100 active:scale-95"
             >
               <Pencil size={12} strokeWidth={1.75} />
             </button>
-          </div>
-          <div className="flex items-center gap-1">
           </div>
         </header>
 
@@ -2149,91 +2209,127 @@ export function ChatView({
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
-          <div className="max-w-2xl mx-auto space-y-8 pb-32">
+        <div ref={scrollRef} className="omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-6 sm:px-10">
+          {/* ── Reading column + sources rail ─────────────────────────────
+              One column, wider than a chat's: the answer body is set at 17px
+              and wants ~68 characters a line, and the question headings above
+              it need room to stay two lines rather than four. Past 1180px the
+              thread's sources move out of the drawer and into a sticky rail
+              beside the answer, where they can be read while reading. Below
+              that width the rail is gone entirely rather than squeezed — a
+              120px column of truncated titles is worse than the drawer. */}
+          <div className="omni-thread-grid mx-auto w-full max-w-[1120px]">
+          <div className="omni-thread-col mx-auto w-full min-w-0 max-w-[760px] pb-10">
             {(() => {
               return messages.map((msg, i) => (
-              <div key={i} data-message-index={i} className={`flex flex-col scroll-mt-20 ${msg.role === 'user' ? (editingIndex === i ? 'items-stretch' : 'items-end') : 'items-start'}`}>
+              <div
+                key={i}
+                data-message-index={i}
+                className={`flex flex-col items-stretch scroll-mt-20 ${
+                  msg.role === 'user'
+                    ? `pb-6 ${isFirstQuestion(i) ? 'pt-1' : 'mt-4 border-t border-[var(--line)] pt-9'}`
+                    : 'pb-8'
+                }`}
+              >
                 {msg.role === 'user' ? (
                   <>
                   {!!msg.sourceUrls?.length && <ContinuedFromBanner urls={msg.sourceUrls} />}
-                  <div className={`group relative flex flex-row items-end gap-1 ${editingIndex === i ? 'w-full' : 'max-w-[85%]'}`}>
-                    {/* Hover action row — left of bubble */}
-                    {editingIndex !== i && (
-                      <div className="flex items-center gap-0.5 mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
-                        <button
-                          title="Copy"
-                          onClick={() => {
-                            navigator.clipboard.writeText(msg.content)
-                            toast.success('Copied')
-                          }}
-                          className="p-1.5 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-150 active:scale-95"
-                        >
-                          <Copy size={14} strokeWidth={1.75} />
-                        </button>
-                        {!isLoading && (
-                          <button
-                            title="Edit message"
-                            onClick={() => { setEditingIndex(i); setEditText(msg.content); setTimeout(() => editRef.current?.focus(), 0) }}
-                            className="p-1.5 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[color-mix(in_srgb,var(--foreground)_6%,transparent)] transition-all duration-150 active:scale-95"
-                          >
-                            <Pencil size={14} strokeWidth={1.75} />
-                          </button>
-                        )}
-                      </div>
-                    )}
-
+                  <div className="group relative w-full">
                     {editingIndex === i ? (
                       /* Inline edit area — full width to match the answer column, with
                          Cancel/Done sitting below the box (Perplexity-style) rather than
                          crammed inside it. */
-                      <div className="w-full flex flex-col gap-3">
-                        <div className="w-full rounded-2xl bg-[var(--secondary)] px-4 py-3">
-                          <textarea
-                            ref={editRef}
-                            value={editText}
-                            onChange={(e) => {
-                              setEditText(e.target.value)
-                              e.target.style.height = 'auto'
-                              e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') setEditingIndex(null)
-                              if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault()
-                                if (editText.trim()) { setEditingIndex(null); handleRewind(i, editText.trim()) }
-                              }
-                            }}
-                            rows={1}
-                            className="w-full resize-none bg-transparent text-[15px] text-[var(--foreground)] leading-relaxed focus:outline-none custom-scrollbar"
-                            style={{ minHeight: '28px' }}
-                          />
-                        </div>
-                        <div className="flex justify-end items-center gap-2">
-                          <button
-                            onClick={() => setEditingIndex(null)}
-                            className="px-5 py-2 text-[14px] font-medium rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            disabled={!editText.trim()}
-                            onClick={() => { if (editText.trim()) { setEditingIndex(null); handleRewind(i, editText.trim()) } }}
-                            className="px-5 py-2 text-[14px] font-medium rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                          >
-                            Done
-                          </button>
+                      /* Editing keeps the serif — you are rewriting a
+                         heading, and switching to 15px UI text mid-edit makes
+                         the line jump. The consequence of rewriting (every
+                         later turn is discarded) is stated next to the button
+                         that does it, not after the fact. */
+                      <div className="w-full rounded-[24px] border border-[var(--teal)] bg-[var(--paper-raised)] px-[18px] py-4">
+                        <textarea
+                          ref={editRef}
+                          value={editText}
+                          onChange={(e) => {
+                            setEditText(e.target.value)
+                            e.target.style.height = 'auto'
+                            e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') setEditingIndex(null)
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault()
+                              if (editText.trim()) { setEditingIndex(null); handleRewind(i, editText.trim()) }
+                            }
+                          }}
+                          rows={1}
+                          className="omni-display w-full resize-none bg-transparent pb-3 text-[26px] leading-[1.25] text-[var(--ink)] focus:outline-none custom-scrollbar"
+                          style={{ minHeight: '34px' }}
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span className="text-[13px] text-[var(--ink-faint)]">
+                            Rewriting this question discards the turns after it.
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setEditingIndex(null)} className="omni-pill py-[7px]">
+                              Cancel
+                            </button>
+                            <button
+                              disabled={!editText.trim()}
+                              onClick={() => { if (editText.trim()) { setEditingIndex(null); handleRewind(i, editText.trim()) } }}
+                              className="omni-pill omni-pill-solid py-2 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Ask again
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-2xl bg-[var(--secondary)] px-4 py-2.5 text-[15px] text-foreground whitespace-pre-wrap break-words min-w-0 overflow-hidden">
-                        {msg.follow_up_content && (
-                          <div className="mb-2 pb-2 border-b border-[var(--border)]/50 flex items-start gap-1.5 text-[13px] text-muted-foreground italic">
-                            <MessageSquarePlus size={13} className="mt-0.5 shrink-0 opacity-70" />
-                            <span className="line-clamp-3">{msg.follow_up_content}</span>
-                          </div>
-                        )}
-                        {msg.content}
+                      /* ── The question, as a heading ────────────────────
+                         An answer engine's turn opens with the question set
+                         in display serif, not a chat bubble on the right: the
+                         question is the title of everything under it, and a
+                         right-aligned bubble makes the eye cross the column
+                         twice per turn. The first question in a thread is set
+                         a size larger than its follow-ups so the thread has a
+                         visible top. Copy and Edit live in pills that fade in
+                         on hover, keeping the resting state pure text. */
+                      <div className="flex items-start gap-4">
+                        <div className="min-w-0 flex-1">
+                          {msg.follow_up_content && (
+                            <div className="mb-3 flex items-start gap-1.5 border-l-2 border-[var(--line-strong)] pl-3 text-[13.5px] italic leading-snug text-[var(--ink-muted)]">
+                              <MessageSquarePlus size={13} className="mt-0.5 shrink-0 opacity-70" />
+                              <span className="line-clamp-3">{msg.follow_up_content}</span>
+                            </div>
+                          )}
+                          <h2
+                            className={`omni-display leading-[1.18] tracking-[-0.015em] text-[var(--ink)] [overflow-wrap:anywhere] ${
+                              isFirstQuestion(i) ? 'text-[clamp(26px,3.2vw,34px)]' : 'text-[clamp(22px,2.4vw,27px)]'
+                            }`}
+                          >
+                            {msg.content}
+                          </h2>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5 pt-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+                          <button
+                            title="Copy question"
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content)
+                              toast.success('Copied')
+                            }}
+                            className="omni-pill px-2.5 py-1.5"
+                          >
+                            <Copy size={13} strokeWidth={1.6} />
+                          </button>
+                          {!isLoading && (
+                            <button
+                              title="Edit and ask again"
+                              onClick={() => { setEditingIndex(i); setEditText(msg.content); setTimeout(() => editRef.current?.focus(), 0) }}
+                              className="omni-pill py-1.5"
+                            >
+                              <Pencil size={13} strokeWidth={1.6} />
+                              <span className="hidden sm:inline">Edit</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2438,9 +2534,6 @@ export function ChatView({
                         {(parsed.text || msg.stoppedByUser) && !(i === streamingIndex && isLoading) ? (
                           <AnswerFooter
                             content={parsed.text}
-                            sources={mergedSources}
-                            ownSources={msg.sources}
-                            onOpenSources={openSources}
                             onRegenerate={isLocked ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                             isSignedIn={!!isSignedIn}
@@ -2452,14 +2545,79 @@ export function ChatView({
                 )}
               </div>
             ))})()}
+            {/* ── Keep pulling the thread ────────────────────────────────
+                Offered only when the thread is genuinely idle — a finished
+                assistant turn, nothing streaming, nothing locked. A list of
+                next questions under a half-written answer is an interruption,
+                not a suggestion. Hairline rows rather than chips: these are
+                sentences, and five pills of prose wrap into a mess. */}
+            {threadIdle && (
+              <div className="mt-10">
+                <div className="omni-eyebrow mb-2.5">Keep pulling the thread</div>
+                <div className="flex flex-col border-t border-[var(--line)]">
+                  {FOLLOW_UP_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => askFollowUp(prompt)}
+                      className="group flex items-center justify-between gap-4 border-b border-[var(--line)] py-[15px] text-left text-[16px] text-[var(--ink-body)] transition-colors hover:text-[var(--teal)]"
+                    >
+                      <span>{prompt}</span>
+                      <span className="shrink-0 text-[var(--ink-fainter)] transition-colors group-hover:text-[var(--teal)]">
+                        +
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Bottom spacer: reserves room so the latest query can sit at the top. */}
             {spacerH > 0 && <div ref={spacerRef} style={{ height: spacerH }} aria-hidden className="shrink-0" />}
           </div>
+
+          {/* ── Sources rail ─────────────────────────────────────────────
+              The thread's one and only sources surface at this width. It
+              carries the same detail the old drawer did — host, credibility,
+              and the passage the answer drew on — because there is no longer
+              a second place to go for it. */}
+          {mergedSources.length > 0 && (
+            <aside className="omni-thread-rail custom-scrollbar sticky top-6 max-h-[calc(100dvh-170px)] flex-col gap-2.5 overflow-y-auto pb-6">
+              <div className="omni-eyebrow mb-0.5">
+                Sources · {mergedSources.length}
+              </div>
+              <SourceList sources={mergedSources} compact />
+            </aside>
+          )}
+          </div>
+
+          {/* Below the rail's breakpoint the same list runs under the answer
+              at full width, so sources are never unreachable — they just stop
+              being something you read alongside the text. */}
+          {mergedSources.length > 0 && (
+            <div className="omni-thread-inline-sources mx-auto w-full max-w-[760px] flex-col gap-3">
+              <div className="omni-eyebrow mb-1">Sources · {mergedSources.length}</div>
+              <SourceList sources={mergedSources} />
+            </div>
+          )}
+
+          {/* Clearance for the floating composer. A single spacer at the end
+              of the scroll area rather than bottom padding on each block, so
+              the gap stays the same whether or not the inline source list is
+              the last thing in the column. */}
+          <div className="h-40 shrink-0" aria-hidden />
         </div>
 
-        {/* Composer */}
-        <div className="flex-shrink-0 border-t border-[var(--border-subtle)] bg-[var(--background)] p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-          <div className="max-w-[800px] mx-auto w-full">
+        {/* ── Follow-up composer ───────────────────────────────────────────
+            Floating over a scrim rather than sitting behind a hard rule: the
+            answer text should look like it continues under the composer, not
+            like it stops at a bar. The gradient does the separating, so the
+            column keeps its full measure. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(to_top,var(--paper)_45%,transparent)] px-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-8 sm:px-10">
+          {/* Left-aligned inside the same 1120px container the thread uses, so
+              the composer sits under the answer column rather than drifting
+              toward the middle of column-plus-rail. */}
+          <div className="pointer-events-auto mx-auto w-full max-w-[1120px]">
+          <div className="w-full max-w-[760px]">
             <div
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
@@ -2469,12 +2627,11 @@ export function ChatView({
                 uploadFilesFromList(e.dataTransfer.files);
               }}
               className={`
-                relative rounded-2xl transition-all duration-300 flex flex-col
+                relative flex flex-col rounded-[26px] bg-[var(--paper-raised)] transition-all duration-300
                 ${isFocused || isDragging
-                  ? 'shadow-[0_0_0_1px_var(--accent),0_4px_24px_rgba(32,178,170,0.08)] bg-[var(--card)]'
-                  : 'shadow-[0_0_0_1px_var(--border),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_0_0_1px_var(--border),0_4px_16px_rgba(0,0,0,0.06)] bg-card'
+                  ? 'shadow-[0_0_0_1px_var(--teal),0_14px_34px_-24px_color-mix(in_srgb,var(--ink)_50%,transparent)]'
+                  : 'shadow-[0_0_0_1px_var(--line-strong),0_14px_34px_-26px_color-mix(in_srgb,var(--ink)_40%,transparent)] hover:shadow-[0_0_0_1px_var(--line-strong),0_16px_38px_-24px_color-mix(in_srgb,var(--ink)_46%,transparent)]'
                 }
-                ${isDragging ? 'ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--background)]' : ''}
               `}
             >
               {(attachedFiles.length > 0 || sourceUrls.length > 0) && (
@@ -2643,7 +2800,7 @@ export function ChatView({
                           {/* Mobile bottom sheet */}
                           <div className="md:hidden fixed inset-0 z-[100] flex flex-col justify-end">
                             <div
-                              className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+                              className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-sm animate-in fade-in duration-200"
                               onClick={() => { setPlusMenuOpen(false); setAddUrlOpen(false) }}
                             />
                             <div className="relative bg-[var(--background)] border-t border-[var(--border)] rounded-t-3xl px-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom-full duration-300">
@@ -2713,12 +2870,12 @@ export function ChatView({
                     onClick={handleSst}
                     disabled={isLoading || isLocked}
                     className={`
-                      relative flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
+                      relative flex h-9 w-9 items-center justify-center rounded-full transition-colors
                       ${!isLoading && !isLocked
                         ? isRecording
-                          ? 'bg-accent text-accent-foreground hover:opacity-90 shadow-[0_0_0_1px_var(--accent)]'
-                          : 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed'
+                          ? 'border border-transparent bg-[var(--teal)] text-[var(--accent-foreground)]'
+                          : 'border border-[var(--line-strong)] text-[var(--ink-muted)] hover:border-[var(--teal)] hover:text-[var(--teal)]'
+                        : 'border border-[var(--line)] text-[var(--ink-faint)] cursor-not-allowed'
                       }
                     `}
                     aria-label={isRecording ? 'Stop speech to text' : 'Start speech to text'}
@@ -2733,7 +2890,7 @@ export function ChatView({
                     <button
                       type="button"
                       onClick={handleStop}
-                      className="flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200 bg-accent text-accent-foreground hover:opacity-90 active:scale-95 cursor-pointer"
+                      className="omni-send h-9 w-9"
                       aria-label="Stop generation"
                     >
                       <Square className="h-3.5 w-3.5 fill-current" />
@@ -2743,13 +2900,7 @@ export function ChatView({
                       type="button"
                       onClick={handleSend}
                       disabled={isLocked || (!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || attachedFiles.some((f) => f.status === 'uploading')}
-                      className={`
-                        flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                        ${!isLocked && (input.trim() || attachedFiles.filter((f) => f.status === 'ready').length > 0) && !attachedFiles.some((f) => f.status === 'uploading')
-                            ? 'bg-accent text-accent-foreground hover:opacity-90 cursor-pointer'
-                            : 'bg-muted text-muted-foreground cursor-not-allowed'
-                        }
-                      `}
+                      className="omni-send h-9 w-9"
                       aria-label="Submit message"
                     >
                       <ArrowRight className="h-4 w-4" />
@@ -2789,6 +2940,7 @@ export function ChatView({
                 )
               })()}
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -2835,11 +2987,11 @@ export function ChatView({
         </div>
       )}
 
-      {/* Sources drawer — small overlay panel, slides in over the right edge.
-          Doubles as the check-source result view when checkSourceState is set. */}
+      {/* "Check source" results — the passages backing a highlighted claim,
+          opened from the text-selection menu. Browsing the thread's sources
+          is the rail's job; this panel only ever shows a check. */}
       <SourcesPanel
-        sources={activeSources}
-        citedNumbers={activeCitedNumbers}
+        sources={[]}
         open={sourcesOpen}
         onClose={() => { setSourcesOpen(false); setCheckSourceState(null) }}
         checkSource={checkSourceState}
