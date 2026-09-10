@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DollarSign, ExternalLink } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 
 export interface CurrencyWidgetProps {
     baseCurrency: string
@@ -52,100 +52,99 @@ export function CurrencyWidget({ baseCurrency, rates, initialAmount = 1, date }:
         }
     }
 
+    /* ── The design's paired boxes ────────────────────────────────────────
+       Base on raised paper, each target on a teal tint, an `=` between them.
+       The tint is the point: it says which side is the answer without a
+       label, so a glance lands on the converted number rather than reading
+       two identical boxes to work out which is which. Both sides stay
+       editable — converting back is the same question asked the other way. */
+    const CurrencyBox = ({
+        id,
+        code,
+        value,
+        target,
+    }: {
+        id: string
+        code: string
+        value: string
+        target?: boolean
+    }) => (
+        <label
+            className={`flex min-w-0 flex-1 cursor-text flex-col rounded-[14px] border px-3 py-2.5 transition-colors ${
+                target
+                    ? 'border-[var(--teal-line)] bg-[var(--teal-tint-deep)] focus-within:border-[var(--teal)]'
+                    : 'border-[var(--line)] bg-[var(--paper)] focus-within:border-[var(--teal)]'
+            }`}
+        >
+            <span
+                className={`omni-mono mb-1 text-[10px] tracking-[0.1em] ${
+                    target ? 'text-[var(--teal)]' : 'text-[var(--ink-faint)]'
+                }`}
+            >
+                {code.toUpperCase()}
+            </span>
+            <input
+                type="text"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => handleInputChange(id, e.target.value)}
+                placeholder="0"
+                className={`omni-display w-full min-w-0 bg-transparent p-0 text-[24px] leading-tight outline-none placeholder:text-[var(--ink-fainter)] ${
+                    target ? 'text-[var(--teal)]' : 'text-[var(--ink)]'
+                }`}
+            />
+        </label>
+    )
+
+    const baseValue = activeId === 'base' ? activeValue : formatNum(baseAmount)
+    const primaryRate = entries[0][1]
+
     return (
-        <div className="w-full rounded-2xl overflow-hidden border border-[var(--border-subtle)] bg-[var(--card)] shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all">
-            {/* header row */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--secondary)]/30">
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-1.5 bg-[var(--background)] rounded-lg shadow-sm border border-[var(--border-subtle)]/50 shrink-0">
-                        <DollarSign className="h-4 w-4 flex-none text-[var(--foreground)] opacity-80" />
-                    </div>
-                    <span className="text-[14px] font-medium text-[var(--foreground)] truncate opacity-90">Currency Conversion</span>
-                </div>
+        <div className="w-full min-w-0 rounded-[20px] border border-[var(--line-strong)] bg-[var(--paper-raised)] px-[18px] pb-[17px] pt-[15px]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="omni-eyebrow">Currency</span>
                 <a
                     href="https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors flex-none ml-2"
+                    className="flex min-w-0 items-center gap-1.5 truncate text-[11.5px] text-[var(--ink-faint)] transition-colors hover:text-[var(--teal)]"
                 >
-                    <ExternalLink className="h-3.5 w-3.5" />
+                    {date ? `As of ${date}` : 'European Central Bank'}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
                 </a>
             </div>
 
-            {/* body */}
-            <div className="p-5 flex flex-col gap-4">
-                {isSingle ? (
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                        <div className="flex items-center gap-3 bg-[var(--secondary)]/30 rounded-xl p-3 px-4 border border-transparent focus-within:border-[var(--accent)]/40 focus-within:bg-[var(--secondary)]/50 focus-within:shadow-[0_0_0_1px_rgba(var(--accent),0.1)] transition-all flex-1 min-w-0">
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={activeId === 'base' ? activeValue : formatNum(baseAmount)}
-                                onChange={(e) => handleInputChange('base', e.target.value)}
-                                className="bg-transparent text-[24px] font-semibold tracking-tight text-[var(--foreground)] w-full min-w-0 outline-none placeholder:text-[var(--muted-foreground)]/30 p-0 m-0"
-                                placeholder="0"
+            {isSingle ? (
+                <div className="grid grid-cols-[minmax(0,1fr)_18px_minmax(0,1fr)] items-center gap-2">
+                    <CurrencyBox id="base" code={baseCurrency} value={baseValue} />
+                    <span className="text-center text-[15px] text-[var(--ink-fainter)]">=</span>
+                    <CurrencyBox
+                        id={entries[0][0]}
+                        code={entries[0][0]}
+                        value={activeId === entries[0][0] ? activeValue : formatNum(baseAmount * primaryRate)}
+                        target
+                    />
+                </div>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    <CurrencyBox id="base" code={baseCurrency} value={baseValue} />
+                    {entries.map(([targetCurrency, rate]) => (
+                        <div key={targetCurrency} className="grid grid-cols-[18px_minmax(0,1fr)] items-center gap-2">
+                            <span className="text-center text-[15px] text-[var(--ink-fainter)]">=</span>
+                            <CurrencyBox
+                                id={targetCurrency}
+                                code={targetCurrency}
+                                value={activeId === targetCurrency ? activeValue : formatNum(baseAmount * rate)}
+                                target
                             />
-                            <span className="text-[14px] font-medium text-[var(--muted-foreground)] uppercase shrink-0 px-1 select-none">{baseCurrency}</span>
                         </div>
+                    ))}
+                </div>
+            )}
 
-                        <div className="flex items-center justify-center shrink-0 px-0 sm:px-1 text-[var(--muted-foreground)]/40 font-semibold text-lg">
-                            =
-                        </div>
-
-                        <div className="flex items-center gap-3 bg-[var(--secondary)]/30 rounded-xl p-3 px-4 border border-transparent focus-within:border-[var(--accent)]/40 focus-within:bg-[var(--secondary)]/50 focus-within:shadow-[0_0_0_1px_rgba(var(--accent),0.1)] transition-all flex-1 min-w-0">
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={activeId === entries[0][0] ? activeValue : formatNum(baseAmount * entries[0][1])}
-                                onChange={(e) => handleInputChange(entries[0][0], e.target.value)}
-                                className="bg-transparent text-[24px] font-semibold tracking-tight text-[var(--foreground)] w-full min-w-0 outline-none placeholder:text-[var(--muted-foreground)]/30 p-0 m-0"
-                                placeholder="0"
-                            />
-                            <span className="text-[14px] font-medium text-[var(--muted-foreground)] uppercase shrink-0 px-1 select-none">{entries[0][0]}</span>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-3 bg-[var(--secondary)]/30 rounded-xl p-3 px-4 border border-transparent focus-within:border-[var(--accent)]/40 focus-within:bg-[var(--secondary)]/50 focus-within:shadow-[0_0_0_1px_rgba(var(--accent),0.1)] transition-all flex-1 min-w-0">
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={activeId === 'base' ? activeValue : formatNum(baseAmount)}
-                                    onChange={(e) => handleInputChange('base', e.target.value)}
-                                    className="bg-transparent text-[24px] font-semibold tracking-tight text-[var(--foreground)] w-full min-w-0 outline-none placeholder:text-[var(--muted-foreground)]/30 p-0 m-0"
-                                    placeholder="0"
-                                />
-                                <span className="text-[14px] font-medium text-[var(--muted-foreground)] uppercase shrink-0 px-1 select-none">{baseCurrency}</span>
-                            </div>
-                        </div>
-
-                        {entries.map(([targetCurrency, rate]) => (
-                            <div key={targetCurrency} className="flex items-center gap-2">
-                                <div className="flex items-center justify-center shrink-0 w-8 text-[var(--muted-foreground)]/40 font-semibold text-lg">
-                                    =
-                                </div>
-                                <div className="flex items-center gap-3 bg-[var(--secondary)]/30 rounded-xl p-3 px-4 border border-transparent focus-within:border-[var(--accent)]/40 focus-within:bg-[var(--secondary)]/50 focus-within:shadow-[0_0_0_1px_rgba(var(--accent),0.1)] transition-all flex-1 min-w-0">
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        value={activeId === targetCurrency ? activeValue : formatNum(baseAmount * rate)}
-                                        onChange={(e) => handleInputChange(targetCurrency, e.target.value)}
-                                        className="bg-transparent text-[24px] font-semibold tracking-tight text-[var(--foreground)] w-full min-w-0 outline-none placeholder:text-[var(--muted-foreground)]/30 p-0 m-0"
-                                        placeholder="0"
-                                    />
-                                    <span className="text-[14px] font-medium text-[var(--muted-foreground)] uppercase shrink-0 px-1 select-none">{targetCurrency}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {date && (
-                    <div className="flex justify-start border-t border-[var(--border-subtle)]/40 pt-2.5 mt-0.5">
-                        <p className="text-[11px] text-[var(--muted-foreground)] w-full text-left opacity-70">As of {date}</p>
-                    </div>
-                )}
+            <div className="omni-mono mt-3 text-[12.5px] text-[var(--ink-muted)]">
+                1 {baseCurrency.toUpperCase()} = {primaryRate.toLocaleString(undefined, { maximumFractionDigits: 4 })}{' '}
+                {entries[0][0].toUpperCase()}
             </div>
         </div>
     )
