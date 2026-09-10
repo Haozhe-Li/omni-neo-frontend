@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, Paperclip, Link2, Telescope, Plane, GraduationCap } from 'lucide-react'
-import Image from 'next/image'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -16,6 +15,7 @@ import { ModelPicker } from '@/components/model-picker'
 import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, type ChatModelId } from '@/lib/models'
 
 import { toast } from 'sonner'
+import { OmniMark } from '@/components/omni-mark'
 
 
 type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
@@ -948,6 +948,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
         >
           <Menu size={20} />
         </button>
+        {/* The mark, centred — the bar was empty apart from the menu button,
+            and on mobile this header is the only place the product signs its
+            name at all. Not a link: this *is* home, so there is nowhere for it
+            to go. */}
+        <OmniMark size={22} />
       </header>
 
       {/* Auto-detecting overlay */}

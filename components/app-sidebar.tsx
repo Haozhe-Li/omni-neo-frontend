@@ -599,8 +599,12 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                     <>
                         <Link
                             href="/"
-                            className="group flex min-h-[28px] items-center gap-2.5"
+                            /* min-h keeps this the same height as the collapse
+                               button opposite, so dropping the wordmark did not
+                               shorten the row the rail is measured from. */
+                            className="flex min-h-[28px] items-center transition-opacity hover:opacity-70"
                             aria-label="Omni — home"
+                            title="Omni — home"
                             /* The rings take a turn on the way home. Nothing
                                depends on it and nothing waits for it — the
                                navigation is unchanged, and on the layout the
@@ -609,9 +613,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                             onClick={markBurst.trigger}
                         >
                             <OmniMark key={markBurst.run} size={22} {...markBurst.mark} />
-                            <span className="font-[family-name:var(--font-plex)] pt-[2px] text-[25px] leading-none tracking-[-0.01em] text-[var(--ink)] transition-colors group-hover:text-[var(--teal)]">
-                                omni
-                            </span>
                         </Link>
                         <div className="flex items-center gap-1">
                             {isSyncing && (
