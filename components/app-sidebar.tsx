@@ -740,7 +740,10 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 own hover cards. A thread you can already see is one line of
                 text; the affordances (delete, live dot) surface on hover so
                 the resting state stays a readable list. */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 pt-7 pb-2 custom-scrollbar">
+            {/* Same treatment as the sources rail: a classic scrollbar in a
+                narrow column of hairline-separated text lands a grey track
+                right where the titles end and reads as a second border. */}
+            <div className="omni-hide-scrollbar flex-1 overflow-y-auto overflow-x-hidden px-5 pt-7 pb-2">
                 {isExpanded && (
                     <>
                         <div className="omni-eyebrow pb-2">Recent</div>

@@ -940,17 +940,25 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           28s, one reversed) plus a slower teal bloom that follows the
           cursor. All three are far below the text in contrast — the point is
           that the empty half of a blank home screen is never quite still,
-          not that anyone notices a gradient. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-[180px] -right-[140px] z-0 h-[620px] w-[620px] rounded-full omni-drift"
-        style={{ background: 'radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--teal) 13%, transparent), transparent 68%)' }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-[200px] -left-[120px] z-0 h-[520px] w-[520px] rounded-full omni-drift-slow"
-        style={{ background: 'radial-gradient(circle at 60% 50%, color-mix(in srgb, var(--rust) 12%, transparent), transparent 68%)' }}
-      />
+          not that anyone notices a gradient.
+
+          The clipping wrapper is load-bearing, not decoration. These are
+          deliberately positioned past the edges, and an absolutely positioned
+          box that hangs off the BOTTOM of a scroll container still counts
+          toward its scrollable area — so the lower wash was adding exactly
+          its own 200px of overshoot to the page and letting the home screen
+          scroll down past its own footer. `overflow-hidden` here contains
+          them; `inset-0` keeps them pinned to the visible frame. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div
+          className="omni-drift absolute -top-[180px] -right-[140px] h-[620px] w-[620px] rounded-full"
+          style={{ background: 'radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--teal) 13%, transparent), transparent 68%)' }}
+        />
+        <div
+          className="omni-drift-slow absolute -bottom-[200px] -left-[120px] h-[520px] w-[520px] rounded-full"
+          style={{ background: 'radial-gradient(circle at 60% 50%, color-mix(in srgb, var(--rust) 12%, transparent), transparent 68%)' }}
+        />
+      </div>
       <div
         ref={glowRef}
         aria-hidden="true"
