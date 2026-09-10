@@ -66,10 +66,9 @@ export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedI
   const handleDislike = () => { setDisliked(true); setLiked(false) }
 
   return (
-    /* A hairline over the action row rather than a card around it: the
-       footer belongs to the answer above it, and boxing it would make the
-       turn look like it ended twice. */
-    <div className="mt-7 border-t border-[var(--line)] pt-2">
+    /* No rule above the actions — whitespace already ends the answer, and a
+       hairline on top of that read as the turn ending twice. */
+    <div className="mt-6">
       {regeneratedWith && (
         <p className="mb-1 pt-1 text-[11.5px] text-[var(--ink-faint)] select-none">
           Regenerated with {getModel(regeneratedWith).label}

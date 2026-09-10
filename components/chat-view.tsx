@@ -2340,7 +2340,7 @@ export function ChatView({
                 data-message-index={i}
                 className={`flex flex-col items-stretch scroll-mt-20 ${
                   msg.role === 'user'
-                    ? `pb-6 ${isFirstQuestion(i) ? 'pt-1' : 'mt-4 border-t border-[var(--line)] pt-9'}`
+                    ? `pb-6 ${isFirstQuestion(i) ? 'pt-1' : 'pt-14'}`
                     : 'pb-8'
                 }`}
               >
@@ -2667,12 +2667,16 @@ export function ChatView({
             {threadIdle && (
               <div className="mt-10">
                 <div className="omni-eyebrow mb-2.5">Keep pulling the thread</div>
+                {/* The one rule that stays: it sits under the label and
+                    opens the list. The rows below it are separated by their
+                    own spacing — a line between every prompt turned five
+                    short sentences into a table. */}
                 <div className="flex flex-col border-t border-[var(--line)]">
                   {FOLLOW_UP_PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
                       onClick={() => askFollowUp(prompt)}
-                      className="group flex items-center justify-between gap-4 border-b border-[var(--line)] py-[15px] text-left text-[16px] text-[var(--ink-body)] transition-colors hover:text-[var(--teal)]"
+                      className="group flex items-center justify-between gap-4 py-3.5 text-left text-[16px] text-[var(--ink-body)] transition-colors hover:text-[var(--teal)]"
                     >
                       <span>{prompt}</span>
                       <span className="shrink-0 text-[var(--ink-fainter)] transition-colors group-hover:text-[var(--teal)]">
