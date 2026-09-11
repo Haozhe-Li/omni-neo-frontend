@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { BookOpen, Search, ArrowUpDown, Menu } from 'lucide-react'
-import { PagesGrid, PagesLead, type PageSummary } from '@/components/pages-grid'
+import { PagesGrid, type PageSummary } from '@/components/pages-grid'
 import { usePagesShellControls } from '@/components/pages-shell'
 
 export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
@@ -31,11 +31,6 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
 
         return result
     }, [initialPages, searchQuery, sortBy])
-
-    // The lead slot is only meaningful for the unfiltered, newest-first view.
-    const showLead = !searchQuery.trim() && sortBy === 'newest' && filteredAndSortedPages.length > 2
-    const lead = showLead ? filteredAndSortedPages[0] : null
-    const rest = showLead ? filteredAndSortedPages.slice(1) : filteredAndSortedPages
 
     const today = useMemo(
         () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()),
@@ -101,13 +96,7 @@ export function PagesClient({ initialPages }: { initialPages: PageSummary[] }) {
                     </p>
                 </div>
             ) : (
-                <>
-                    {/* The lead runs only in the default view: once someone has
-                        searched or flipped to oldest-first, "the newest one,
-                        bigger" stops meaning anything. */}
-                    {showLead && lead && <PagesLead page={lead} href={`/pages/${lead.id}`} />}
-                    <PagesGrid pages={rest} getHref={(p) => `/pages/${p.id}`} />
-                </>
+                <PagesGrid pages={filteredAndSortedPages} />
             )}
         </section>
         <footer className="w-full py-6 hidden md:flex flex-col gap-4 justify-center items-center animate-fade-up">

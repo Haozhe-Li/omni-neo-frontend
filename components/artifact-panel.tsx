@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Code2, Eye } from 'lucide-react'
+import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Code2, Eye, Link2, Globe } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuth, useClerk } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
@@ -55,8 +56,13 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
     ...artifacts.map((a) => ({ id: a.id, title: a.title, kind: 'chart' as const, chart: a })),
   ]
   const active = items.find((it) => it.id === activeId) ?? items[items.length - 1]
+  const { isSignedIn } = useAuth()
+  const clerk = useClerk()
   const [copied, setCopied] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [quickSharing, setQuickSharing] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [isPdfLoading, setIsPdfLoading] = useState(false)
   const containerRef = useRef<HTMLElement>(null)
@@ -351,7 +357,9 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
 
   useEffect(() => {
     setCopied(false)
+    setLinkCopied(false)
     setShareOpen(false)
+    setExportOpen(false)
   }, [active?.id])
 
   // No artifact yet but the agent is writing one → show a writing placeholder.
@@ -377,6 +385,45 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
     setCopied(true)
     toast.success('Copied')
     setTimeout(() => setCopied(false), 1500)
+  }
+
+  // "Copy share link" — a quick, unlisted publish: the same `/api/publish`
+  // call `ShareToPagesMenu` makes for its own "Publish & Copy Link" button,
+  // just with `publishToPages: false` and no duration prompt, so tapping one
+  // row gets a working link without walking through the fuller publish flow
+  // (that flow is still there, right below, for anyone who wants the listing
+  // toggle or an expiry).
+  const handleQuickShare = async () => {
+    if (active.kind !== 'report' || !active.report || quickSharing) return
+    if (!isSignedIn) {
+      clerk.openSignIn()
+      return
+    }
+    setQuickSharing(true)
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: active.report.title || 'report',
+          answer: active.report.content || '',
+          duration: 'permanent',
+          publishToPages: false,
+          sources: active.report.sources,
+        }),
+      })
+      if (!res.ok) throw new Error('publish failed')
+      const { id } = await res.json()
+      await navigator.clipboard.writeText(`${window.location.origin}/pages/${id}`)
+      setLinkCopied(true)
+      toast.success('Link copied')
+      setTimeout(() => setLinkCopied(false), 1500)
+    } catch (e) {
+      console.error('Quick share failed', e)
+      toast.error('Failed to create share link')
+    } finally {
+      setQuickSharing(false)
+    }
   }
 
   return (
@@ -421,72 +468,110 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             </button>
           </div>
 
-          {/* Share */}
+          {/* Share — outline pill, own dropdown: a share link (quick,
+              unlisted) and the fuller publish-to-Pages flow below it. */}
           <div className="relative">
-            {/* Share backdrop */}
             {shareOpen && (
-              <div 
-                className="fixed inset-0 z-40" 
-                onClick={() => setShareOpen(false)}
-              />
+              <div className="fixed inset-0 z-40" onClick={() => setShareOpen(false)} />
             )}
-            <button 
+            <button
               disabled={drafting}
-              onClick={() => setShareOpen(!shareOpen)}
-              className="omni-pill omni-pill-solid relative z-50 gap-1.5 px-3.5 py-1.5 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={() => { setShareOpen(!shareOpen); setExportOpen(false) }}
+              className="omni-pill relative z-50 gap-1.5 px-3.5 py-1.5 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Share size={12} strokeWidth={2} />
               Share
             </button>
-            {/* Share dropdown */}
-            {shareOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] py-2 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] transform origin-top-right transition-all animate-in fade-in zoom-in-95">
-                <button 
-                  onClick={() => { handleCopy(); setShareOpen(false); }}
-                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
+            {shareOpen && active.kind === 'report' && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-[272px] overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] origin-top-right animate-in fade-in zoom-in-95">
+                <button
+                  onClick={handleQuickShare}
+                  disabled={quickSharing}
+                  className="flex w-full items-start gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
                 >
-                  {copied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
-                  {copied ? 'Copied!' : 'Copy full text'}
+                  {linkCopied ? (
+                    <Check size={15} className="mt-0.5 shrink-0 text-[var(--teal)]" strokeWidth={2} />
+                  ) : (
+                    <Link2 size={15} className="mt-0.5 shrink-0 text-[var(--teal)]" strokeWidth={2} />
+                  )}
+                  <span>
+                    <span className="block text-[13.5px] text-[var(--ink)]">
+                      {linkCopied ? 'Link copied' : 'Copy share link'}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-[var(--ink-faint)]">
+                      Anyone with the link can read it
+                    </span>
+                  </span>
                 </button>
-                <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+                <div className="my-1 h-px bg-[var(--border-subtle)]/50" />
+                <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} sources={active.report?.sources} />
+              </div>
+            )}
+          </div>
+
+          {/* Export — its own outline pill: copy-as-text plus every
+              download format, each row naming its file extension the way
+              the design does. */}
+          <div className="relative">
+            {exportOpen && (
+              <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />
+            )}
+            <button
+              disabled={drafting}
+              onClick={() => { setExportOpen(!exportOpen); setShareOpen(false) }}
+              className="omni-pill relative z-50 gap-1.5 px-3.5 py-1.5 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download size={12} strokeWidth={2} />
+              Export
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] origin-top-right animate-in fade-in zoom-in-95">
+                <button
+                  onClick={() => { handleCopy(); setExportOpen(false) }}
+                  className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"
+                >
+                  <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                    {copied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
+                    {copied ? 'Copied!' : active.kind === 'report' ? 'Copy as Markdown' : 'Copy chart data'}
+                  </span>
+                  {active.kind === 'report' && <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">MD</span>}
+                </button>
                 {active.kind === 'report' && (
                   <>
-                    <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} sources={active.report?.sources} />
-                    <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+                    <button
+                      onClick={() => { setExportOpen(false); handleDownload('markdown') }}
+                      className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"
+                    >
+                      <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                        <Download size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
+                        Download Markdown
+                      </span>
+                      <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">MD</span>
+                    </button>
+                    <button
+                      onClick={() => { setExportOpen(false); handleDownload('html') }}
+                      disabled={isPdfLoading}
+                      className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
+                    >
+                      <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                        <Code2 size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
+                        Download HTML
+                      </span>
+                      <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">HTML</span>
+                    </button>
+                    <button
+                      onClick={() => { setExportOpen(false); handleDownload('pdf') }}
+                      disabled={isPdfLoading}
+                      className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
+                    >
+                      <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                        <FileText size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
+                        Download PDF
+                      </span>
+                      <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">PDF</span>
+                    </button>
                   </>
                 )}
-                <button
-                  onClick={() => {
-                    setShareOpen(false)
-                    handleDownload('markdown')
-                  }}
-                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)]"
-                >
-                  <Download size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
-                  Download Markdown
-                </button>
-                <button 
-                  onClick={() => { 
-                    setShareOpen(false)
-                    handleDownload('html')
-                  }}
-                  disabled={isPdfLoading}
-                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
-                >
-                  <Code2 size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
-                  Download HTML
-                </button>
-                <button 
-                  onClick={() => { 
-                    setShareOpen(false)
-                    handleDownload('pdf')
-                  }}
-                  disabled={isPdfLoading}
-                  className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] text-[var(--ink)] transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
-                >
-                  <FileText size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
-                  Download PDF
-                </button>
               </div>
             )}
           </div>

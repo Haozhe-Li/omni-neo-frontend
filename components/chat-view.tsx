@@ -703,12 +703,14 @@ export function ChatView({
   const [checkSourceState, setCheckSourceState] = useState<CheckSourceState | null>(null)
 
   // Mobile-only: below the width where either the sticky rail or the inline
-  // list fits (see `.omni-thread-inline-sources` in globals.css), a turn's
-  // sources live behind a button instead — this is which turn's `AnswerFooter`
-  // opened it. Irrelevant once `checkSourceState` is set: a check result takes
-  // the sheet over regardless of which turn's button was tapped, same as it
-  // takes the rail over on desktop.
-  const [mobileSourcesOpen, setMobileSourcesOpen] = useState(false)
+  // list fits (see `.omni-thread-inline-sources` in globals.css), each turn
+  // gets its own Answer/Sources tab pair right under its question instead of
+  // a rail or a fallback list — keyed by message index so switching one
+  // turn's tab leaves every other turn showing its answer. `mobileSourcesTurn`
+  // is which turn a live `checkSourceState` belongs to: irrelevant once it's
+  // set, a check result takes that turn's tab over regardless of which turn's
+  // own tab was last tapped, same as it takes the rail over on desktop.
+  const [mobileTab, setMobileTab] = useState<Record<number, 'answer' | 'sources'>>({})
   const [mobileSourcesTurn, setMobileSourcesTurn] = useState<number | null>(null)
 
   // "Check source" from the text-selection menu: `turn` is the assistant
@@ -722,12 +724,15 @@ export function ChatView({
         return
       }
       // Harmless on desktop — nothing reads this state there — but on mobile
-      // it's what pops the sheet open at the exact moment a claim is tapped,
-      // rather than updating a list the reader has already scrolled past.
-      // `turn` is set too so dismissing the check result (not closing the
-      // sheet) falls back to that turn's own list instead of an empty one.
-      setMobileSourcesOpen(true)
+      // it's what flips that turn's tab to Sources at the exact moment a
+      // claim is tapped, rather than updating a list the reader has already
+      // scrolled past. Dismissing the check result (not switching the tab
+      // back) falls back to that turn's own list instead of an empty one.
+      setMobileTab((prev) => (prev[turn] === 'sources' ? prev : { ...prev, [turn]: 'sources' }))
       setMobileSourcesTurn(turn)
+      document
+        .querySelector<HTMLElement>(`[data-message-index="${turn}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       setCheckSourceState({ status: 'loading', claim, matches: [] })
       try {
         const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
@@ -2606,8 +2611,43 @@ export function ChatView({
                   (() => {
                     const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[], segments: [] as RenderSegment[] }
                     const reportDrafting = parsed.reports.some((r) => !r.complete)
+                    const turnDone = !(i === streamingIndex && isLoading)
+                    const tSources = sourcesByTurn.get(i)
+                    const tSourceCount = (tSources?.cited.length ?? 0) + (tSources?.unused.length ?? 0)
+                    const turnTab = mobileTab[i] ?? 'answer'
                     return (
                       <div className="w-full" data-selection-scope="assistant-message">
+                        {/* Mobile-only Answer/Sources tabs — below the width where
+                            either the sticky rail or the inline fallback list fits
+                            (see `.omni-thread-inline-sources` in globals.css), each
+                            turn switches between showing its own answer and its own
+                            source list in place, rather than opening a separate
+                            surface for the second one. */}
+                        {turnDone && (tSourceCount > 0 || (mobileSourcesTurn === i && checkSourceState)) && (
+                          <div className="mb-5 flex items-center gap-5 border-b border-[var(--line)] sm:hidden">
+                            <button
+                              onClick={() => setMobileTab((prev) => ({ ...prev, [i]: 'answer' }))}
+                              className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
+                                turnTab === 'answer'
+                                  ? 'border-[var(--teal)] text-[var(--teal)]'
+                                  : 'border-transparent text-[var(--ink-faint)]'
+                              }`}
+                            >
+                              Answer
+                            </button>
+                            <button
+                              onClick={() => setMobileTab((prev) => ({ ...prev, [i]: 'sources' }))}
+                              className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
+                                turnTab === 'sources'
+                                  ? 'border-[var(--teal)] text-[var(--teal)]'
+                                  : 'border-transparent text-[var(--ink-faint)]'
+                              }`}
+                            >
+                              Sources{tSourceCount > 0 ? ` · ${tSourceCount}` : ''}
+                            </button>
+                          </div>
+                        )}
+                        <div className={turnTab === 'sources' ? 'hidden sm:block' : undefined}>
                         <WidgetCards widgets={msg.widgets} />
                         {/* Text and tool activity can arrive interleaved (text, then
                             tools, then more text, ...). When we have ordered blocks,
@@ -2791,16 +2831,28 @@ export function ChatView({
                             </div>
                           </div>
                         )}
+                        </div>
 
-                        {/* footer: sources + actions, once the turn is complete */}
-                        {(parsed.text || msg.stoppedByUser) && !(i === streamingIndex && isLoading) ? (
+                        {/* The turn's own answer/sources swap — full-width like the
+                            tablet fallback list, not the 248px rail's compact one. */}
+                        {turnTab === 'sources' && (
+                          <div className="sm:hidden">
+                            <SourcesRail
+                              cited={tSources?.cited ?? []}
+                              unused={tSources?.unused ?? []}
+                              checkSource={mobileSourcesTurn === i ? checkSourceState : undefined}
+                              onDismissCheck={() => setCheckSourceState(null)}
+                            />
+                          </div>
+                        )}
+
+                        {/* footer: actions, once the turn is complete */}
+                        {(parsed.text || msg.stoppedByUser) && turnDone ? (
                           <AnswerFooter
                             content={parsed.text}
                             onRegenerate={isLocked ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                             isSignedIn={!!isSignedIn}
-                            sourceCount={sourcesByTurn.get(i)?.cited.length ?? 0}
-                            onOpenSources={() => { setMobileSourcesTurn(i); setMobileSourcesOpen(true) }}
                           />
                         ) : null}
                       </div>
@@ -2904,43 +2956,6 @@ export function ChatView({
                 checkSource={checkSourceState}
                 onDismissCheck={() => setCheckSourceState(null)}
               />
-            </div>
-          )}
-
-          {/* Phone sheet — under 640px there's no width to spare for a rail
-              or an inline list, and a check-source result needs to appear
-              where the tap happened rather than in a block the reader has
-              long since scrolled past. One instance for the whole thread:
-              which turn it's showing is `mobileSourcesTurn`, set by whichever
-              `AnswerFooter` button opened it (or by `handleCheckSource`,
-              which also takes the sheet over regardless of which turn's
-              button — if any — was last tapped, same as the rail on desktop
-              lets a check result take it over mid-browse. */}
-          {mobileSourcesOpen && (
-            <div className="fixed inset-0 z-50 flex flex-col bg-[var(--paper)] sm:hidden animate-in fade-in slide-in-from-bottom-8 duration-300">
-              <div className="flex h-[52px] shrink-0 items-center justify-between border-b border-[var(--line)] px-4">
-                {/* Static, unlike the rail's own heading right below it — that
-                    one already says "Sources · 4" or "Checking sources…", and
-                    echoing it up here just to fill the bar would read as the
-                    same fact stated twice in two sizes. This bar exists to
-                    hold the close button, not to repeat the count. */}
-                <span className="text-[14px] text-[var(--ink)]">Sources</span>
-                <button
-                  onClick={() => { setMobileSourcesOpen(false); setCheckSourceState(null); setMobileSourcesTurn(null) }}
-                  className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
-                  title="Close"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="custom-scrollbar flex flex-1 flex-col gap-3 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                <SourcesRail
-                  cited={mobileSourcesTurn != null ? sourcesByTurn.get(mobileSourcesTurn)?.cited ?? [] : []}
-                  unused={mobileSourcesTurn != null ? sourcesByTurn.get(mobileSourcesTurn)?.unused ?? [] : []}
-                  checkSource={checkSourceState}
-                  onDismissCheck={() => setCheckSourceState(null)}
-                />
-              </div>
             </div>
           )}
 

@@ -162,7 +162,7 @@ export function SchedulePageClient({ runId }: { runId: string }) {
     if (!report) return null
 
     return (
-        <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
+        <div className="omni-app-shell flex h-[100dvh] w-full overflow-hidden relative">
             <AppSidebar
                 onSelectThread={selectThread}
                 onNewChat={goHome}

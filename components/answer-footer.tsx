@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw, BookOpen } from 'lucide-react'
+import { Copy, Check, Share2, ThumbsUp, ThumbsDown, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { CHAT_MODELS, getModel, type ChatModelId } from '@/lib/models'
 
@@ -36,16 +36,9 @@ interface AnswerFooterProps {
   /** Guests can't regenerate on a signed-in-only model — those rows are hidden
    *  rather than shown locked, since this menu is an action list, not a picker. */
   isSignedIn?: boolean
-  /** Mobile only (`sm:hidden`) — above `sm` this turn's sources already sit in
-   * the sticky rail or the inline list beside/under the answer, so a second
-   * entry point here would just be a redundant button. Below it neither
-   * exists (see chat-view.tsx), so this is the only door in. Omitted or 0
-   * hides the button entirely rather than showing a dead "0". */
-  sourceCount?: number
-  onOpenSources?: () => void
 }
 
-export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false, sourceCount = 0, onOpenSources }: AnswerFooterProps) {
+export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
@@ -88,16 +81,6 @@ export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedI
         <IconBtn title="Share">
           <Share2 size={16} strokeWidth={1.75} />
         </IconBtn>
-
-        {sourceCount > 0 && onOpenSources && (
-          <button
-            onClick={onOpenSources}
-            className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12.5px] text-[var(--ink-faint)] transition-all duration-150 active:scale-95 hover:bg-[var(--sand)] hover:text-[var(--ink)] sm:hidden"
-          >
-            <BookOpen size={15} strokeWidth={1.75} />
-            <span>{sourceCount}</span>
-          </button>
-        )}
 
         {/* Regenerate — available on any assistant message; the caller
             (chat-view) confirms with the user first if this isn't the last

@@ -39,7 +39,7 @@ export function PagesShell({ children }: { children: ReactNode }) {
   const selectThread = useCallback((id: string) => router.push(`/thread/${id}`), [router])
 
   return (
-    <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
+    <div className="omni-app-shell flex h-[100dvh] w-full overflow-hidden relative">
       <AppSidebar
         onSelectThread={selectThread}
         onNewChat={goHome}

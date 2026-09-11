@@ -41,7 +41,7 @@ export function SettingsPageClient({ tabSlug }: { tabSlug?: string }) {
     }, [router])
 
     return (
-        <div className="flex h-screen w-full bg-background overflow-hidden relative">
+        <div className="omni-app-shell flex h-screen w-full overflow-hidden relative">
             <AppSidebar
                 className="flex-shrink-0 z-50 relative"
                 isOpen={sidebarOpen}

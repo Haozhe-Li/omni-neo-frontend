@@ -522,6 +522,19 @@
   }
 }
 
+/* Every route's `h-[100dvh]` shell (app/page.tsx, thread/schedule/pages/
+   settings page-clients) paints its own opaque `bg-background` over the full
+   viewport — a second surface stacked directly on `body`, so `body`'s own
+   paper grain above never has anything transparent to show through beneath
+   it. Same fill, same texture, so the shell reads as a continuous sheet of
+   paper rather than a textured body peeking out only around edges that don't
+   actually exist. */
+.omni-app-shell {
+  background-color: var(--background);
+  background-image: radial-gradient(var(--paper-texture) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
 @keyframes shimmer-bar {
   0% {
     transform: translateX(-100%);

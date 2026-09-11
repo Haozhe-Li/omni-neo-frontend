@@ -146,7 +146,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
+    <div className="omni-app-shell flex h-[100dvh] w-full overflow-hidden relative">
       <AppSidebar
         currentThreadId={threadId}
         onSelectThread={selectThread}
