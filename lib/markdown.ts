@@ -120,6 +120,31 @@ function fixEmphasisClosing(text: string): string {
     })
 }
 
+// Backend fallback: the model occasionally emits a multi-citation marker as
+// one bracket with comma-separated numbers — `[1,2]` or `[1, 2, 3]` — instead
+// of the adjacent `[1][2][3]` markers every citation code path below expects.
+// Left alone, a comma marker matches none of their `\[(\d+)\]` regexes and
+// falls through as inert literal text: no badge, not counted as cited, not
+// moved off trailing punctuation. Rewriting it into the adjacent shape up
+// front means every one of those paths — `transformCitations`,
+// `extractCitedNumbers`, `moveCitationsAfterPunctuation` — picks it up with
+// no changes of their own.
+//
+// Requires 2+ numbers (a lone `[3]` is already the shape nothing needs
+// fixing) and only digits/commas/whitespace inside the brackets, which is
+// deliberately narrow: callers split fenced code out before this ever runs
+// (`preprocessMarkdown`'s own fence split, and the matching split added to
+// `extractCitedNumbers` below), so a genuine array literal like `[1, 2, 3]`
+// in a code sample is never in scope to begin with.
+function normalizeCommaCitations(text: string): string {
+    return text.replace(/\[(\d+(?:\s*,\s*\d+)+)\]/g, (_match, list: string) =>
+        list
+            .split(',')
+            .map((n) => `[${n.trim()}]`)
+            .join('')
+    )
+}
+
 // Rewrites `[n]` inline citation markers into `[n](citation:n)` so they parse
 // as ordinary markdown links (intercepted by a custom `a` renderer) instead of
 // literal bracketed text. Only markers with a known source are rewritten —
@@ -188,7 +213,11 @@ function moveCitationsAfterPunctuation(segment: string): string {
 export function extractCitedNumbers(content: string): Set<number> {
     const nums = new Set<number>()
     if (!content) return nums
-    for (const match of content.matchAll(/\[(\d+)\](?!\()/g)) nums.add(Number(match[1]))
+    // Drop fenced code before normalizing comma markers — see
+    // `normalizeCommaCitations` — then scan what's left exactly as before.
+    for (const segment of content.split(/```[\s\S]*?```/g)) {
+        for (const match of normalizeCommaCitations(segment).matchAll(/\[(\d+)\](?!\()/g)) nums.add(Number(match[1]))
+    }
     return nums
 }
 
@@ -237,11 +266,13 @@ export function preprocessMarkdown(
                 ? segment
                 : transformMath(
                       citationStep(
-                          // `fixEmphasisFlanking` first: it peels quotes out of
-                          // `**"foo"**`, which is what makes the closing marker
-                          // legal there. Whatever punctuation it leaves inside
-                          // the bold is then handled by `fixEmphasisClosing`.
-                          outsideInlineCode(escapeCurrencyDollars(moveCitationsAfterPunctuation(segment)), (prose) =>
+                          // `normalizeCommaCitations` first: `moveCitationsAfterPunctuation`
+                          // only recognizes adjacent `[n][n]` runs, not a comma
+                          // marker's single bracket. `fixEmphasisFlanking` then
+                          // peels quotes out of `**"foo"**`, which is what makes
+                          // the closing marker legal there; whatever punctuation
+                          // it leaves inside the bold is handled by `fixEmphasisClosing`.
+                          outsideInlineCode(escapeCurrencyDollars(moveCitationsAfterPunctuation(normalizeCommaCitations(segment))), (prose) =>
                               fixEmphasisClosing(fixEmphasisFlanking(prose))
                           ),
                           citationNumbers
