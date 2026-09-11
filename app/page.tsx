@@ -206,7 +206,7 @@ export default function Home() {
   }, [fetchWithAuth])
 
   return (
-    <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
+    <div className="omni-app-shell flex h-[100dvh] w-full overflow-hidden relative">
       <AppSidebar
         currentThreadId={currentThreadId}
         onSelectThread={handleSelectThread}

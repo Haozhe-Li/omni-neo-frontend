@@ -108,14 +108,21 @@ export function ShareToPagesMenu({ title, content, sources, idSeed }: ShareToPag
     <div className="flex flex-col">
       <button
         onClick={handleToggle}
-        className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left ${expanded ? 'bg-[var(--secondary)]/60' : ''}`}
+        className={`flex w-full items-start gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)] ${expanded ? 'bg-[var(--sand)]' : ''}`}
       >
-        <Globe size={14} className="text-[var(--muted-foreground)]" strokeWidth={2} />
-        {shareUrl ? 'Manage Pages Share' : 'Share to Pages'}
+        <Globe size={15} className="mt-0.5 shrink-0 text-[var(--rust)]" strokeWidth={2} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] text-[var(--ink)]">
+            {shareUrl ? 'Manage Pages share' : 'Publish to Pages'}
+          </span>
+          <span className="mt-0.5 block text-[12px] text-[var(--ink-faint)]">
+            Adds it to the public feed under your name
+          </span>
+        </span>
         {!isSignedIn ? (
-          <Lock size={12} className="ml-auto opacity-50" />
+          <Lock size={12} className="mt-1 shrink-0 opacity-50" />
         ) : (
-          <ChevronDown size={13} className={`ml-auto opacity-50 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+          <ChevronDown size={13} className={`mt-1 shrink-0 opacity-50 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
         )}
       </button>
 

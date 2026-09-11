@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   Check,
-  ChevronDown,
   Code2,
   Copy,
   Download,
@@ -58,6 +57,7 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
   const { isMobile, toggleSidebar } = usePagesShellControls()
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [shareOpen, setShareOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
@@ -69,6 +69,7 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
 
   useEffect(() => {
     setShareOpen(false)
+    setExportOpen(false)
   }, [id])
 
   const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
@@ -419,66 +420,98 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
             </button>
           </div>
 
-          {/* Share — deliberately the subdued half of this pair. Its actions
-              are utilities for a reader who already has what they came for
-              (copy it, download it), where Ask Omni next to it is a
-              destination; two solid pills side by side gave them equal weight
-              and read as two competing primaries. Outlined rather than
-              ghosted so it still holds its own against the toolbar's other
-              borderless controls. */}
+          {/* Share — just the link, one row. Outlined rather than ghosted so
+              it still holds its own against the toolbar's other borderless
+              controls, and deliberately the subdued half of this pair: Ask
+              Omni next to it is a destination, this is a utility. */}
           <div className="relative">
             {shareOpen && <div className="fixed inset-0 z-40" onClick={() => setShareOpen(false)} />}
             <button
-              onClick={() => setShareOpen(!shareOpen)}
+              onClick={() => { setShareOpen(!shareOpen); setExportOpen(false) }}
               className="omni-pill relative z-50 gap-1.5 px-3.5 py-1.5 text-[12.5px]"
             >
               <Share size={12} strokeWidth={2} />
               Share
-              <ChevronDown
-                size={12}
-                strokeWidth={2}
-                className={`text-[var(--muted-foreground)] transition-transform ${shareOpen ? 'rotate-180' : ''}`}
-              />
             </button>
             {shareOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-64 origin-top-right overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] py-2 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] transition-all animate-in fade-in zoom-in-95">
-                <button
-                  onClick={() => { handleCopy(); setShareOpen(false) }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
-                >
-                  {copied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
-                  {copied ? 'Copied!' : 'Copy full text'}
-                </button>
+              <div className="absolute right-0 top-full z-50 mt-2 w-[272px] origin-top-right overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] transition-all animate-in fade-in zoom-in-95">
                 <button
                   onClick={() => { handleCopyLink(); setShareOpen(false) }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                  className="flex w-full items-start gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"
                 >
-                  {linkCopied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <LinkIcon size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
-                  {linkCopied ? 'Link copied!' : 'Copy link'}
+                  {linkCopied ? (
+                    <Check size={15} className="mt-0.5 shrink-0 text-[var(--teal)]" strokeWidth={2} />
+                  ) : (
+                    <LinkIcon size={15} className="mt-0.5 shrink-0 text-[var(--teal)]" strokeWidth={2} />
+                  )}
+                  <span>
+                    <span className="block text-[13.5px] text-[var(--ink)]">
+                      {linkCopied ? 'Link copied' : 'Copy share link'}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-[var(--ink-faint)]">
+                      Anyone with the link can read it
+                    </span>
+                  </span>
                 </button>
-                <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
+              </div>
+            )}
+          </div>
+
+          {/* Export — copy-as-text plus every download format, each row
+              naming its file extension. Its own outline pill, matching the
+              report artifact panel's Share/Export split 1:1. */}
+          <div className="relative">
+            {exportOpen && <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />}
+            <button
+              onClick={() => { setExportOpen(!exportOpen); setShareOpen(false) }}
+              className="omni-pill relative z-50 gap-1.5 px-3.5 py-1.5 text-[12.5px]"
+            >
+              <Download size={12} strokeWidth={2} />
+              Export
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-60 origin-top-right overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] transition-all animate-in fade-in zoom-in-95">
                 <button
-                  onClick={() => { setShareOpen(false); handleDownload('markdown') }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left"
+                  onClick={() => { handleCopy(); setExportOpen(false) }}
+                  className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"
                 >
-                  <Download size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
-                  Download Markdown
+                  <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                    {copied ? <Check size={14} className="text-[var(--teal)]" strokeWidth={2} /> : <Copy size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />}
+                    {copied ? 'Copied!' : 'Copy as Markdown'}
+                  </span>
+                  <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">MD</span>
                 </button>
                 <button
-                  onClick={() => { setShareOpen(false); handleDownload('html') }}
+                  onClick={() => { setExportOpen(false); handleDownload('markdown') }}
+                  className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"
+                >
+                  <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                    <Download size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
+                    Download Markdown
+                  </span>
+                  <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">MD</span>
+                </button>
+                <button
+                  onClick={() => { setExportOpen(false); handleDownload('html') }}
                   disabled={isPdfLoading}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left disabled:opacity-50"
+                  className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
                 >
-                  <Code2 size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
-                  Download HTML
+                  <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                    <Code2 size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
+                    Download HTML
+                  </span>
+                  <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">HTML</span>
                 </button>
                 <button
-                  onClick={() => { setShareOpen(false); handleDownload('pdf') }}
+                  onClick={() => { setExportOpen(false); handleDownload('pdf') }}
                   disabled={isPdfLoading}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--foreground)] hover:bg-[var(--secondary)]/80 transition-colors text-left disabled:opacity-50"
+                  className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)] disabled:opacity-50"
                 >
-                  <FileText size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
-                  Download PDF
+                  <span className="flex items-center gap-3 text-[13.5px] text-[var(--ink)]">
+                    <FileText size={14} className="text-[var(--ink-faint)]" strokeWidth={2} />
+                    Download PDF
+                  </span>
+                  <span className="omni-mono text-[10.5px] text-[var(--ink-faint)]">PDF</span>
                 </button>
               </div>
             )}

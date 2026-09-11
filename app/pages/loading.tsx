@@ -13,43 +13,40 @@ import { PagesShell } from '@/components/pages-shell'
  * no change needed to the page's own data fetching.
  *
  * Mirrors PagesClient/PagesGrid's actual layout (header, count + search/sort
- * row, a 3-column card grid) so the swap-in doesn't jump the page around.
+ * row, a stack of feed-row cards) so the swap-in doesn't jump the page around.
  */
 export default function PagesLoading() {
     return (
         <PagesShell>
             <div className="h-full overflow-y-auto custom-scrollbar">
-                <div className="max-w-6xl mx-auto px-6">
-                    <section className="pt-10 sm:pt-14 pb-6">
-                        <div className="h-7 w-28 rounded-md bg-[var(--secondary)] animate-pulse" />
-                        <div className="mt-2.5 h-4 w-80 max-w-full rounded-md bg-[var(--secondary)] animate-pulse" />
+                <div className="mx-auto max-w-[1000px] px-6 sm:px-10">
+                    <section className="pt-10 sm:pt-11 pb-7">
+                        <div className="h-3.5 w-40 rounded-md bg-[var(--sand)] animate-pulse" />
+                        <div className="mt-3 h-9 w-28 rounded-md bg-[var(--sand)] animate-pulse" />
                     </section>
 
-                    <section className="pb-8 sm:pb-10">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                            <div className="h-4 w-16 rounded-md bg-[var(--secondary)] animate-pulse" />
-                            <div className="flex items-center gap-3">
-                                <div className="h-9 w-full sm:w-64 rounded-xl bg-[var(--secondary)] animate-pulse" />
-                                <div className="h-9 w-24 shrink-0 rounded-xl bg-[var(--secondary)] animate-pulse" />
-                            </div>
+                    <section className="pb-10">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3 mb-6">
+                            <div className="h-8 w-full sm:w-56 rounded-full bg-[var(--sand)] animate-pulse" />
+                            <div className="h-8 w-20 shrink-0 rounded-full bg-[var(--sand)] animate-pulse" />
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {Array.from({ length: 6 }).map((_, i) => (
+                        <div className="flex flex-col gap-3.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
                                 <div
                                     key={i}
-                                    className="flex flex-col overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)]"
+                                    className="flex flex-col gap-3 rounded-[26px] border border-[var(--line)] bg-[var(--paper-raised)] px-[30px] pb-[18px] pt-[22px]"
                                 >
-                                    <div className="aspect-[16/9] w-full animate-pulse bg-[var(--secondary)]" />
-                                    <div className="px-4 pt-3.5 pb-4">
-                                        <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--secondary)]" />
-                                        <div className="mt-2 h-4 w-1/2 animate-pulse rounded bg-[var(--secondary)]" />
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="h-[26px] w-[26px] shrink-0 animate-pulse rounded-full bg-[var(--sand)]" />
+                                        <div className="h-3 w-24 animate-pulse rounded bg-[var(--sand)]" />
+                                        <div className="h-3 w-16 animate-pulse rounded bg-[var(--sand)]" />
                                     </div>
-                                    <div className="mt-auto border-t border-[var(--border-subtle)] px-4 pt-3 pb-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="h-3 w-20 animate-pulse rounded bg-[var(--secondary)]" />
-                                            <div className="h-3 w-16 animate-pulse rounded bg-[var(--secondary)]" />
-                                        </div>
+                                    <div className="h-6 w-3/4 animate-pulse rounded bg-[var(--sand)]" />
+                                    <div className="h-4 w-full max-w-[68ch] animate-pulse rounded bg-[var(--sand)]" />
+                                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-[var(--line-hair)] pt-3">
+                                        <div className="h-3 w-24 animate-pulse rounded bg-[var(--sand)]" />
+                                        <div className="h-7 w-40 animate-pulse rounded-full bg-[var(--sand)]" />
                                     </div>
                                 </div>
                             ))}
