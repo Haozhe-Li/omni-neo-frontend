@@ -19,6 +19,23 @@ const VERDICT_KEYWORDS = [
 // Hard floor so we don't fire `/check_source` for a two-word fragment.
 const MIN_LEN = 6
 
+// A candidate has to clear this score to be worth firing `/check_source`
+// for at all — see `scoreSentence`. Below this, a sentence has at most one
+// weak signal (a bare digit, or a citation marker with nothing else backing
+// it), which is common enough in ordinary prose that gating on it alone
+// buried the answer in dashed underlines with nothing distinctive about
+// them. 2 requires either a real verdict-shaped claim, or a specific
+// *emphasized* figure that's also cited.
+const MIN_SCORE = 2
+
+// Ceiling on how much of the answer's own text can end up marked, as a
+// fraction of `content.length`. The dashed underline is a "this one's worth
+// double-checking" signal — if a quarter of the answer carries it, it stops
+// meaning anything. Applied as a running total over already-picked spans
+// (highest-scoring first), never over the first pick, so a short answer
+// whose one good claim happens to be long still gets marked.
+const MAX_COVERAGE = 0.25
+
 export interface ClaimCandidate {
     /** Stable within one extraction run — callers that need global uniqueness
      * should namespace it themselves (e.g. by message index), since a single
@@ -42,11 +59,17 @@ function stripEmphasis(s: string): string {
     return s.replace(/\*\*/g, '').replace(/`/g, '')
 }
 
+// A bare digit no longer scores on its own — page numbers, years and plain
+// counts are in nearly every sentence of a research answer, and gating on
+// them alone is what turned "worth double-checking" into "most of the
+// paragraph". Only two shapes count now: a superlative/verdict word (this
+// sentence is making a claim, not just stating a fact), or a figure the
+// model itself chose to emphasize — bold is the model's own signal that this
+// number is the point of the sentence, not incidental to it.
 function scoreSentence(raw: string): number {
     let score = 0
-    if (/\*\*[^*]*\d[^*]*\*\*/.test(raw)) score += 2
-    else if (/\d/.test(raw)) score += 1
-    if (VERDICT_KEYWORDS.some((k) => raw.includes(k))) score += 1
+    if (VERDICT_KEYWORDS.some((k) => raw.includes(k))) score += 2
+    if (/\*\*[^*]*\d[^*]*\*\*/.test(raw)) score += 1
     if (/\[(\d+)\](?!\()/.test(raw)) score += 1
     return score
 }
@@ -192,9 +215,26 @@ export function extractClaimCandidates(content: string, max = 5): ClaimCandidate
     const spans = collectCandidateSpans(content)
     const scored = spans
         .map((s, i) => ({ ...s, i, score: scoreSentence(s.text) }))
-        .filter((s) => s.score > 0 && s.text.trim().length >= MIN_LEN && isSafeToWrap(s.text))
+        .filter((s) => s.score >= MIN_SCORE && s.text.trim().length >= MIN_LEN && isSafeToWrap(s.text))
     scored.sort((a, b) => b.score - a.score || a.i - b.i)
-    return scored.slice(0, max).map((s, idx) => ({
+
+    // Greedily take the highest-scoring spans first, but stop once they'd
+    // cover more than `MAX_COVERAGE` of the answer — except the very first
+    // pick, which always goes through so a short answer isn't left with zero
+    // candidates just because its one real claim is a long sentence.
+    const budget = content.length * MAX_COVERAGE
+    const picked: typeof scored = []
+    let covered = 0
+    for (const s of scored) {
+        if (picked.length >= max) break
+        const len = s.end - s.start
+        if (picked.length > 0 && covered + len > budget) continue
+        picked.push(s)
+        covered += len
+    }
+    picked.sort((a, b) => a.i - b.i)
+
+    return picked.map((s, idx) => ({
         id: `vc${idx}`,
         start: s.start,
         end: s.end,

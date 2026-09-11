@@ -78,6 +78,22 @@ interface ChatViewProps {
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
+// A dashed underline is only worth drawing when a match's excerpt is an
+// actual quotable passage, not a stray short substring that happened to
+// line up character-for-character (a bare number, a shared word) — that
+// technically satisfies `canHighlightExcerpt` but highlights nothing a
+// reader would recognize as "this backs the claim". Scoped to the
+// *automatic* background sweep only (`runVerifyExtraction` /
+// `runReportVerifyExtraction`): a manually triggered check-source (the
+// text-selection menu, or clicking an existing dashed underline) still
+// shows every match `canHighlightExcerpt` accepts, highlightable or not.
+const MIN_AUTO_HIGHLIGHT_CHARS = 12
+function hasMeaningfulAutoHighlight(matches: CheckSourceMatch[]): boolean {
+  return matches.some(
+    (m) => (m.excerpt || '').trim().length >= MIN_AUTO_HIGHLIGHT_CHARS && canHighlightExcerpt(m.chunk, m.excerpt, m.title, m.url)
+  )
+}
+
 // Module-level so the array identity is stable across renders — passing a
 // fresh `['...']` literal as a prop every render would re-run TextSelectionMenu's
 // effect (tearing down and re-adding its document listeners) on every re-render.
@@ -1342,13 +1358,11 @@ export function ChatView({
             const data = await response.json()
             const matches: CheckSourceMatch[] = data?.matches ?? []
             // Only surface a dashed underline for an automatic (background)
-            // hit when at least one match's excerpt actually locates inside
-            // its chunk — an unhighlightable match here would render as a
-            // mark with nothing to show. Manual checks (`handleCheckSource`)
-            // are unaffected and always display every match, highlightable
-            // or not.
-            const hasHighlightableMatch = matches.some((m) => canHighlightExcerpt(m.chunk, m.excerpt, m.title, m.url))
-            if (hasHighlightableMatch) {
+            // hit when at least one match has a real, quotable highlight —
+            // see `hasMeaningfulAutoHighlight`. Manual checks
+            // (`handleCheckSource`) are unaffected and always display every
+            // match, highlightable or not.
+            if (hasMeaningfulAutoHighlight(matches)) {
               // Land each hit the moment it's confirmed rather than batching
               // behind the slowest candidate — an early sentence's dashed
               // underline shows up as soon as it's found, instead of every
@@ -1453,8 +1467,7 @@ export function ChatView({
             const data = await response.json()
             const matches: CheckSourceMatch[] = data?.matches ?? []
             // Same highlightability gate as the message-level sweep above.
-            const hasHighlightableMatch = matches.some((m) => canHighlightExcerpt(m.chunk, m.excerpt, m.title, m.url))
-            if (hasHighlightableMatch) {
+            if (hasMeaningfulAutoHighlight(matches)) {
               persistReportVerifiedClaim(messageIndex, reportId, {
                 id: candidate.id,
                 start: candidate.start,
