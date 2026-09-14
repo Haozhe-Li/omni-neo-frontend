@@ -117,6 +117,13 @@ export function AppSidebar({
     const searchRequestIdRef = useRef(0)
     const [isSearchVisible, setIsSearchVisible] = useState(false)
     const [isSyncing, setIsSyncing] = useState(false)
+    // Guest-to-account data merge (see auth-listener.tsx) used to force a
+    // full-page redirect to a dedicated /migrating screen. It now runs in the
+    // background and just swaps the "Recent" list for skeleton rows instead.
+    const [isGuestMerging, setIsGuestMerging] = useState(false)
+    const [guestMergeLeaving, setGuestMergeLeaving] = useState(false)
+    const guestMergeStartedAtRef = useRef(0)
+    const guestMergeTimersRef = useRef<{ hide?: ReturnType<typeof setTimeout>; unmount?: ReturnType<typeof setTimeout> }>({})
     const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
     const [isSettingsOpen, setIsSettingsOpen] = useState(false)
     const [settingsInitialTab, setSettingsInitialTab] = useState<TabId>('general')
@@ -239,6 +246,47 @@ export function AppSidebar({
         } catch { }
         finally { setIsSyncing(false) }
     }, [fetchWithAuth])
+
+    // Merges are usually sub-second, so flipping the skeleton on and straight
+    // back off reads as a flash/glitch rather than a loading state. Keep it
+    // visible for a minimum stretch, then fade it out, instead of snapping
+    // between skeleton and real list.
+    useEffect(() => {
+        const MIN_VISIBLE_MS = 700
+        const FADE_MS = 250
+
+        const clearTimers = () => {
+            if (guestMergeTimersRef.current.hide) clearTimeout(guestMergeTimersRef.current.hide)
+            if (guestMergeTimersRef.current.unmount) clearTimeout(guestMergeTimersRef.current.unmount)
+        }
+
+        const onStart = () => {
+            clearTimers()
+            guestMergeStartedAtRef.current = Date.now()
+            setGuestMergeLeaving(false)
+            setIsGuestMerging(true)
+        }
+        const onEnd = () => {
+            const elapsed = Date.now() - guestMergeStartedAtRef.current
+            const wait = Math.max(0, MIN_VISIBLE_MS - elapsed)
+            guestMergeTimersRef.current.hide = setTimeout(() => {
+                setGuestMergeLeaving(true)
+                guestMergeTimersRef.current.unmount = setTimeout(() => {
+                    setIsGuestMerging(false)
+                    setGuestMergeLeaving(false)
+                    syncFromBackend()
+                }, FADE_MS)
+            }, wait)
+        }
+
+        window.addEventListener('omni:guestmerge:start', onStart)
+        window.addEventListener('omni:guestmerge:end', onEnd)
+        return () => {
+            window.removeEventListener('omni:guestmerge:start', onStart)
+            window.removeEventListener('omni:guestmerge:end', onEnd)
+            clearTimers()
+        }
+    }, [syncFromBackend])
 
     // Debounce the search box before hitting the backend (200ms).
     useEffect(() => {
@@ -767,7 +815,24 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                     <>
                         <div className="omni-eyebrow pb-2">Recent</div>
                         <div className="flex flex-col">
-                            {filteredHistory.map((chat) => {
+                            {isGuestMerging && !trimmedSearchQuery ? (
+                                <div
+                                    className={`flex flex-col transition-opacity duration-[250ms] ease-out ${guestMergeLeaving ? 'opacity-0' : 'opacity-100'}`}
+                                    aria-hidden
+                                >
+                                    {[86, 62, 74, 50, 68].map((w, i) => (
+                                        <div key={i} className="flex items-center border-b border-[var(--line-hair)] py-[7px] last:border-b-0">
+                                            <span
+                                                className="h-[11px] rounded-full bg-[var(--line-strong)]"
+                                                style={{
+                                                    width: `${w}%`,
+                                                    animation: `omni-soft-pulse 1300ms ease-in-out ${i * 130}ms infinite`,
+                                                }}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : filteredHistory.map((chat) => {
                                 const isCurrent = currentThreadId === chat.thread_id
                                 return (
                                     <div
@@ -821,7 +886,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                                     </div>
                                 )
                             })}
-                            {filteredHistory.length === 0 && (
+                            {!isGuestMerging && filteredHistory.length === 0 && (
                                 <p className="py-3 text-[13.5px] leading-relaxed text-[var(--ink-faint)]">
                                     Nothing yet. Your threads collect here.
                                 </p>
