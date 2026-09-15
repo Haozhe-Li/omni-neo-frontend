@@ -7,6 +7,7 @@ import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
 import { highlightExcerpt, type HighlightSegment } from '@/lib/highlight'
 import { isTrustedTier } from '@/lib/credibility'
 import { CredibilityTag } from '@/components/credibility-badge'
+import { ArguableTag } from '@/components/arguable-badge'
 
 function hostOf(url: string) {
   try {
@@ -154,8 +155,9 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
           {snippet}
         </span>
       )}
-      <span className="mt-2.5 flex items-center">
+      <span className="mt-2.5 flex items-center gap-1.5">
         <CredibilityTag credibility={source.credibility} />
+        <ArguableTag arguable={source.arguable} />
       </span>
     </>
   )
@@ -224,8 +226,9 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
           )
         )}
       </span>
-      <span className="mt-2.5 flex items-center">
+      <span className="mt-2.5 flex items-center gap-1.5">
         <CredibilityTag credibility={match.credibility} />
+        <ArguableTag arguable={match.arguable} />
       </span>
     </>
   )
