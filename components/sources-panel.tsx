@@ -9,6 +9,8 @@ import { highlightExcerpt } from '@/lib/highlight'
 import { truncateFilename } from '@/lib/domain'
 import { CredibilityTag } from '@/components/credibility-badge'
 import { isTrustedTier, type Credibility } from '@/lib/credibility'
+import { ArguableTag } from '@/components/arguable-badge'
+import type { Arguable } from '@/lib/arguable'
 
 // Stable sort (ties keep their original relative order) that floats
 // official/trusted/first-party sources to the top of whatever list is being
@@ -38,7 +40,7 @@ const notifyUploadedDocument = () =>
 // user-uploaded document (source.url === '') gets a generic file icon and its
 // filename instead, and isn't clickable. Takes a structural {url, title}
 // rather than `Source` so it also accepts a `CheckSourceMatch`.
-function SourceCardHeader({ source }: { source: { url: string; title: string; credibility?: Credibility } }) {
+function SourceCardHeader({ source }: { source: { url: string; title: string; credibility?: Credibility; arguable?: Arguable } }) {
   const isDocument = !source.url
   return (
     <div className="mb-1.5 flex items-center gap-2">
@@ -58,6 +60,7 @@ function SourceCardHeader({ source }: { source: { url: string; title: string; cr
         {isDocument ? truncateFilename(source.title, 30, true) : domainOf(source.url)}
       </span>
       <CredibilityTag credibility={source.credibility} />
+      <ArguableTag arguable={source.arguable} />
     </div>
   )
 }
