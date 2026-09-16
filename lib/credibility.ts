@@ -1,5 +1,15 @@
 // Mirrors the backend's classification tiers (core/utils/source_credibility.py).
-export type CredibilityLabel = 'official' | 'trusted' | 'first_party' | 'social_media' | 'junk' | 'unknown'
+// "arguable" is a documented-reliability-problem tier, not a separate flag —
+// it's handled by its own dedicated UI (see `components/arguable-badge.tsx`
+// and `isArguable` below) rather than by `CREDIBILITY_META`/`CredibilityTag`.
+export type CredibilityLabel =
+  | 'official'
+  | 'trusted'
+  | 'first_party'
+  | 'social_media'
+  | 'arguable'
+  | 'junk'
+  | 'unknown'
 
 /** What a `Source`/`CheckSourceMatch`'s `credibility` field actually carries —
  * the backend always sends both: `reason` is a real, source-specific
@@ -19,7 +29,11 @@ export interface CredibilityMeta {
   trusted: boolean
 }
 
-type KnownLabel = Exclude<CredibilityLabel, 'unknown'>
+// "arguable" is excluded here the same way "unknown" is: it renders through
+// `ArguableTag`/`ArguableIcon`/`ArguableExplanation` instead of the generic
+// credibility pill, so it must never gain a `CREDIBILITY_META` entry (that
+// would make `CredibilityTag` render a second, redundant badge for it).
+type KnownLabel = Exclude<CredibilityLabel, 'unknown' | 'arguable'>
 
 export const CREDIBILITY_META: Record<KnownLabel, CredibilityMeta> = {
   official: { label: 'Official', trusted: true },
@@ -29,10 +43,11 @@ export const CREDIBILITY_META: Record<KnownLabel, CredibilityMeta> = {
   junk: { label: 'Low quality', trusted: false },
 }
 
-/** Returns null for "unknown"/missing — those render nothing, not a
- * placeholder, so content saved before this field existed looks unchanged. */
+/** Returns null for "unknown"/"arguable"/missing — those render nothing (or,
+ * for "arguable", render via the dedicated Arguable* components instead), not
+ * a placeholder, so content saved before this field existed looks unchanged. */
 export function getCredibilityMeta(credibility?: Credibility | null): CredibilityMeta | null {
-  if (!credibility || credibility.label === 'unknown') return null
+  if (!credibility || credibility.label === 'unknown' || credibility.label === 'arguable') return null
   return CREDIBILITY_META[credibility.label as KnownLabel] ?? null
 }
 
@@ -41,4 +56,13 @@ export function getCredibilityMeta(credibility?: Credibility | null): Credibilit
  * list without otherwise reordering it. */
 export function isTrustedTier(credibility?: Credibility | null): boolean {
   return getCredibilityMeta(credibility)?.trusted ?? false
+}
+
+/** True only when the backend classified this specific source as "arguable"
+ * (a documented reliability problem — see `source_credibility.py`), never a
+ * generic viewpoint flag. Absent/other label means "not flagged" — treat
+ * that the same as `false`, not as "verified clean", so content saved before
+ * this tier existed looks unchanged. */
+export function isArguable(credibility?: Credibility | null): boolean {
+  return credibility?.label === 'arguable'
 }

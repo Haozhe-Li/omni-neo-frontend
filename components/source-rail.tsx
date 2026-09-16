@@ -157,7 +157,7 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
       )}
       <span className="mt-2.5 flex items-center gap-1.5">
         <CredibilityTag credibility={source.credibility} />
-        <ArguableTag arguable={source.arguable} />
+        <ArguableTag credibility={source.credibility} />
       </span>
     </>
   )
@@ -228,7 +228,7 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
       </span>
       <span className="mt-2.5 flex items-center gap-1.5">
         <CredibilityTag credibility={match.credibility} />
-        <ArguableTag arguable={match.arguable} />
+        <ArguableTag credibility={match.credibility} />
       </span>
     </>
   )
