@@ -1,5 +1,4 @@
 import type { Credibility } from './credibility'
-import type { Arguable } from './arguable'
 
 // ── Wire protocol (mirrors backend core/stream.py) ─────────────────────────
 
@@ -88,18 +87,14 @@ export interface Source {
   date?: string
   /**
    * Credibility assigned by the backend (`core/utils/source_credibility.py`) —
-   * a label plus a source-specific one-sentence reason. Absent on older
-   * content saved before this field existed — treat that the same as
-   * "unknown" (render nothing, not a placeholder).
+   * a label plus a source-specific one-sentence reason. `label: 'arguable'`
+   * means the source has a documented reliability problem (see
+   * `isArguable`/`ArguableTag` in `lib/credibility.ts` /
+   * `components/arguable-badge.tsx`) — it's a tier of this same field, not a
+   * separate flag. Absent on older content saved before this field existed —
+   * treat that the same as "unknown" (render nothing, not a placeholder).
    */
   credibility?: Credibility
-  /**
-   * Set when the backend flagged this specific source's content as disputed
-   * (conflicts with other sources, contested claim, etc.), with a
-   * source-specific one-sentence `reason`. Absent means "not flagged" —
-   * treat that the same as "not disputed", not a placeholder state.
-   */
-  arguable?: Arguable
 }
 
 /**
@@ -119,7 +114,6 @@ export interface CheckSourceMatch {
   score: number
   turn: number | null
   credibility?: Credibility
-  arguable?: Arguable
 }
 
 /** Drives the sources panel's "check source" view (see `sources-panel.tsx`). */

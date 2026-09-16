@@ -59,7 +59,7 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                     {source.title}
                 </span>
                 <CredibilityTag credibility={source.credibility} />
-                <ArguableTag arguable={source.arguable} />
+                <ArguableTag credibility={source.credibility} />
                 <div className="flex items-center gap-2">
                     {source.content && (
                         <button
