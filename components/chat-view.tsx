@@ -708,6 +708,12 @@ export function ChatView({
   // Artifact side panel
   const [panelOpen, setPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
+  // Whether the panel fills the whole content area instead of sharing it
+  // with the thread — the "open like an unpublished Page" mode. Explicit
+  // state rather than inferred, so a plain click on the report card (which
+  // should always land in the familiar split view) and the card's dedicated
+  // expand button (which should jump straight to fullscreen) can disagree.
+  const [panelFullscreen, setPanelFullscreen] = useState(false)
   
   const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState<string | null>(null)
@@ -786,10 +792,14 @@ export function ChatView({
   }, [])
 
   // Open the panel and collapse the app sidebar (they compete for width).
+  // `fullscreen` defaults to false (not "keep whatever it was") so a plain
+  // click on a report card always lands in the familiar split view even if
+  // a previous report was left maximized.
   const openPanel = useCallback(
-    (id: string) => {
+    (id: string, opts?: { fullscreen?: boolean }) => {
       setActiveArtifactId(id)
       setPanelOpen(true)
+      setPanelFullscreen(!!opts?.fullscreen)
       setSidebarOpen?.(false)
     },
     [setSidebarOpen]
@@ -864,6 +874,11 @@ export function ChatView({
           <div className="flex items-center gap-2 shrink-0">
             <button
               disabled={isReportStreaming}
+              onClick={(e) => {
+                e.stopPropagation()
+                openPanel(r.id, { fullscreen: true })
+              }}
+              title={`Open ${r.title} fullscreen`}
               className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--ink-faint)] opacity-0 transition-colors hover:bg-[var(--sand)] hover:text-[var(--teal)] group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-0"
             >
               <Maximize2 size={13} strokeWidth={2} />
@@ -2403,8 +2418,10 @@ export function ChatView({
   // ── render ───────────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
-      {/* Main column */}
-      <div className="flex flex-col h-full relative min-w-0 flex-1 transition-all duration-300">
+      {/* Main column — hidden outright (not just squeezed to w-0) once the
+          panel goes fullscreen: it hands the panel the entire row via flex,
+          same as the report card's "Open" overlay hands it 62% otherwise. */}
+      <div className={panelOpen && panelFullscreen ? 'hidden' : 'flex flex-col h-full relative min-w-0 flex-1 transition-all duration-300'}>
         <TextSelectionMenu
           containerRef={scrollRef}
           onFollowUp={handleAskOmni}
@@ -3331,7 +3348,7 @@ export function ChatView({
       {hasPanelContent && (
         <div
           className={`hidden sm:block h-full flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            panelOpen ? 'w-[62%] max-w-[1240px]' : 'w-0'
+            !panelOpen ? 'w-0' : panelFullscreen ? 'w-full' : 'w-[62%] max-w-[1240px]'
           }`}
         >
           <div className="h-full w-full">
@@ -3345,6 +3362,10 @@ export function ChatView({
               onFollowUp={handleAskOmni}
               onCheckSource={handleCheckSource}
               onVerifiedClaimClick={handleReportVerifiedClaimClick}
+              checkSourceState={checkSourceState}
+              onDismissCheckSource={() => setCheckSourceState(null)}
+              isFullscreen={panelFullscreen}
+              onToggleFullscreen={() => setPanelFullscreen((v) => !v)}
             />
           </div>
         </div>
@@ -3364,6 +3385,8 @@ export function ChatView({
               onFollowUp={handleAskOmni}
               onCheckSource={handleCheckSource}
               onVerifiedClaimClick={handleReportVerifiedClaimClick}
+              checkSourceState={checkSourceState}
+              onDismissCheckSource={() => setCheckSourceState(null)}
             />
           </div>
         </div>

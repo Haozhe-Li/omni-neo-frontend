@@ -226,7 +226,7 @@ const DOCUMENT_LABEL_MAX = 20
 const notifyUploadedDocument = () =>
   toast.info("This is a document you uploaded — it can't be opened as a link.")
 
-export function CitationBadge({ sources }: { sources: Source[] }) {
+export function CitationBadge({ sources, variant = 'quiet' }: { sources: Source[]; variant?: 'quiet' | 'prominent' }) {
   const [idx, setIdx] = useState(0)
   const current = sources[Math.min(idx, sources.length - 1)]
   const primaryIsDocument = !sources[0].url
@@ -247,17 +247,26 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
     return () => cancelAnimationFrame(raf)
   }, [])
 
-  /* Deliberately quiet. A citation is punctuation, not a call to action:
-     every teal chip in a paragraph pulled the eye off the sentence it was
-     supporting, and a dense answer became a field of buttons. Sand fill,
-     muted ink, colour only on hover — it recedes into the prose until you
-     look for it.
+  /* Deliberately quiet in chat. A citation is punctuation, not a call to
+     action: every teal chip in a paragraph pulled the eye off the sentence
+     it was supporting, and a dense answer became a field of buttons. Sand
+     fill, muted ink, colour only on hover — it recedes into the prose until
+     you look for it.
+
+     A report is read differently — slower, closer to a document than a chat
+     reply — and readers specifically look for its citations, so the same
+     chip gets a `prominent` variant there: a hairline border and teal text
+     lift it just enough off the page to register as "there's a source here"
+     at a glance, without going as loud as a solid-fill button.
 
      `leading-[1.35]` rather than `leading-none` is the fix for the clipped
      glyphs: at zero leading the line box is exactly the font size, so
      descenders in a host like "google" or "gg" were cut off by the chip's
      own rounded edge. */
-  const triggerClassName = `mx-0.5 inline-flex max-w-[150px] items-center rounded-[4px] bg-[var(--sand)] px-1.5 py-[1px] align-baseline font-mono text-[11px] leading-[1.35] text-[var(--ink-muted)] no-underline transition-colors transition-opacity duration-300 ease-out hover:bg-[var(--sand-deep)] hover:text-[var(--ink)] ${revealed ? 'opacity-100' : 'opacity-0'}`
+  const triggerClassName =
+    variant === 'prominent'
+      ? `mx-0.5 inline-flex max-w-[150px] items-center rounded-[5px] border border-[var(--line-strong)] bg-[var(--paper-raised)] px-1.5 py-[1px] align-baseline font-mono text-[11px] leading-[1.35] text-[var(--teal)] no-underline transition-colors transition-opacity duration-300 ease-out hover:border-[var(--teal-line)] hover:bg-[var(--teal-tint)] ${revealed ? 'opacity-100' : 'opacity-0'}`
+      : `mx-0.5 inline-flex max-w-[150px] items-center rounded-[4px] bg-[var(--sand)] px-1.5 py-[1px] align-baseline font-mono text-[11px] leading-[1.35] text-[var(--ink-muted)] no-underline transition-colors transition-opacity duration-300 ease-out hover:bg-[var(--sand-deep)] hover:text-[var(--ink)] ${revealed ? 'opacity-100' : 'opacity-0'}`
 
   return (
     <HoverCard openDelay={150} closeDelay={100} onOpenChange={(open) => { if (!open) setIdx(0) }}>
@@ -551,17 +560,19 @@ interface MarkdownRenderContextValue {
   citationMap: Map<number, Source>
   verifiedIds: ReadonlySet<string>
   onVerifiedClaimClick?: (id: string) => void
+  citationVariant: 'quiet' | 'prominent'
 }
 
 const MarkdownRenderContext = createContext<MarkdownRenderContextValue>({
   citationMap: new Map(),
   verifiedIds: new Set(),
+  citationVariant: 'quiet',
 })
 
 function MarkdownLink({ href, children }: { href?: string; children?: ReactNode }) {
-  const { citationMap } = useContext(MarkdownRenderContext)
+  const { citationMap, citationVariant } = useContext(MarkdownRenderContext)
   const sources = resolveCitationSources(href, children, citationMap)
-  if (sources.length > 0) return <CitationBadge sources={sources} />
+  if (sources.length > 0) return <CitationBadge sources={sources} variant={citationVariant} />
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
       {children}
@@ -755,10 +766,18 @@ interface MarkdownMessageProps {
    * that never verify claims.
    */
   wrapClaimCandidates?: boolean
+  /**
+   * Visual weight of `[n]` citation chips. `'quiet'` (default) is the
+   * deliberately understated chat treatment (see `CitationBadge`). Pass
+   * `'prominent'` for surfaces read like a document rather than a chat
+   * reply — currently just the report reader — where readers specifically
+   * scan for citations and the quiet chip reads as invisible.
+   */
+  citationVariant?: 'quiet' | 'prominent'
 }
 
 /** GitHub-flavoured Markdown renderer matching the original answer styling. */
-export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick, hideCitations, wrapClaimCandidates }: MarkdownMessageProps) {
+export const MarkdownMessage = memo(function MarkdownMessage({ content, className = '', sources, verifiedClaims, onVerifiedClaimClick, hideCitations, wrapClaimCandidates, citationVariant = 'quiet' }: MarkdownMessageProps) {
   const citationMap = useMemo(() => {
     const map = new Map<number, Source>()
     for (const s of sources ?? []) if (typeof s.n === 'number') map.set(s.n, s)
@@ -785,8 +804,8 @@ export const MarkdownMessage = memo(function MarkdownMessage({ content, classNam
     [content, verifySpans]
   )
   const renderContext = useMemo(
-    () => ({ citationMap, verifiedIds, onVerifiedClaimClick }),
-    [citationMap, verifiedIds, onVerifiedClaimClick]
+    () => ({ citationMap, verifiedIds, onVerifiedClaimClick, citationVariant }),
+    [citationMap, verifiedIds, onVerifiedClaimClick, citationVariant]
   )
 
   return (

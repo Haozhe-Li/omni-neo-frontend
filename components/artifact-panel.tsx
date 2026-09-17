@@ -1,14 +1,24 @@
 'use client'
 
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Code2, Eye, Link2, Globe } from 'lucide-react'
+import { X, BarChart3, FileText, Copy, Check, Share, Download, ExternalLink, Code2, Eye, Link2, Globe, Maximize2, Minimize2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
-import type { ChartArtifact, ReportArtifact } from '@/lib/types'
+import { SourcesPanel } from '@/components/sources-panel'
+import { extractCitedNumbers } from '@/lib/markdown'
+import type { ChartArtifact, ReportArtifact, CheckSourceState } from '@/lib/types'
+
+function domainOf(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
 
 // Report ids follow `parseReports`' deterministic `m<messageIndex>[-b<n>]-
 // report-<n>` scheme (see `lib/report-parser.ts`) — recovering the owning
@@ -48,9 +58,25 @@ interface ArtifactPanelProps {
   /** Called with (reportId, claimId) when a verify-claim dashed underline
    * inside the active report is clicked. */
   onVerifiedClaimClick?: (reportId: string, id: string) => void
+  /**
+   * The thread's shared check-source result (see chat-view.tsx). A check
+   * triggered from inside this panel — via `onCheckSource` or a verify-claim
+   * click — lands here just like it would in the main chat's sources rail;
+   * this panel surfaces it in its own `SourcesPanel` drawer instead, since
+   * once the report is open that rail can be squeezed out of sight behind it.
+   */
+  checkSourceState?: CheckSourceState | null
+  /** Clears `checkSourceState` — called when the drawer is closed. */
+  onDismissCheckSource?: () => void
+  /** Whether the panel currently fills the whole content area (see the
+   * width toggle in chat-view.tsx) rather than sharing it with the thread. */
+  isFullscreen?: boolean
+  /** Toggles `isFullscreen`. Omitted hides the control (e.g. on mobile,
+   * which is already a full-screen overlay). */
+  onToggleFullscreen?: () => void
 }
 
-export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose, drafting, onFollowUp, onCheckSource, onVerifiedClaimClick }: ArtifactPanelProps) {
+export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose, drafting, onFollowUp, onCheckSource, onVerifiedClaimClick, checkSourceState, onDismissCheckSource, isFullscreen, onToggleFullscreen }: ArtifactPanelProps) {
   const items: PanelItem[] = [
     ...reports.map((r) => ({ id: r.id, title: r.title, kind: 'report' as const, report: r })),
     ...artifacts.map((a) => ({ id: a.id, title: a.title, kind: 'chart' as const, chart: a })),
@@ -65,9 +91,28 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   const [exportOpen, setExportOpen] = useState(false)
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [isPdfLoading, setIsPdfLoading] = useState(false)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   const containerRef = useRef<HTMLElement>(null)
 
   const activeReportId = active?.report?.id
+  const reportSources = active?.report?.sources ?? []
+  // Which of this report's sources it actually cites inline, so the drawer
+  // can split "used" from "read but not cited" the same way the chat rail
+  // and the published Pages view do (see `partitionSources`).
+  const citedNumbers = useMemo(
+    () => (active?.report ? extractCitedNumbers(active.report.content) : new Set<number>()),
+    [active?.report]
+  )
+  // A check triggered from inside this report (text selection or a
+  // verify-claim click) should pull this drawer open on its own, same as
+  // clicking the "Sources" pill does — the reader just asked a question
+  // about this report's evidence and shouldn't also have to go find the
+  // button.
+  const sourcesDrawerOpen = sourcesOpen || !!checkSourceState
+  const closeSourcesDrawer = () => {
+    setSourcesOpen(false)
+    onDismissCheckSource?.()
+  }
   // Stable per-report-id callback, not a fresh closure at the render site —
   // this panel re-renders on every keystroke in the composer (it's a child
   // of the same ChatView that owns the input box), and MarkdownMessage folds
@@ -360,6 +405,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
     setLinkCopied(false)
     setShareOpen(false)
     setExportOpen(false)
+    setSourcesOpen(false)
   }, [active?.id])
 
   // No artifact yet but the agent is writing one → show a writing placeholder.
@@ -430,8 +476,15 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
     /* ── The report reader ────────────────────────────────────────────────
         Raised paper, not the page ground: a report is a document handed to
         you, and lifting its surface above the thread it came from is what
-        makes the slide-over read as "opened" rather than "another column". */
-    <div className="relative flex h-full w-full flex-col border-l border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[-30px_0_60px_-40px_color-mix(in_srgb,var(--ink)_45%,transparent)]">
+        makes the slide-over read as "opened" rather than "another column".
+
+        Outer row, not a single column: the sources drawer (opened from the
+        header pill, or by a check-source result landing on this panel) sits
+        as a sibling to the reader rather than floating over it — same
+        composition as PagesDetailView, so a report's sources behave the
+        same way whether it's still in the panel or already published. */
+    <div className="relative flex h-full w-full">
+    <div className="relative flex h-full min-w-0 flex-1 flex-col border-l border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[-30px_0_60px_-40px_color-mix(in_srgb,var(--ink)_45%,transparent)]">
       {/* Header */}
       <div className="relative z-20 flex h-[52px] shrink-0 items-center gap-3 border-b border-[var(--line-hair)] px-5">
         {/* Title — takes all remaining space, truncates */}
@@ -448,6 +501,37 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         
         {/* Controls — fixed width, never wrap */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Sources — same favicon-stack pill as the published Pages toolbar
+              (see PagesDetailView), so a report reads as the same document
+              whether it's still sitting in the panel or already shared.
+              Opens this panel's own sources drawer rather than the thread's
+              rail, which the panel itself can crowd out of sight. */}
+          {active.kind === 'report' && reportSources.length > 0 && (
+            <button
+              disabled={drafting}
+              onClick={() => setSourcesOpen(true)}
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] text-[var(--ink-muted)] transition-colors hover:bg-[var(--sand)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span className="flex -space-x-1.5">
+                {reportSources.slice(0, 4).map((s, i) =>
+                  s.url ? (
+                    <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--paper-raised)] overflow-hidden bg-[var(--sand)] flex items-center justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
+                    </span>
+                  ) : (
+                    <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--paper-raised)] overflow-hidden bg-[var(--sand)] flex items-center justify-center">
+                      <FileText size={9} className="text-[var(--ink-muted)]" />
+                    </span>
+                  )
+                )}
+              </span>
+              <span className="hidden sm:inline">
+                {reportSources.length} source{reportSources.length > 1 ? 's' : ''}
+              </span>
+            </button>
+          )}
+
           {/* View / Code Toggle */}
           <div className="hidden items-center rounded-full border border-[var(--line-strong)] p-0.5 sm:flex">
             <button 
@@ -576,6 +660,21 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             )}
           </div>
 
+          {/* Fullscreen — expands the panel to fill the whole content area,
+              like opening the report as its own page instead of a slide-over
+              beside the thread (see chat-view.tsx's width toggle). Hidden
+              when the host doesn't wire it up (mobile's overlay is already
+              full-screen). */}
+          {onToggleFullscreen && (
+            <button
+              onClick={onToggleFullscreen}
+              className="hidden h-7 w-7 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)] sm:flex"
+              title={isFullscreen ? 'Exit fullscreen' : 'Open fullscreen'}
+            >
+              {isFullscreen ? <Minimize2 size={13} strokeWidth={1.5} /> : <Maximize2 size={13} strokeWidth={1.5} />}
+            </button>
+          )}
+
           {/* Close */}
           <button
             onClick={onClose}
@@ -617,11 +716,16 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         ) : active.report ? (
           <article
             ref={containerRef}
-            className="mx-auto max-w-[68ch]"
+            // Fullscreen borrows the published Pages article's measure
+            // (max-w-[880px]) instead of the split-view's narrower 68ch —
+            // the panel now has the room, and a wider, blog-like column is
+            // part of reading it as "the same document".
+            className={`mx-auto ${isFullscreen ? 'max-w-[880px]' : 'max-w-[68ch]'}`}
             data-message-index={viewMode === 'view' ? reportMessageIndex(active.report.id) ?? undefined : undefined}
           >
             {viewMode === 'view' ? (
               <>
+                <p className="omni-eyebrow mb-3">Research Report</p>
                 <h1 className="omni-display mb-7 text-[38px] leading-[1.1] text-[var(--ink)]">{active.report.title}</h1>
                 {active.report.content ? (
                   <MarkdownMessage
@@ -633,6 +737,11 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                     // offsets against a still-growing content string would be
                     // stale by the time the background check confirms them.
                     wrapClaimCandidates={active.report.complete !== false && !!handleVerifiedClaimClick}
+                    // A report is read closer to a document than a chat
+                    // reply — readers specifically scan for its citations —
+                    // so its `[n]` chips get the bordered, higher-contrast
+                    // treatment instead of chat's deliberately quiet one.
+                    citationVariant="prominent"
                   />
                 ) : null}
 
@@ -650,6 +759,17 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
       {active.kind === 'report' && viewMode === 'view' && (
         <TextSelectionMenu containerRef={containerRef} onFollowUp={onFollowUp} onCheckSource={onCheckSource} />
       )}
+    </div>
+
+    {active.kind === 'report' && (
+      <SourcesPanel
+        sources={reportSources}
+        citedNumbers={citedNumbers}
+        open={sourcesDrawerOpen}
+        onClose={closeSourcesDrawer}
+        checkSource={checkSourceState}
+      />
+    )}
     </div>
   )
 }

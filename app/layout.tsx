@@ -128,6 +128,25 @@ export default function Rootlayout({
       suppressHydrationWarning
       className={`${hankenGrotesk.variable} ${instrumentSerif.variable} ${plexMono.variable}`}
     >
+      <head>
+        {/* Noto Serif SC pairs with Instrument Serif for CJK glyphs — see
+            the type-system note above and the font-family fallback chains
+            in globals.css (`--font-plex`/`--font-display`/`.omni-display`).
+            Loaded as a plain stylesheet rather than through next/font/google:
+            that loader can't self-host a CJK subset of a "Serif SC" family
+            (its manifest only lists latin/cyrillic/vietnamese for these), and
+            a plain `@import url(...)` inside globals.css fails to build —
+            Tailwind v4's `@import 'tailwindcss'` expands in place into a
+            block of non-import rules, which then sits ahead of any sibling
+            `@import` regardless of source order, and CSS requires every
+            `@import` to precede all other rules. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500&display=swap"
+        />
+      </head>
       <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
