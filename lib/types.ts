@@ -116,7 +116,7 @@ export interface CheckSourceMatch {
   credibility?: Credibility
 }
 
-/** Drives the sources panel's "check source" view (see `sources-panel.tsx`). */
+/** Drives the sources rail's "check source" view (see `source-rail.tsx`). */
 export interface CheckSourceState {
   status: 'loading' | 'done'
   claim: string

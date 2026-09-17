@@ -16,19 +16,12 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MarkdownBlogView } from '@/components/markdown-blog-view'
-import { SourcesPanel } from '@/components/sources-panel'
+import { SourcesRail } from '@/components/source-rail'
 import { usePagesShellControls } from '@/components/pages-shell'
+import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
 import { OmniMark } from '@/components/omni-mark'
-
-function domainOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
 
 // Always production, even when this page is being previewed on localhost or
 // staging — Omni's chat has to be able to fetch the URL it's handed, and the
@@ -61,11 +54,27 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
   const [copied, setCopied] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  // Narrow-width only: which of Article/Sources is showing. Ignored once the
+  // container is wide enough for the rail (see `.omni-report-*` in globals.css).
+  const [tab, setTab] = useState<'article' | 'sources'>('article')
   const containerRef = useRef<HTMLDivElement>(null)
+  const railFade = useEdgeFade<HTMLElement>()
 
+  // A stranger can't open a document someone uploaded into their own thread,
+  // so a published page lists only the web sources.
   const validSources = useMemo(() => (sources || []).filter((s) => s?.url), [sources])
   const citedNumbers = useMemo(() => extractCitedNumbers(markdown), [markdown])
+  // Same split the thread and the in-chat reader show: what the page cites,
+  // then what the research read without citing.
+  const cited = useMemo(
+    () => validSources.filter((s) => typeof s.n === 'number' && citedNumbers.has(s.n)),
+    [validSources, citedNumbers]
+  )
+  const unused = useMemo(
+    () => validSources.filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n))),
+    [validSources, citedNumbers]
+  )
+  const hasSources = validSources.length > 0
 
   useEffect(() => {
     setShareOpen(false)
@@ -382,26 +391,6 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
         <div className="flex-1" />
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {/* Sources — opens the same drawer used in chat */}
-          {validSources.length > 0 && (
-            <button
-              onClick={() => setSourcesOpen(true)}
-              className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all"
-            >
-              <span className="flex -space-x-1.5">
-                {validSources.slice(0, 4).map((s, i) => (
-                  <span key={i} className="h-4 w-4 rounded-full ring-1 ring-[var(--background)] overflow-hidden bg-[var(--secondary)] flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`https://www.google.com/s2/favicons?domain=${domainOf(s.url)}&sz=64`} alt="" className="h-full w-full object-cover" />
-                  </span>
-                ))}
-              </span>
-              <span className="hidden sm:inline">
-                {validSources.length} source{validSources.length > 1 ? 's' : ''}
-              </span>
-            </button>
-          )}
-
           {/* View / Code Toggle */}
           <div className="hidden items-center rounded-full border border-[var(--line-strong)] p-0.5 sm:flex">
             <button
@@ -545,41 +534,81 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div ref={containerRef}>
-          {viewMode === 'view' ? (
-            <div className="px-4 py-8 sm:px-6 sm:py-10">
-              <MarkdownBlogView
-                embedded
-                showMeta={false}
-                showReferences={false}
-                title={title}
-                markdown={markdown}
-                author={author}
-                publishedAt={publishedAt}
-                tags={tags}
-                sources={sources}
-                coverImage={coverImage}
-              />
+      {/* Body — the reader's composition (see `.omni-report-*` in globals.css
+          and ArtifactPanel): the page keeps its measure, its sources sit
+          beside it in the thread's 248px rail, and under the rail's width
+          they trade places behind the Article/Sources tabs. `containerRef`
+          stays on the document alone so an export is the page, not the page
+          plus a column of source cards. */}
+      <div className="omni-report-scroll flex-1 overflow-y-auto custom-scrollbar">
+        {viewMode === 'view' ? (
+          <div className="px-4 py-8 sm:px-6 sm:py-10">
+            {hasSources && (
+              <div className="omni-report-tabs mx-auto mb-7 w-full max-w-[880px] items-center gap-5 border-b border-[var(--line)]">
+                <button
+                  onClick={() => setTab('article')}
+                  className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
+                    tab === 'article' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
+                  }`}
+                >
+                  Article
+                </button>
+                <button
+                  onClick={() => setTab('sources')}
+                  className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
+                    tab === 'sources' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
+                  }`}
+                >
+                  Sources · {validSources.length}
+                </button>
+              </div>
+            )}
+
+            <div className="omni-report-grid mx-auto w-full max-w-[1180px]">
+              <div
+                ref={containerRef}
+                className={`omni-report-col mx-auto w-full min-w-0 max-w-[880px] ${tab === 'sources' ? 'omni-report-col-hidden' : ''}`}
+              >
+                <MarkdownBlogView
+                  embedded
+                  showMeta={false}
+                  showReferences={false}
+                  title={title}
+                  markdown={markdown}
+                  author={author}
+                  publishedAt={publishedAt}
+                  tags={tags}
+                  sources={sources}
+                  coverImage={coverImage}
+                />
+              </div>
+
+              {hasSources && (
+                <aside
+                  ref={railFade.ref}
+                  style={railFade.style}
+                  className="omni-report-rail omni-hide-scrollbar omni-edge-fade sticky top-6 max-h-[calc(100dvh-140px)] flex-col gap-2.5 overflow-y-auto pb-6"
+                >
+                  <SourcesRail cited={cited} unused={unused} compact />
+                </aside>
+              )}
             </div>
-          ) : (
-            <div className="max-w-3xl mx-auto px-6 py-8 md:px-8">
-              <pre className="whitespace-pre-wrap pb-12 font-mono text-[13px] leading-[1.7] text-[var(--ink-body)]">
-                {fullText}
-              </pre>
-            </div>
-          )}
-        </div>
+
+            {hasSources && tab === 'sources' && (
+              <div className="omni-report-inline-sources mx-auto w-full max-w-[880px] flex-col gap-3">
+                <SourcesRail cited={cited} unused={unused} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div ref={containerRef} className="max-w-3xl mx-auto px-6 py-8 md:px-8">
+            <pre className="whitespace-pre-wrap pb-12 font-mono text-[13px] leading-[1.7] text-[var(--ink-body)]">
+              {fullText}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
-
-    <SourcesPanel
-      sources={validSources}
-      citedNumbers={citedNumbers}
-      open={sourcesOpen}
-      onClose={() => setSourcesOpen(false)}
-    />
     </div>
   )
 }

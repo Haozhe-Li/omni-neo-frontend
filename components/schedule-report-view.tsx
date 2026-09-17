@@ -15,8 +15,9 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MarkdownBlogView } from '@/components/markdown-blog-view'
-import { SourcesPanel } from '@/components/sources-panel'
+import { SourcesRail } from '@/components/source-rail'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
+import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
 
@@ -45,11 +46,24 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
   const [shareOpen, setShareOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  // Narrow-width only: which of Report/Sources is showing. Ignored once the
+  // container is wide enough for the rail (see `.omni-report-*` in globals.css).
+  const [tab, setTab] = useState<'report' | 'sources'>('report')
   const containerRef = useRef<HTMLDivElement>(null)
+  const railFade = useEdgeFade<HTMLElement>()
 
   const validSources = useMemo(() => (sources || []).filter((s) => s?.url), [sources])
   const citedNumbers = useMemo(() => extractCitedNumbers(markdown), [markdown])
+  // Same split the thread and the in-chat reader show.
+  const cited = useMemo(
+    () => validSources.filter((s) => typeof s.n === 'number' && citedNumbers.has(s.n)),
+    [validSources, citedNumbers]
+  )
+  const unused = useMemo(
+    () => validSources.filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n))),
+    [validSources, citedNumbers]
+  )
+  const hasSources = validSources.length > 0
 
   const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
   const fullText = `# ${title}\n\n${markdown}`
@@ -154,17 +168,6 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
           <div className="flex-1" />
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {validSources.length > 0 && (
-              <button
-                onClick={() => setSourcesOpen(true)}
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] transition-all"
-              >
-                <span className="hidden sm:inline">
-                  {validSources.length} source{validSources.length > 1 ? 's' : ''}
-                </span>
-              </button>
-            )}
-
             <div className="hidden sm:flex items-center p-0.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/50">
               <button
                 onClick={() => setViewMode('view')}
@@ -225,38 +228,76 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <div ref={containerRef}>
-            {viewMode === 'view' ? (
-              <div className="px-4 py-8 sm:px-6 sm:py-10">
-                <MarkdownBlogView
-                  embedded
-                  showMeta={false}
-                  showReferences={false}
-                  title={title}
-                  markdown={markdown}
-                  publishedAt={publishedAt}
-                  sources={sources}
-                />
+        {/* Body — the reader's composition (see `.omni-report-*` in
+            globals.css and ArtifactPanel). `containerRef` stays on the
+            document alone so an export is the report, not the report plus a
+            column of source cards. */}
+        <div className="omni-report-scroll flex-1 overflow-y-auto custom-scrollbar">
+          {viewMode === 'view' ? (
+            <div className="px-4 py-8 sm:px-6 sm:py-10">
+              {hasSources && (
+                <div className="omni-report-tabs mx-auto mb-7 w-full max-w-[880px] items-center gap-5 border-b border-[var(--line)]">
+                  <button
+                    onClick={() => setTab('report')}
+                    className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
+                      tab === 'report' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
+                    }`}
+                  >
+                    Report
+                  </button>
+                  <button
+                    onClick={() => setTab('sources')}
+                    className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
+                      tab === 'sources' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
+                    }`}
+                  >
+                    Sources · {validSources.length}
+                  </button>
+                </div>
+              )}
+
+              <div className="omni-report-grid mx-auto w-full max-w-[1180px]">
+                <div
+                  ref={containerRef}
+                  className={`omni-report-col mx-auto w-full min-w-0 max-w-[880px] ${tab === 'sources' ? 'omni-report-col-hidden' : ''}`}
+                >
+                  <MarkdownBlogView
+                    embedded
+                    showMeta={false}
+                    showReferences={false}
+                    title={title}
+                    markdown={markdown}
+                    publishedAt={publishedAt}
+                    sources={sources}
+                  />
+                </div>
+
+                {hasSources && (
+                  <aside
+                    ref={railFade.ref}
+                    style={railFade.style}
+                    className="omni-report-rail omni-hide-scrollbar omni-edge-fade sticky top-6 max-h-[calc(100dvh-140px)] flex-col gap-2.5 overflow-y-auto pb-6"
+                  >
+                    <SourcesRail cited={cited} unused={unused} compact />
+                  </aside>
+                )}
               </div>
-            ) : (
-              <div className="max-w-3xl mx-auto px-6 py-8 md:px-8">
-                <pre className="text-[14px] leading-relaxed text-[var(--foreground)] opacity-90 whitespace-pre-wrap font-mono pb-12">
-                  {fullText}
-                </pre>
-              </div>
-            )}
-          </div>
+
+              {hasSources && tab === 'sources' && (
+                <div className="omni-report-inline-sources mx-auto w-full max-w-[880px] flex-col gap-3">
+                  <SourcesRail cited={cited} unused={unused} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div ref={containerRef} className="max-w-3xl mx-auto px-6 py-8 md:px-8">
+              <pre className="text-[14px] leading-relaxed text-[var(--foreground)] opacity-90 whitespace-pre-wrap font-mono pb-12">
+                {fullText}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
-
-      <SourcesPanel
-        sources={validSources}
-        citedNumbers={citedNumbers}
-        open={sourcesOpen}
-        onClose={() => setSourcesOpen(false)}
-      />
     </div>
   )
 }
