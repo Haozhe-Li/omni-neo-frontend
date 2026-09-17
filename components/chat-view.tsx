@@ -1122,7 +1122,11 @@ export function ChatView({
     messages.forEach((m, i) => {
       if (m.role !== 'assistant') return
       const own = m.sources ?? []
-      const text = parsedByIndex[i]?.text ?? m.content ?? ''
+      // The raw turn, not `parsedByIndex[i].text`: that one has the `<report>`
+      // block stripped out of it, so on a research turn — where every `[n]`
+      // lives inside the document — the rail declared all nine sources "read
+      // but not used" while the report beside it cited them.
+      const text = m.content || ''
       const citedNumbers = extractCitedNumbers(text)
       const seen = new Set<number>()
       const cited: Source[] = []
@@ -1134,6 +1138,46 @@ export function ChatView({
       }
       const unused = own.filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n)))
       out.set(i, { cited, unused })
+    })
+    return out
+  }, [messages, mergedSources])
+
+  /**
+   * The same split, per `<report>` rather than per turn — what the reader's
+   * own rail shows (see `ArtifactPanel`).
+   *
+   * A report can't reuse its turn's entry above: `sourcesByTurn` reads the
+   * narration *with the report stripped out*, so for a research turn — where
+   * every `[n]` lives inside the document — that entry cites nothing. The
+   * citations here are the report's own; `unused` stays the owning turn's
+   * fetches, the same scoping rule as above. While the report is still being
+   * written nothing has been "not cited" yet, so it shows what the turn has
+   * read so far, flat, exactly as the thread does mid-run.
+   */
+  const reportRailSources = useMemo(() => {
+    const out = new Map<string, { cited: Source[]; unused: Source[]; researching?: boolean }>()
+    messages.forEach((m, i) => {
+      if (m.role !== 'assistant') return
+      const own = m.sources ?? []
+      for (const r of parsedByIndex[i]?.reports ?? []) {
+        if (r.complete === false) {
+          out.set(r.id, { cited: own, unused: [], researching: true })
+          continue
+        }
+        const citedNumbers = extractCitedNumbers(r.content)
+        const seen = new Set<number>()
+        const cited: Source[] = []
+        for (const n of citedNumbers) {
+          if (seen.has(n)) continue
+          seen.add(n)
+          const src = mergedSources.find((s) => s.n === n)
+          if (src) cited.push(src)
+        }
+        out.set(r.id, {
+          cited,
+          unused: own.filter((s) => !(typeof s.n === 'number' && citedNumbers.has(s.n))),
+        })
+      }
     })
     return out
   }, [messages, parsedByIndex, mergedSources])
@@ -3364,6 +3408,7 @@ export function ChatView({
               onVerifiedClaimClick={handleReportVerifiedClaimClick}
               checkSourceState={checkSourceState}
               onDismissCheckSource={() => setCheckSourceState(null)}
+              reportSources={reportRailSources}
               isFullscreen={panelFullscreen}
               onToggleFullscreen={() => setPanelFullscreen((v) => !v)}
             />
@@ -3387,6 +3432,7 @@ export function ChatView({
               onVerifiedClaimClick={handleReportVerifiedClaimClick}
               checkSourceState={checkSourceState}
               onDismissCheckSource={() => setCheckSourceState(null)}
+              reportSources={reportRailSources}
             />
           </div>
         </div>

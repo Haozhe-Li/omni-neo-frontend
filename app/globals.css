@@ -1489,6 +1489,68 @@
   }
 }
 
+/* ── Report reader column + sources rail ───────────────────────────────────
+   The same composition as the thread's, on the reader's own container: the
+   document keeps its measure, its sources sit beside it in the same 248px
+   rail, made of the same cards. A container query for the same reason as
+   above, only more so — the reader is a 62% slide-over most of the time, so
+   the viewport width says nothing about whether a second column fits.
+
+   Under the breakpoint the rail steps aside for the Report/Sources tabs at
+   the top of the reader, which swap the two in place. That is the phone
+   behaviour from the thread rather than its tablet one: a report runs long,
+   and a source list parked below it — or worse, a check-source result
+   landing down there — is off screen exactly when it is asked for. */
+.omni-report-scroll {
+  container-type: inline-size;
+  container-name: omni-report;
+}
+
+.omni-report-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 44px;
+}
+
+.omni-report-rail {
+  display: none;
+}
+
+.omni-report-tabs {
+  display: flex;
+}
+
+.omni-report-inline-sources {
+  display: flex;
+}
+
+/* Set by the reader while the Sources tab is selected. Declared before the
+   container query below so that, once the rail is up, the document comes
+   back regardless of which tab was last picked while narrow. */
+.omni-report-col-hidden {
+  display: none;
+}
+
+@container omni-report (min-width: 1000px) {
+  .omni-report-grid {
+    grid-template-columns: minmax(0, 1fr) 248px;
+  }
+
+  .omni-report-rail {
+    display: flex;
+  }
+
+  .omni-report-tabs,
+  .omni-report-inline-sources {
+    display: none;
+  }
+
+  .omni-report-col-hidden {
+    display: block;
+  }
+}
+
 /* ── Scrollbars that don't draw ────────────────────────────────────────────
    For panels whose scroll is incidental to their layout rather than part of
    it — the sources rail above all. A classic scrollbar there lays a grey
