@@ -581,7 +581,12 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
               Share
             </button>
             {shareOpen && active.kind === 'report' && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-[272px] overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] origin-top-right animate-in fade-in zoom-in-95">
+              // `right-0` anchors to this button's own (narrow) wrapper, which
+              // sits left of Export and Close — fine on desktop, but on mobile
+              // that pushes a 272px-wide menu 50-plus px past the left edge of
+              // the screen. Below `sm`, switch to a viewport-anchored `fixed`
+              // sheet under the header instead of a button-anchored dropdown.
+              <div className="absolute right-0 top-full z-50 mt-2 w-[272px] max-sm:fixed max-sm:left-4 max-sm:right-4 max-sm:top-[60px] max-sm:mt-0 max-sm:w-auto overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] origin-top-right animate-in fade-in zoom-in-95">
                 <button
                   onClick={handleQuickShare}
                   disabled={quickSharing}
@@ -623,7 +628,8 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
               Export
             </button>
             {exportOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] origin-top-right animate-in fade-in zoom-in-95">
+              // Same viewport-anchored fix as the Share menu above.
+              <div className="absolute right-0 top-full z-50 mt-2 w-60 max-sm:fixed max-sm:left-4 max-sm:right-4 max-sm:top-[60px] max-sm:mt-0 max-sm:w-auto overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] p-1.5 shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] origin-top-right animate-in fade-in zoom-in-95">
                 <button
                   onClick={() => { handleCopy(); setExportOpen(false) }}
                   className="flex w-full items-center justify-between gap-3 rounded-[13px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--sand)]"

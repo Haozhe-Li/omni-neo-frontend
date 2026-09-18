@@ -2709,15 +2709,58 @@ export function ChatView({
                     const tSources = sourcesByTurn.get(i)
                     const tSourceCount = (tSources?.cited.length ?? 0) + (tSources?.unused.length ?? 0)
                     const turnTab = mobileTab[i] ?? 'answer'
+                    const showMobileTabs = turnDone && (tSourceCount > 0 || (mobileSourcesTurn === i && checkSourceState))
                     return (
                       <div className="w-full" data-selection-scope="assistant-message">
+                        {/* On mobile, the "N searches · View steps" summary is turn
+                            metadata that applies to both the Answer and Sources tabs
+                            below it, so it's hoisted above the tab strip instead of
+                            living inside the Answer tab's content (where switching to
+                            Sources used to hide it entirely). Desktop is untouched —
+                            the tab strip never renders there, so this duplicate stays
+                            hidden and the original copy in its normal reading position
+                            is what shows. */}
+                        {showMobileTabs && (
+                          <div className="mb-5 sm:hidden">
+                            {msg.blocks && msg.blocks.length > 0 ? (
+                              msg.blocks[0].type === 'tools' &&
+                              (() => {
+                                const leadingBlock = msg.blocks![0]
+                                const isLastBlock = msg.blocks!.length === 1
+                                const isCurrentlyStreaming = i === streamingIndex && isLoading
+                                const followedByText = msg.blocks!.slice(1).some((b) => b.type === 'text' && b.content.trim())
+                                return (
+                                  <ToolActivity
+                                    steps={leadingBlock.steps}
+                                    isStreaming={isCurrentlyStreaming && isLastBlock}
+                                    answered={followedByText || !isCurrentlyStreaming}
+                                    drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
+                                    idPrefix={`m${i}-b0`}
+                                    onOpenScript={openPanel}
+                                  />
+                                )
+                              })()
+                            ) : (
+                              !!msg.steps?.length && (
+                                <ToolActivity
+                                  steps={msg.steps}
+                                  isStreaming={i === streamingIndex && isLoading}
+                                  answered={!!parsed.text}
+                                  drafting={reportDrafting ? 'report' : msg.drafting}
+                                  idPrefix={`m${i}`}
+                                  onOpenScript={openPanel}
+                                />
+                              )
+                            )}
+                          </div>
+                        )}
                         {/* Mobile-only Answer/Sources tabs — below the width where
                             either the sticky rail or the inline fallback list fits
                             (see `.omni-thread-inline-sources` in globals.css), each
                             turn switches between showing its own answer and its own
                             source list in place, rather than opening a separate
                             surface for the second one. */}
-                        {turnDone && (tSourceCount > 0 || (mobileSourcesTurn === i && checkSourceState)) && (
+                        {showMobileTabs && (
                           <div className="mb-5 flex items-center gap-5 border-b border-[var(--line)] sm:hidden">
                             <button
                               onClick={() => setMobileTab((prev) => ({ ...prev, [i]: 'answer' }))}
@@ -2753,16 +2796,21 @@ export function ChatView({
                             const isCurrentlyStreaming = i === streamingIndex && isLoading
                             if (block.type === 'tools') {
                               const followedByText = msg.blocks!.slice(bi + 1).some((b) => b.type === 'text' && b.content.trim())
+                              // bi === 0 is already shown above the mobile tab strip
+                              // (see showMobileTabs block above); keep this copy for
+                              // desktop's normal reading order and hide it on mobile
+                              // so it isn't rendered twice there.
                               return (
-                                <ToolActivity
-                                  key={`tools-${i}-${bi}`}
-                                  steps={block.steps}
-                                  isStreaming={isCurrentlyStreaming && isLastBlock}
-                                  answered={followedByText || !isCurrentlyStreaming}
-                                  drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
-                                  idPrefix={`m${i}-b${bi}`}
-                                  onOpenScript={openPanel}
-                                />
+                                <div key={`tools-${i}-${bi}`} className={bi === 0 && showMobileTabs ? 'hidden sm:block' : undefined}>
+                                  <ToolActivity
+                                    steps={block.steps}
+                                    isStreaming={isCurrentlyStreaming && isLastBlock}
+                                    answered={followedByText || !isCurrentlyStreaming}
+                                    drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
+                                    idPrefix={`m${i}-b${bi}`}
+                                    onOpenScript={openPanel}
+                                  />
+                                </div>
                               )
                             }
                             // Render text and any inline <report> blocks in the order
@@ -2812,14 +2860,19 @@ export function ChatView({
                           })
                         ) : (
                           <>
-                            <ToolActivity
-                              steps={msg.steps}
-                              isStreaming={i === streamingIndex && isLoading}
-                              answered={!!parsed.text}
-                              drafting={reportDrafting ? 'report' : msg.drafting}
-                              idPrefix={`m${i}`}
-                              onOpenScript={openPanel}
-                            />
+                            {/* Already shown above the mobile tab strip (see
+                                showMobileTabs block above); hidden here on mobile
+                                so it isn't rendered twice. */}
+                            <div className={showMobileTabs ? 'hidden sm:block' : undefined}>
+                              <ToolActivity
+                                steps={msg.steps}
+                                isStreaming={i === streamingIndex && isLoading}
+                                answered={!!parsed.text}
+                                drafting={reportDrafting ? 'report' : msg.drafting}
+                                idPrefix={`m${i}`}
+                                onOpenScript={openPanel}
+                              />
+                            </div>
                             {/* answer text and inline report/textblock cards, in source order */}
                             {parsed.segments.map((seg, si) =>
                               seg.type === 'text' ? (
@@ -2927,15 +2980,23 @@ export function ChatView({
                         )}
                         </div>
 
-                        {/* The turn's own answer/sources swap — full-width like the
-                            tablet fallback list, not the 248px rail's compact one. */}
+                        {/* The turn's own answer/sources swap. Narrower than the
+                            tablet fallback list, so it uses the rail's `compact`
+                            sizing (smaller title/snippet text, tighter padding)
+                            rather than the full desktop card — and, since
+                            `SourcesRail` renders a flat list of siblings and
+                            leaves spacing to its parent, this wrapper is what
+                            keeps the cards from sitting flush against each
+                            other the way the rail and inline-fallback parents
+                            already do. */}
                         {turnTab === 'sources' && (
-                          <div className="sm:hidden">
+                          <div className="flex flex-col gap-2.5 sm:hidden">
                             <SourcesRail
                               cited={tSources?.cited ?? []}
                               unused={tSources?.unused ?? []}
                               checkSource={mobileSourcesTurn === i ? checkSourceState : undefined}
                               onDismissCheck={() => setCheckSourceState(null)}
+                              compact
                             />
                           </div>
                         )}
