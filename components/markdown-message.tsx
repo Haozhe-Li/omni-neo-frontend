@@ -76,19 +76,50 @@ interface MapSpec {
   pins: MapPinSpec[]
 }
 
-function MapLoadingPlaceholder() {
+/** Geocoded pins by map-block source — see the note in `InlineMap`. */
+const geocodedMaps = new Map<string, LightChatMapPoint[]>()
+
+/**
+ * Holds the same space the finished map will: the `h-64 sm:h-80` tile area
+ * plus one row per pin, matching LightChatMiniMap's own list.
+ *
+ * Sizing this by hand is worth it because the swap happens *late* — the pins
+ * have to be geocoded first — and a placeholder that is the wrong height
+ * moves every word below it at the moment it resolves. A flat 360px box in
+ * place of a 4-pin map was a ~250px jolt, which reads as the document
+ * spontaneously scrolling while you are trying to click something in it.
+ *
+ * `pins` is null while the block's JSON is still streaming and the pin count
+ * isn't known yet; a bare tile area is the closest guess available.
+ */
+function MapLoadingPlaceholder({ pins }: { pins?: number | null }) {
   return (
-    <div className="my-4 h-[360px] w-full overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--foreground)_2.5%,var(--background))] relative">
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5">
-        <MapPin
-          size={20}
-          strokeWidth={1.5}
-          className="text-[var(--muted-foreground)] opacity-40 animate-pulse"
-        />
-        <span className="omni-shimmer-text text-[12.5px] font-medium tracking-wide opacity-70">
-          Loading map…
-        </span>
+    <div className="my-4 w-full overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--card)]">
+      <div className="relative h-64 sm:h-80 border-b border-[var(--border-subtle)]/40 bg-[color-mix(in_srgb,var(--foreground)_2.5%,var(--background))]">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5">
+          <MapPin
+            size={20}
+            strokeWidth={1.5}
+            className="text-[var(--muted-foreground)] opacity-40 animate-pulse"
+          />
+          <span className="omni-shimmer-text text-[12.5px] font-medium tracking-wide opacity-70">
+            Loading map…
+          </span>
+        </div>
       </div>
+      {!!pins && (
+        <div>
+          {Array.from({ length: pins }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-3.5 py-2.5">
+              <div className="h-6 w-6 shrink-0 rounded-full bg-[var(--border-subtle)]/70" />
+              <div className="min-w-0 flex-1 space-y-1.5 py-0.5">
+                <div className="h-2.5 w-1/3 rounded-full bg-[var(--border-subtle)]/70" />
+                <div className="h-2 w-2/3 rounded-full bg-[var(--border-subtle)]/50" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -119,20 +150,35 @@ function MapTextFallback({ spec }: { spec: MapSpec }) {
 // while the JSON is still streaming or geocoding is in progress. Falls back to
 // a plain text list if all geocoding fails.
 export function InlineMap({ source }: { source: string }) {
-  const [points, setPoints] = useState<LightChatMapPoint[]>([])
-  const [geocodingDone, setGeocodingDone] = useState(false)
+  const key = source.trim()
+  // Resolved pins, kept for the lifetime of the tab rather than the
+  // component's. An answer's markdown is re-parsed whenever anything about it
+  // changes — a claim getting confirmed re-splices its verify markers, for
+  // instance — and a fresh mount would otherwise drop back to the placeholder
+  // and re-geocode, collapsing a 600px map to its loading state and yanking
+  // everything below it up the page mid-read. Keyed by the block's own source,
+  // so two different maps never share an entry.
+  const [points, setPoints] = useState<LightChatMapPoint[]>(() => geocodedMaps.get(key) ?? [])
+  const [geocodingDone, setGeocodingDone] = useState(() => geocodedMaps.has(key))
 
   // Quick parse to know whether JSON is complete yet (used for placeholder).
   let spec: MapSpec | null = null
   try {
-    spec = JSON.parse(source.trim())
+    spec = JSON.parse(key)
   } catch {}
 
   useEffect(() => {
     let parsed: MapSpec | null = null
-    try { parsed = JSON.parse(source.trim()) } catch {}
+    try { parsed = JSON.parse(key) } catch {}
 
     if (!parsed?.pins?.length) {
+      setGeocodingDone(true)
+      return
+    }
+
+    const cached = geocodedMaps.get(key)
+    if (cached) {
+      setPoints(cached)
       setGeocodingDone(true)
       return
     }
@@ -160,19 +206,20 @@ export function InlineMap({ source }: { source: string }) {
         })
         .filter(Boolean) as LightChatMapPoint[]
       if (!cancelled) {
+        geocodedMaps.set(key, resolved)
         setPoints(resolved)
         setGeocodingDone(true)
       }
     })()
 
     return () => { cancelled = true }
-  }, [source])
+  }, [key])
 
-  // JSON not yet complete (still streaming)
+  // JSON not yet complete (still streaming) — the pin count isn't known yet.
   if (!spec) return <MapLoadingPlaceholder />
 
   // Geocoding in progress with no resolved pins yet
-  if (!geocodingDone && points.length === 0) return <MapLoadingPlaceholder />
+  if (!geocodingDone && points.length === 0) return <MapLoadingPlaceholder pins={spec.pins?.length} />
 
   // All pins failed geocoding — text fallback
   if (geocodingDone && points.length === 0) return <MapTextFallback spec={spec} />
