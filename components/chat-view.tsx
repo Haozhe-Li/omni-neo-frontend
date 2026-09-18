@@ -511,13 +511,20 @@ function MessageSourceUrls({ urls }: { urls: string[] }) {
 // line than Latin, so a character-count heuristic can't do this). Only
 // short questions (the common case) skip the wrapper's overflow/gradient
 // entirely, so they're never faded for no reason.
+// Collapsed height, in lines: 2 full lines plus a half-height sliver of a
+// third, so the fade reads as "there's more below" rather than eating most of
+// line 2 — a fade band sized to a whole line (as a flat `h-8` was) covers a
+// big fraction of a 2-line box and made line 2 look broken, not truncated.
+const _QUESTION_CLAMP_LINES = 2.5
+const _QUESTION_FADE_LINES = 0.5
+
 function QuestionHeading({ content, className }: { content: string; className: string }) {
   const ref = useRef<HTMLHeadingElement | null>(null)
   // `heights` is null until measured, and stays null forever for a question
-  // that never overflows 2 lines — that's what "collapsible" means below, and
-  // it's what keeps a short question from growing a "Show more" toggle it
+  // that never overflows the clamp — that's what "collapsible" means below,
+  // and it's what keeps a short question from growing a "Show more" toggle it
   // doesn't need.
-  const [heights, setHeights] = useState<{ collapsed: number; full: number } | null>(null)
+  const [heights, setHeights] = useState<{ collapsed: number; fade: number; full: number } | null>(null)
   const [expanded, setExpanded] = useState(false)
 
   useIsoLayoutEffect(() => {
@@ -525,9 +532,9 @@ function QuestionHeading({ content, className }: { content: string; className: s
     if (!el) return
     const lineH = parseFloat(getComputedStyle(el).lineHeight) || 0
     if (!lineH) return
-    const collapsed = lineH * 2
+    const collapsed = lineH * _QUESTION_CLAMP_LINES
     const full = el.scrollHeight
-    setHeights(full > collapsed + 1 ? { collapsed, full } : null)
+    setHeights(full > collapsed + 1 ? { collapsed, fade: lineH * _QUESTION_FADE_LINES, full } : null)
     setExpanded(false)
   }, [content, className])
 
@@ -544,7 +551,10 @@ function QuestionHeading({ content, className }: { content: string; className: s
           {content}
         </h2>
         {collapsible && !expanded && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(to_top,var(--paper)_35%,transparent)]" />
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_top,var(--paper)_35%,transparent)]"
+            style={{ height: heights.fade }}
+          />
         )}
       </div>
       {collapsible && (
