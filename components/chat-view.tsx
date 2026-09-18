@@ -2473,7 +2473,15 @@ export function ChatView({
 
   // ── render ───────────────────────────────────────────────────────────────
   return (
-    <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
+    /* `overflow-clip`, not `overflow-hidden`. Hidden still makes this a scroll
+       container — scrollbar-less, but the browser may scroll it to bring a
+       focused or selected node into view, and there is no way for it to scroll
+       back. This row is ~20px taller than its box, so one such nudge (clicking
+       "Check source" was enough) left it parked at scrollTop 20 for good: the
+       reader appeared to sit 20px higher than the thread beside it, whose own
+       header is sticky and so looked unmoved. Clip renders identically and
+       cannot be scrolled at all. */
+    <div className="relative flex h-full w-full overflow-clip bg-[var(--background)]">
       {/* Main column — hidden outright (not just squeezed to w-0) once the
           panel goes fullscreen: it hands the panel the entire row via flex,
           same as the report card's "Open" overlay hands it 62% otherwise. */}

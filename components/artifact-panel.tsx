@@ -142,6 +142,13 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   const rail = (activeReportId && reportSources?.get(activeReportId)) || fallbackRail
   const hasRailSources = rail.cited.length > 0 || rail.unused.length > 0
   const sourceCount = rail.cited.length + rail.unused.length
+  // Whether there is a Sources tab to be on at all. A report that cites
+  // nothing only has one while a check is up, so `tab` can outlive its own
+  // tab: dismissing the check used to leave the state on 'sources' with no
+  // tabs left to switch back with, and the document stayed hidden. Deriving
+  // the active tab instead of trusting the state makes that unrepresentable.
+  const canShowSources = hasRailSources || !!checkSourceState
+  const activeTab = canShowSources ? tab : 'report'
   // Fullscreen borrows the published Pages article's measure; the split view
   // keeps the narrower one that fits beside the thread.
   const articleMeasure = isFullscreen ? 'max-w-[880px]' : 'max-w-[68ch]'
@@ -725,12 +732,12 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             {/* Report / Sources tabs — only while the rail doesn't fit (the
                 class owns its own display; see globals.css). Same underline
                 tabs the thread uses per turn on a phone. */}
-            {viewMode === 'view' && (hasRailSources || checkSourceState) && (
+            {viewMode === 'view' && canShowSources && (
               <div className={`omni-report-tabs mx-auto mb-7 w-full ${articleMeasure} items-center gap-5 border-b border-[var(--line)]`}>
                 <button
                   onClick={() => setTab('report')}
                   className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
-                    tab === 'report' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
+                    activeTab === 'report' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
                   }`}
                 >
                   Report
@@ -738,7 +745,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                 <button
                   onClick={() => setTab('sources')}
                   className={`-mb-px border-b-[1.5px] pb-2.5 text-[13.5px] transition-colors ${
-                    tab === 'sources' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
+                    activeTab === 'sources' ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-transparent text-[var(--ink-faint)]'
                   }`}
                 >
                   Sources{sourceCount > 0 ? ` · ${sourceCount}` : ''}
@@ -755,7 +762,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                 // part of reading it as "the same document".
                 // The tab only governs the document in `view`; the raw
                 // markdown has no sources tab to be swapped out for.
-                className={`omni-report-col mx-auto w-full min-w-0 ${articleMeasure} ${viewMode === 'view' && tab === 'sources' ? 'omni-report-col-hidden' : ''}`}
+                className={`omni-report-col mx-auto w-full min-w-0 ${articleMeasure} ${viewMode === 'view' && activeTab === 'sources' ? 'omni-report-col-hidden' : ''}`}
                 data-message-index={viewMode === 'view' ? reportMessageIndex(active.report.id) ?? undefined : undefined}
               >
                 {viewMode === 'view' ? (
@@ -786,7 +793,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
 
               {/* The reader's sources, in the thread's rail — same width, same
                   cards, same check-a-claim takeover. */}
-              {viewMode === 'view' && (hasRailSources || checkSourceState) && (
+              {viewMode === 'view' && canShowSources && (
                 <aside
                   ref={railFade.ref}
                   style={railFade.style}
@@ -805,7 +812,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
             </div>
 
             {/* The same list, full width, when the tabs are what's showing. */}
-            {viewMode === 'view' && tab === 'sources' && (hasRailSources || checkSourceState) && (
+            {viewMode === 'view' && activeTab === 'sources' && (
               <div className={`omni-report-inline-sources mx-auto w-full ${articleMeasure} flex-col gap-3`}>
                 <SourcesRail
                   cited={rail.cited}
