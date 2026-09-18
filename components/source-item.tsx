@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import type { Source } from '@/lib/types'
 import { CredibilityTag } from '@/components/credibility-badge'
 import { ArguableTag } from '@/components/arguable-badge'
+import { SafeLink } from '@/components/safe-link'
 
 interface SourceItemProps {
     source: Source
@@ -83,15 +84,14 @@ export function SourceItem({ source, index, label, showNumber = true }: SourceIt
                             <ExternalLink className="h-3.5 w-3.5" />
                         </button>
                     ) : (
-                        <a
+                        <SafeLink
                             href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            credibility={source.credibility}
                             className="text-[var(--ink-fainter)] transition-colors hover:text-[var(--teal)]"
                             onClick={(e) => e.stopPropagation()}
                         >
                             <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
+                        </SafeLink>
                     )}
                 </div>
             </div>

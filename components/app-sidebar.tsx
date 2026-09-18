@@ -15,6 +15,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SettingsDialog, TAB_SLUGS, type TabId } from '@/components/settings-dialog'
 import { UsageLimitDialog } from '@/components/usage-limit-dialog'
+import { SafeLinkModal } from '@/components/safe-link-modal'
 import {
     AlertDialog,
     AlertDialogContent,
@@ -894,6 +895,9 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
 
             {/* Usage-limit-reached Dialog — self-driven via window event, see usage-limit-dialog.tsx */}
             <UsageLimitDialog />
+
+            {/* Safe Link interstitial — self-driven via window event, see safe-link-modal.tsx */}
+            <SafeLinkModal />
 
             {/* Search Dialog Modal */}
             < Dialog open={isSearchVisible} onOpenChange={(open) => {

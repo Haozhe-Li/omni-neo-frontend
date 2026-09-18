@@ -21,6 +21,7 @@ import type { Source } from '@/lib/types'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import { CredibilityExplanation, CredibilityIcon, CredibilityTag } from '@/components/credibility-badge'
 import { ArguableExplanation, ArguableIcon, ArguableTag } from '@/components/arguable-badge'
+import { SafeLink } from '@/components/safe-link'
 
 const LightChatMiniMap = dynamic(
   () => import('@/components/light-chat-mini-map').then((m) => m.LightChatMiniMap),
@@ -317,12 +318,12 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
             {extra > 0 && <span className="ml-1 shrink-0 text-[var(--ink-faint)]">+{extra}</span>}
           </button>
         ) : (
-          <a href={sources[0].url} target="_blank" rel="noopener noreferrer" className={triggerClassName}>
+          <SafeLink href={sources[0].url} credibility={sources[0].credibility} className={triggerClassName}>
             <CredibilityIcon credibility={sources[0].credibility} className="mr-1" />
             <ArguableIcon credibility={sources[0].credibility} className="mr-1" />
             <span className="min-w-0 truncate">{primaryLabel}</span>
             {extra > 0 && <span className="ml-1 shrink-0 text-[var(--ink-faint)]">+{extra}</span>}
-          </a>
+          </SafeLink>
         )}
       </HoverCardTrigger>
       <HoverCardContent className="w-80 p-0 overflow-hidden">
@@ -391,10 +392,9 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
             )}
           </button>
         ) : (
-          <a
+          <SafeLink
             href={current.url}
-            target="_blank"
-            rel="noopener noreferrer"
+            credibility={current.credibility}
             className="block p-3 no-underline hover:bg-[color-mix(in_srgb,var(--foreground)_3%,transparent)] transition-colors"
           >
             <div className="mb-1.5 flex items-center gap-2">
@@ -414,7 +414,7 @@ export function CitationBadge({ sources }: { sources: Source[] }) {
               <p className="mt-1.5 text-[12px] leading-relaxed text-[var(--muted-foreground)] line-clamp-4">{current.content}</p>
             )}
             <div className="mt-1.5 truncate text-[11px] text-[var(--muted-foreground)]/70">{current.url}</div>
-          </a>
+          </SafeLink>
         )}
         <CredibilityExplanation credibility={current.credibility} />
         <ArguableExplanation credibility={current.credibility} />
@@ -609,10 +609,13 @@ function MarkdownLink({ href, children }: { href?: string; children?: ReactNode 
   const { citationMap } = useContext(MarkdownRenderContext)
   const sources = resolveCitationSources(href, children, citationMap)
   if (sources.length > 0) return <CitationBadge sources={sources} />
+  // No registered citation — the model wrote this URL directly into its
+  // answer, so it never went through `classify_sources`. No `credibility`
+  // prop: SafeLink always gates it and fetches a verdict from /classify_url.
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
+    <SafeLink href={href ?? ''} className="underline underline-offset-2 decoration-[var(--muted-foreground)]/40 hover:decoration-[var(--foreground)]/60 transition-colors">
       {children}
-    </a>
+    </SafeLink>
   )
 }
 

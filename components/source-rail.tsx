@@ -8,6 +8,7 @@ import { highlightExcerpt, type HighlightSegment } from '@/lib/highlight'
 import { isTrustedTier } from '@/lib/credibility'
 import { CredibilityTag } from '@/components/credibility-badge'
 import { ArguableTag } from '@/components/arguable-badge'
+import { SafeLink } from '@/components/safe-link'
 
 function hostOf(url: string) {
   try {
@@ -174,9 +175,9 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
     )
   }
   return (
-    <a href={source.url} target="_blank" rel="noopener noreferrer" className={className}>
+    <SafeLink href={source.url} credibility={source.credibility} className={className}>
       {body}
-    </a>
+    </SafeLink>
   )
 }
 
@@ -245,9 +246,9 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
     )
   }
   return (
-    <a href={match.url} target="_blank" rel="noopener noreferrer" className={className}>
+    <SafeLink href={match.url} credibility={match.credibility} className={className}>
       {body}
-    </a>
+    </SafeLink>
   )
 }
 

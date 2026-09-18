@@ -66,3 +66,23 @@ export function isTrustedTier(credibility?: Credibility | null): boolean {
 export function isArguable(credibility?: Credibility | null): boolean {
   return credibility?.label === 'arguable'
 }
+
+/** True when a click on this link must be gated by the Safe Link
+ * interstitial before navigating — every label except the three trusted
+ * tiers, and (since `isTrustedTier` is false for `undefined`) any link with
+ * no credibility at all, e.g. a raw markdown URL the model typed with no
+ * `[n]` citation attached. */
+export function needsInterstitial(credibility?: Credibility | null): boolean {
+  return !isTrustedTier(credibility)
+}
+
+export type SafeLinkSeverity = 'warning' | 'neutral'
+
+/** The interstitial only draws two visual severities, not one per label:
+ * "arguable"/"junk" reuse `ArguableTag`'s existing warning treatment (a
+ * documented reliability problem), everything else gated (social_media,
+ * unknown, or a link we couldn't verify) reads as merely unverified rather
+ * than flagged. */
+export function safeLinkSeverity(credibility?: Credibility | null): SafeLinkSeverity {
+  return credibility?.label === 'arguable' || credibility?.label === 'junk' ? 'warning' : 'neutral'
+}
