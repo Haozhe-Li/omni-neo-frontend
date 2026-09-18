@@ -501,6 +501,41 @@ function MessageSourceUrls({ urls }: { urls: string[] }) {
   )
 }
 
+// A pasted question can run to a dozen lines, and at question-heading size
+// that pushes the actual answer off the first screen. Clamp to 2 lines and
+// fade the cut with a gradient (same treatment as the inline report preview
+// card below) rather than a hard edge or an ellipsis — measured in JS,
+// against the element's own computed line-height, so it clamps correctly
+// whether the heading is at the larger first-question size or the smaller
+// follow-up size, and for any script (CJK fits far fewer characters per
+// line than Latin, so a character-count heuristic can't do this). Only
+// short questions (the common case) skip the wrapper's overflow/gradient
+// entirely, so they're never faded for no reason.
+function QuestionHeading({ content, className }: { content: string; className: string }) {
+  const ref = useRef<HTMLHeadingElement | null>(null)
+  const [clamp, setClamp] = useState<number | null>(null)
+
+  useIsoLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const lineH = parseFloat(getComputedStyle(el).lineHeight) || 0
+    if (!lineH) return
+    const collapsedH = lineH * 2
+    setClamp(el.scrollHeight > collapsedH + 1 ? collapsedH : null)
+  }, [content, className])
+
+  return (
+    <div className="relative">
+      <h2 ref={ref} className={className} style={clamp ? { maxHeight: clamp, overflow: 'hidden' } : undefined}>
+        {content}
+      </h2>
+      {clamp !== null && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(to_top,var(--paper)_35%,transparent)]" />
+      )}
+    </div>
+  )
+}
+
 // Perplexity-style "Continued from X" banner for a first-party source_url —
 // signals this turn is a follow-up on an existing Omni page rather than an
 // external fetch. Title resolution is lazy/render-time (not baked into
@@ -2661,13 +2696,12 @@ export function ChatView({
                               <span className="line-clamp-3">{msg.follow_up_content}</span>
                             </div>
                           )}
-                          <h2
+                          <QuestionHeading
+                            content={msg.content}
                             className={`omni-display leading-[1.18] tracking-[-0.015em] text-[var(--ink)] [overflow-wrap:anywhere] ${
                               isFirstQuestion(i) ? 'text-[clamp(26px,3.2vw,34px)]' : 'text-[clamp(22px,2.4vw,27px)]'
                             }`}
-                          >
-                            {msg.content}
-                          </h2>
+                          />
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5 pt-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                           <button
