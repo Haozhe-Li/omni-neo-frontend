@@ -513,24 +513,48 @@ function MessageSourceUrls({ urls }: { urls: string[] }) {
 // entirely, so they're never faded for no reason.
 function QuestionHeading({ content, className }: { content: string; className: string }) {
   const ref = useRef<HTMLHeadingElement | null>(null)
-  const [clamp, setClamp] = useState<number | null>(null)
+  // `heights` is null until measured, and stays null forever for a question
+  // that never overflows 2 lines — that's what "collapsible" means below, and
+  // it's what keeps a short question from growing a "Show more" toggle it
+  // doesn't need.
+  const [heights, setHeights] = useState<{ collapsed: number; full: number } | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   useIsoLayoutEffect(() => {
     const el = ref.current
     if (!el) return
     const lineH = parseFloat(getComputedStyle(el).lineHeight) || 0
     if (!lineH) return
-    const collapsedH = lineH * 2
-    setClamp(el.scrollHeight > collapsedH + 1 ? collapsedH : null)
+    const collapsed = lineH * 2
+    const full = el.scrollHeight
+    setHeights(full > collapsed + 1 ? { collapsed, full } : null)
+    setExpanded(false)
   }, [content, className])
 
+  const collapsible = heights !== null
+
   return (
-    <div className="relative">
-      <h2 ref={ref} className={className} style={clamp ? { maxHeight: clamp, overflow: 'hidden' } : undefined}>
-        {content}
-      </h2>
-      {clamp !== null && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(to_top,var(--paper)_35%,transparent)]" />
+    <div>
+      <div className="relative">
+        <h2
+          ref={ref}
+          className={`${className} ${collapsible ? 'overflow-hidden transition-[max-height] duration-300 ease-in-out' : ''}`}
+          style={collapsible ? { maxHeight: expanded ? heights.full : heights.collapsed } : undefined}
+        >
+          {content}
+        </h2>
+        {collapsible && !expanded && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(to_top,var(--paper)_35%,transparent)]" />
+        )}
+      </div>
+      {collapsible && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1.5 flex items-center gap-0.5 text-[12.5px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)]"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+          <ChevronDown size={13} className={`transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
       )}
     </div>
   )
