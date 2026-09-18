@@ -13,7 +13,7 @@ import { AddUrlPopover } from '@/components/add-url-popover'
 import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party-title'
 import { WidgetCards } from '@/components/widget-cards'
-import { ArtifactPanel } from '@/components/artifact-panel'
+import { ArtifactPanel, activePanelItem } from '@/components/artifact-panel'
 import { SourcesRail } from '@/components/source-rail'
 import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
@@ -1313,6 +1313,18 @@ export function ChatView({
   )
   const draftingReport = parsedReports.some((r) => !r.complete)
   const hasPanelContent = allArtifacts.length > 0 || allReports.length > 0 || draftingReport
+
+  /**
+   * An open report carries its own sources rail, so the thread stands its
+   * own down — otherwise the same four cards are on screen twice, once
+   * beside the answer and once beside the document that cites them.
+   *
+   * Scoped to a report, not to the panel being open at all: a chart has no
+   * rail of its own, and hiding the thread's for it would leave the turn's
+   * sources nowhere.
+   */
+  const readerOwnsSources =
+    panelOpen && activePanelItem(allReports, allArtifacts, activeArtifactId)?.kind === 'report'
 
   // When a report starts streaming inline, surface the reader and follow it.
   const openedReportsRef = useRef<Set<string>>(new Set())
@@ -2997,8 +3009,9 @@ export function ChatView({
           {/* ── Sources rail ─────────────────────────────────────────────
               The thread's one and only sources surface at this width, scoped
               to the turn on screen and carrying the detail the old drawer
-              had: host, credibility, and the passage the answer drew on. */}
-          {(hasTurnSources || checkSourceState) && (
+              had: host, credibility, and the passage the answer drew on.
+              Stands down while an open report is showing its own. */}
+          {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
             <aside
               ref={railFade.ref}
               style={railFade.style}
@@ -3020,8 +3033,10 @@ export function ChatView({
               `.omni-thread-inline-sources` in globals.css — hidden under
               640px), the same list runs under the answer at full width: a
               tablet or a narrow desktop window has room to spare for it, just
-              not room for the two columns the rail needs. */}
-          {(hasTurnSources || checkSourceState) && (
+              not room for the two columns the rail needs. This is the copy an
+              open report actually squeezed the thread down into, so it stands
+              down for the reader's own rail too. */}
+          {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
             <div className="omni-thread-inline-sources mx-auto w-full max-w-[760px] flex-col gap-3">
               <SourcesRail
                 cited={turnSources.cited}

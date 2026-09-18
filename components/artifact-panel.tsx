@@ -47,6 +47,27 @@ interface PanelItem {
   report?: ReportArtifact
 }
 
+/**
+ * What the panel is showing for a given `activeId`, including the fallback to
+ * the newest item when the id matches nothing.
+ *
+ * Exported because the thread needs the answer too: once a report is open it
+ * carries its own sources rail, so chat-view.tsx stands its own rail down
+ * rather than printing the same list twice — but only for a report, since a
+ * chart has no rail to replace it with.
+ */
+export function activePanelItem(
+  reports: ReportArtifact[],
+  artifacts: ChartArtifact[],
+  activeId: string | null
+): PanelItem | undefined {
+  const items: PanelItem[] = [
+    ...reports.map((r) => ({ id: r.id, title: r.title, kind: 'report' as const, report: r })),
+    ...artifacts.map((a) => ({ id: a.id, title: a.title, kind: 'chart' as const, chart: a })),
+  ]
+  return items.find((it) => it.id === activeId) ?? items[items.length - 1]
+}
+
 interface ArtifactPanelProps {
   artifacts: ChartArtifact[]
   reports: ReportArtifact[]
@@ -93,7 +114,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
     ...reports.map((r) => ({ id: r.id, title: r.title, kind: 'report' as const, report: r })),
     ...artifacts.map((a) => ({ id: a.id, title: a.title, kind: 'chart' as const, chart: a })),
   ]
-  const active = items.find((it) => it.id === activeId) ?? items[items.length - 1]
+  const active = activePanelItem(reports, artifacts, activeId)
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
   const [copied, setCopied] = useState(false)
@@ -137,7 +158,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   )
 
   const handleDownload = async (format: 'markdown' | 'pdf' | 'html') => {
-    if (active.kind !== 'report' || !active.report) return
+    if (active?.kind !== 'report' || !active.report) return
     const title = active.report.title || 'report'
     const content = `# ${title}\n\n${active.report.content || ''}`
     const normalizeFilename = (s: string) => s.replace(/[^a-z0-9]/gi, '_').toLowerCase()
