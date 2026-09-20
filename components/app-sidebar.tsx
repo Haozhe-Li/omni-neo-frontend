@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, type LucideIcon } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, AudioLines, type LucideIcon } from 'lucide-react'
 import { OmniMark, useMarkBurst } from '@/components/omni-mark'
 import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
 import { toast } from 'sonner'
@@ -125,6 +125,7 @@ export function AppSidebar({
     const [isDeleting, setIsDeleting] = useState(false)
     const [loadingAction, setLoadingAction] = useState<string | null>(null)
     const pagesActive = !!pathname && (pathname === '/pages' || pathname.startsWith('/pages/'))
+    const voiceActive = pathname === '/voice'
 
     // Settings opens as an overlay on top of whatever page you're on (a chat
     // thread, /pages, etc.) — it must NOT navigate away and unmount that page.
@@ -691,6 +692,16 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                     expanded={isExpanded}
                     onClick={() => {
                         if (pathname !== '/pages') router.push('/pages')
+                        if (isMobile && onToggle) onToggle()
+                    }}
+                />
+                <NavRow
+                    icon={AudioLines}
+                    label="Voice"
+                    active={voiceActive}
+                    expanded={isExpanded}
+                    onClick={() => {
+                        if (pathname !== '/voice') router.push('/voice')
                         if (isMobile && onToggle) onToggle()
                     }}
                 />

@@ -1567,6 +1567,140 @@
   height: 0;
 }
 
+/* ── Voice agent orb (/voice) ──────────────────────────────────────────────
+   A glossy sphere rather than a flat blurred disc — borrows the "3D marble
+   with a moving specular highlight" read from assistant-ui's Orb element
+   (assistant-ui.com/elements/orb), rebuilt from this app's own teal ramp
+   instead of theirs. Their five-state model (idle/connecting/listening/
+   speaking + our own "thinking", which their guide doesn't need but our
+   turn-taking does) carries over; what does NOT carry over is color-per-
+   state — every state here stays in the teal family, and what actually
+   changes is motion tempo (breathing vs. pulsing vs. live-reactive), so the
+   page reads as one object getting more or less "awake" rather than
+   swapping identities.
+
+   --orb-glow (0..1) and `transform` are rewritten every animation frame from
+   useVoiceSession's runOrbLoop, but ONLY while the mode is listening/
+   speaking — real mic RMS one way, real playback amplitude (AnalyserNode)
+   the other. idle/connecting/thinking are handed back to plain CSS
+   keyframes instead (the hook clears its inline `transform`/`--orb-glow` on
+   the way out), since a CSS animation always wins the cascade over a
+   same-property inline value anyway — fighting it from JS on every frame
+   would just be wasted work, not a bug, but wasted work still. */
+.omni-voice-orb {
+  position: relative;
+  border-radius: 9999px;
+  overflow: hidden;
+  /* Shaded relative to --teal itself with literal black/white, not against
+     other named teal tokens (--teal-hover, --teal-tint-deep, ...) — those
+     are surface-role tokens that FLIP lightness between themes (e.g.
+     --teal-tint-deep is a near-black wash in dark mode but a near-white one
+     in light mode, since both are "the recessed teal surface" for their own
+     theme). A sphere's highlight/shadow direction can't flip with the
+     theme, so it's anchored to the two colors that never do. */
+  background:
+    radial-gradient(circle at 36% 30%,
+      color-mix(in srgb, var(--teal) calc(60% - 25% * var(--orb-glow, 0.35)), white) 0%,
+      var(--teal) 55%,
+      color-mix(in srgb, var(--teal) 68%, black) 100%);
+  box-shadow:
+    0 0 calc(20px + 46px * var(--orb-glow, 0.35)) calc(1px + 12px * var(--orb-glow, 0.35))
+      color-mix(in srgb, var(--teal) calc(28% + 32% * var(--orb-glow, 0.35)), transparent),
+    inset 0 -14px 26px rgba(0, 0, 0, 0.28),
+    inset 0 8px 18px rgba(255, 255, 255, 0.08);
+  will-change: transform;
+}
+
+/* Specular highlight, clipped to the circle by the parent's overflow:hidden,
+   slowly orbiting — the thing that reads as "glossy sphere" rather than
+   "flat circle" even in a still frame. */
+.omni-voice-orb::before {
+  content: '';
+  position: absolute;
+  inset: -15%;
+  background: radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.5), transparent 32%);
+  animation: omni-orb-highlight-drift 7s linear infinite;
+}
+
+.omni-voice-orb--idle,
+.omni-voice-orb--connecting {
+  /* Same black/white-relative-to-teal shading as the base sphere, just
+     desaturated toward --ink-faint (a genuinely mid-tone neutral in both
+     themes, unlike the teal surface tokens) for a "dormant" look. */
+  background:
+    radial-gradient(circle at 36% 30%,
+      color-mix(in srgb, var(--teal) 25%, white) 0%,
+      color-mix(in srgb, var(--teal) 55%, var(--ink-faint)) 55%,
+      color-mix(in srgb, var(--teal) 45%, black) 100%);
+  box-shadow: inset 0 -14px 26px rgba(0, 0, 0, 0.3), inset 0 8px 18px rgba(255, 255, 255, 0.05);
+}
+
+.omni-voice-orb--idle {
+  animation: omni-orb-idle-breathe 3.6s ease-in-out infinite;
+}
+
+.omni-voice-orb--idle::before {
+  animation-duration: 11s;
+  opacity: 0.5;
+}
+
+.omni-voice-orb--connecting {
+  animation: omni-orb-pulse 1.1s ease-in-out infinite;
+}
+
+.omni-voice-orb--connecting::before {
+  animation-duration: 2.2s;
+}
+
+.omni-voice-orb--thinking {
+  animation: omni-orb-pulse 1.3s ease-in-out infinite;
+}
+
+.omni-voice-orb--thinking::before {
+  animation-duration: 3s;
+}
+
+@keyframes omni-orb-idle-breathe {
+  0%, 100% { transform: scale(0.94); opacity: 0.6; }
+  50% { transform: scale(1.01); opacity: 0.85; }
+}
+
+@keyframes omni-orb-pulse {
+  0%, 100% { transform: scale(0.97); }
+  50% { transform: scale(1.06); }
+}
+
+@keyframes omni-orb-highlight-drift {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Three-dot "thinking"/"typing" indicator — used under the orb while
+   waiting on the agent's first token, and could sit inline elsewhere later.
+   Plain opacity pulse, staggered per dot, no dependency on the orb's own
+   animation state. */
+.omni-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.omni-typing-dots > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: omni-typing-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.omni-typing-dots > span:nth-child(2) { animation-delay: 0.15s; }
+.omni-typing-dots > span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes omni-typing-dot-pulse {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.85); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
 /* ── Softened scroll edges ─────────────────────────────────────────────────
    Pairs with `useEdgeFade`. The panel's own content dissolves at whichever
    edge has more past it, so a list that continues never ends in a hard cut
