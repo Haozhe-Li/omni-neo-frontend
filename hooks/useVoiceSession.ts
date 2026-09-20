@@ -49,6 +49,12 @@ import { getUserLocation } from '@/lib/location'
 
 const SEND_SAMPLE_RATE = 16000
 const PLAYBACK_SAMPLE_RATE = 24000
+const VOICE_INPUT_CONSTRAINTS: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1,
+}
 
 export type VoiceTurn = {
     turnId: number
@@ -336,9 +342,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             playAnalyserRef.current = analyser
             nextPlayTimeRef.current = 0
 
-            micStreamRef.current = await navigator.mediaDevices.getUserMedia({
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-            })
+            micStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: VOICE_INPUT_CONSTRAINTS })
             micCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
             const source = micCtxRef.current.createMediaStreamSource(micStreamRef.current)
             // ScriptProcessorNode is deprecated but needs no separate worklet
@@ -346,7 +350,13 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             // recorder flow in search-home.tsx already ships.
             const node = micCtxRef.current.createScriptProcessor(4096, 1, 1)
             source.connect(node)
-            node.connect(micCtxRef.current.destination)
+            // ScriptProcessorNode needs an output connection to keep processing,
+            // but sending the mic signal to the speakers would create local
+            // monitoring and make acoustic feedback more likely.
+            const silentOutput = micCtxRef.current.createGain()
+            silentOutput.gain.value = 0
+            node.connect(silentOutput)
+            silentOutput.connect(micCtxRef.current.destination)
             micNodeRef.current = node
 
             const wsParams = new URLSearchParams({ thread_id: threadId, user_local_datetime: userLocalDatetime })
