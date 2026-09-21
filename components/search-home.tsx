@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { ArrowRight, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, SquarePen, Paperclip, Link2, Telescope, Plane, GraduationCap } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowRight, AudioLines, Menu, ChevronDown, Check, Lock, Mic, Loader2, X, Plus, SquarePen, Paperclip, Link2, Telescope, Plane, GraduationCap } from 'lucide-react'
 import { useApi } from '@/hooks/useApi'
 import { SignUpButton, useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
@@ -118,6 +119,7 @@ interface SearchHomeProps {
 }
 
 export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar, onNewChat, isMobile = false, model = DEFAULT_MODEL, onModelChange, locked = false, deepLinkFill, deepLinkSourceUrls }: SearchHomeProps) {
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -1377,14 +1379,28 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                     {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
                   </button>
 
-                  <button
-                    type="submit"
-                    disabled={(!!isRecording || !!sstPrompt) ? !query.trim() : false}
-                    className="omni-send h-[38px] w-[38px]"
-                    aria-label="Submit search"
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
+                  {!query && !isRecording && !sstPrompt && attachedFiles.length === 0 && sourceUrls.length === 0 ? (
+                    // Nothing to submit yet — offer voice mode instead of a
+                    // send arrow that would just trigger the suggestion-fill
+                    // fallback (see handleSubmit's showingSuggestion branch).
+                    <button
+                      type="button"
+                      onClick={() => router.push('/voice')}
+                      className="omni-send h-[38px] w-[38px]"
+                      aria-label="Start voice mode"
+                    >
+                      <AudioLines className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={(!!isRecording || !!sstPrompt) ? !query.trim() : false}
+                      className="omni-send h-[38px] w-[38px]"
+                      aria-label="Submit search"
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 

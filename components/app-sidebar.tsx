@@ -47,12 +47,14 @@ function NavRow({
     active,
     expanded,
     onClick,
+    badge,
 }: {
     icon: LucideIcon
     label: string
     active: boolean
     expanded: boolean
     onClick: () => void
+    badge?: string
 }) {
     return (
         <button
@@ -69,7 +71,18 @@ function NavRow({
             {/* 1.5 stroke, not lucide's default 2 — the heavier weight reads
                 as a toolbar and fights the hairlines everywhere else here. */}
             <Icon size={17} strokeWidth={1.5} className="shrink-0" />
-            {expanded && <span>{label}</span>}
+            {expanded && (
+                <span className="flex items-center gap-1.5">
+                    <span>{label}</span>
+                    {badge && (
+                        // Same "Beta" chip as ModelPicker's NewChip — reuse the
+                        // existing badge language instead of a second style.
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--accent)]/12 text-[var(--accent)] leading-none">
+                            {badge}
+                        </span>
+                    )}
+                </span>
+            )}
         </button>
     )
 }
@@ -698,6 +711,7 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 <NavRow
                     icon={AudioLines}
                     label="Voice"
+                    badge="Beta"
                     active={voiceActive}
                     expanded={isExpanded}
                     onClick={() => {
