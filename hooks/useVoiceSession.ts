@@ -55,6 +55,23 @@ const PLAYBACK_SAMPLE_RATE = 24000
 // imprecise), and that tiny timing jitter is audible as a click/pop at the
 // seam. Short enough not to read as its own tremolo.
 const CHUNK_FADE_S = 0.003
+// How many recent speech_chunk sentences/clauses stay on screen at once
+// (sliding by one as each becomes "current") — enough to read as a couple
+// lines without the whole reply piling up and overflowing.
+const CAPTION_WINDOW = 3
+// Fish TTS's live protocol has no per-sentence audio boundary (only a
+// stream-ending "finish" — see omni's core/voice/fish_tts.py), so there's no
+// way to know exactly when a given chunk's audio starts playing. This
+// estimates it from character count instead, calibrated loosely for natural
+// Mandarin speech, and gets anchored to the turn's real playback clock (see
+// turnSpeechStartRef below) rather than trusted in isolation — each chunk is
+// only a sentence/clause, so estimation error can't drift far before the
+// next chunk boundary corrects it.
+const CHARS_PER_SECOND = 4.3
+const CHUNK_PAUSE_S = 0.18
+function estimateChunkSeconds(text: string): number {
+    return text.length / CHARS_PER_SECOND + CHUNK_PAUSE_S
+}
 const VOICE_INPUT_CONSTRAINTS: MediaTrackConstraints = {
     echoCancellation: true,
     noiseSuppression: true,
@@ -72,6 +89,8 @@ export type VoiceTurn = {
 
 export type VoiceConnectionState = 'idle' | 'connecting' | 'connected' | 'error' | 'closed'
 export type VoiceOrbMode = 'idle' | 'listening' | 'thinking' | 'speaking'
+
+type SpeechChunk = { text: string; cumStart: number; cumEnd: number }
 
 function wsUrlFor(path: string): string {
     const backend = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -153,6 +172,18 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
     // first word.
     const readyRef = useRef(false)
     const pendingAudioRef = useRef<ArrayBuffer[]>([])
+    // Estimated-timing caption scheduling (see estimateChunkSeconds above):
+    // speechChunksRef accumulates this turn's speech_chunk messages with a
+    // running estimated start/end offset from turnSpeechStartRef, which is
+    // captured on the Web Audio clock the moment the turn's first audio
+    // buffer is actually scheduled (see playPcm16). runOrbLoop below checks
+    // this every frame against playCtx.currentTime and only triggers a
+    // render when the active chunk index actually changes.
+    const speechChunksRef = useRef<SpeechChunk[]>([])
+    const turnSpeechStartRef = useRef<number | null>(null)
+    const captionIdxRef = useRef(-1)
+    const [agentCaption, setAgentCaption] = useState('')
+    const [agentCaptionKey, setAgentCaptionKey] = useState('empty')
     // turn_end means the server is done GENERATING — it says nothing about
     // whether the client has finished PLAYING what already got sent. Audio
     // is scheduled ahead on the Web Audio timeline (see playPcm16's
@@ -170,6 +201,29 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
 
     const patchCurrentTurn = useCallback((turnId: number, patch: (t: VoiceTurn) => VoiceTurn) => {
         setCurrentTurn((prev) => (prev && prev.turnId === turnId ? patch(prev) : prev))
+    }, [])
+
+    // Slides the displayed caption window to end at chunk `idx` — the last
+    // CAPTION_WINDOW chunks up to and including it, joined one per line.
+    const applyCaptionWindow = useCallback((turnId: number, idx: number) => {
+        captionIdxRef.current = idx
+        const chunks = speechChunksRef.current
+        const from = Math.max(0, idx - (CAPTION_WINDOW - 1))
+        setAgentCaption(
+            chunks
+                .slice(from, idx + 1)
+                .map((c) => c.text)
+                .join('\n')
+        )
+        setAgentCaptionKey(`agent-${turnId}-${idx}`)
+    }, [])
+
+    const resetCaptionWindow = useCallback(() => {
+        speechChunksRef.current = []
+        turnSpeechStartRef.current = null
+        captionIdxRef.current = -1
+        setAgentCaption('')
+        setAgentCaptionKey('empty')
     }, [])
 
     const stopAllPlayback = useCallback(() => {
@@ -201,6 +255,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         src.connect(gain)
         gain.connect(analyser)
         const startAt = Math.max(playCtx.currentTime, nextPlayTimeRef.current)
+        if (turnSpeechStartRef.current === null) turnSpeechStartRef.current = startAt
         const fade = Math.min(CHUNK_FADE_S, buffer.duration / 2)
         gain.gain.setValueAtTime(0, startAt)
         gain.gain.linearRampToValueAtTime(1, startAt + fade)
@@ -244,6 +299,14 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
 
         let rawLevel: number
         if (modeRef.current === 'speaking') {
+            const playCtx = playCtxRef.current
+            if (playCtx && turnSpeechStartRef.current !== null) {
+                const elapsed = playCtx.currentTime - turnSpeechStartRef.current
+                const chunks = speechChunksRef.current
+                let idx = captionIdxRef.current
+                while (idx + 1 < chunks.length && chunks[idx + 1].cumStart <= elapsed) idx++
+                if (idx !== captionIdxRef.current && idx >= 0) applyCaptionWindow(activeTurnIdRef.current, idx)
+            }
             const analyser = playAnalyserRef.current
             let agentLevel = 0
             if (analyser) {
@@ -277,7 +340,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         }
 
         rafRef.current = requestAnimationFrame(runOrbLoop)
-    }, [orbRef])
+    }, [orbRef, applyCaptionWindow])
 
     const toggleMute = useCallback(() => {
         mutedRef.current = !mutedRef.current
@@ -302,6 +365,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         micCtxRef.current?.close().catch(() => {})
         micCtxRef.current = null
         stopAllPlayback()
+        resetCaptionWindow()
         playCtxRef.current?.close().catch(() => {})
         playCtxRef.current = null
         playAnalyserRef.current = null
@@ -319,7 +383,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         if (orbRef.current) orbRef.current.style.transform = ''
         setMode('idle')
         setConnectionState((s) => (s === 'error' ? 'error' : 'closed'))
-    }, [orbRef, setMode, stopAllPlayback])
+    }, [orbRef, setMode, stopAllPlayback, resetCaptionWindow])
 
     const start = useCallback(async () => {
         setErrorMessage(null)
@@ -328,6 +392,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         activeTurnIdRef.current = 0
         readyRef.current = false
         pendingAudioRef.current = []
+        resetCaptionWindow()
         setConnectionState('connecting')
 
         try {
@@ -448,6 +513,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                         activeTurnIdRef.current = msg.turn_id
                         setLiveTranscript('')
                         setMode('thinking')
+                        resetCaptionWindow()
                         setCurrentTurn({
                             turnId: msg.turn_id,
                             userText: msg.user_text || '',
@@ -460,6 +526,20 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                         if (msg.turn_id !== activeTurnIdRef.current) break
                         setMode('speaking')
                         patchCurrentTurn(msg.turn_id, (t) => ({ ...t, agentText: t.agentText + msg.delta, status: 'speaking' }))
+                        break
+                    }
+                    case 'speech_chunk': {
+                        if (msg.turn_id !== activeTurnIdRef.current) break
+                        const chunks = speechChunksRef.current
+                        const prevEnd = chunks.length ? chunks[chunks.length - 1].cumEnd : 0
+                        const text = msg.text || ''
+                        chunks.push({ text, cumStart: prevEnd, cumEnd: prevEnd + estimateChunkSeconds(text) })
+                        // Surface the very first chunk right away instead of
+                        // waiting for its audio to start (a few hundred ms
+                        // later, once TTS has actually synthesized it) — a
+                        // caption arriving a beat before its audio reads as
+                        // anticipation, not lag.
+                        if (captionIdxRef.current === -1) applyCaptionWindow(msg.turn_id, 0)
                         break
                     }
                     case 'tool_call':
@@ -491,6 +571,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                             speakingEndTimerRef.current = null
                         }
                         stopAllPlayback()
+                        resetCaptionWindow()
                         setCurrentTurn((prev) =>
                             prev && (prev.status === 'thinking' || prev.status === 'speaking')
                                 ? { ...prev, status: 'interrupted' }
@@ -543,7 +624,19 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             setConnectionState('error')
             stop()
         }
-    }, [orbRef, patchCurrentTurn, playPcm16, runOrbLoop, setMode, stop, stopAllPlayback, getToken, fetchWithAuth])
+    }, [
+        orbRef,
+        patchCurrentTurn,
+        playPcm16,
+        runOrbLoop,
+        setMode,
+        stop,
+        stopAllPlayback,
+        getToken,
+        fetchWithAuth,
+        applyCaptionWindow,
+        resetCaptionWindow,
+    ])
 
     useEffect(() => () => stop(), [stop])
 
@@ -554,6 +647,8 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         currentTurn,
         liveTranscript,
         errorMessage,
+        agentCaption,
+        agentCaptionKey,
         start,
         stop,
         toggleMute,

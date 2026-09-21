@@ -18,8 +18,19 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
     const router = useRouter()
     const orbRef = useRef<HTMLDivElement>(null)
     const autoStartedRef = useRef(false)
-    const { connectionState, orbMode, muted, currentTurn, liveTranscript, errorMessage, start, stop, toggleMute } =
-        useVoiceSession(orbRef)
+    const {
+        connectionState,
+        orbMode,
+        muted,
+        currentTurn,
+        liveTranscript,
+        errorMessage,
+        agentCaption,
+        agentCaptionKey,
+        start,
+        stop,
+        toggleMute,
+    } = useVoiceSession(orbRef)
 
     // Enter the page already in "on a call" mode — no separate "tap to
     // start" screen. Guarded by a ref (not an empty-deps-only effect alone)
@@ -114,29 +125,46 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
     // slot (large, bold — whatever is live right now). What occupies main
     // moves through three phases per turn:
     //   1. user is talking, no turn yet: main = live transcript, top = empty
-    //   2. agent starts replying: the user's now-finalized line slides up
-    //      into top (small/grey), main becomes the agent's reply
-    //   3. user starts a NEW utterance: the whole old exchange (top + main)
+    //   2. agent starts replying but no speech_chunk has landed yet: the
+    //      user's now-finalized line slides up into top (small/grey), main
+    //      shows the raw growing agent_text (agentCaption is still empty)
+    //   3. once speech_chunk audio-timed captions start (agentCaption,
+    //      agentCaptionKey — see useVoiceSession), top collapses and main
+    //      becomes a sliding window of the last few sentences/clauses,
+    //      timed to when the agent is actually speaking them rather than
+    //      when the text arrived — a single ever-growing reply would run
+    //      off the screen for anything longer than a couple sentences.
+    //   4. user starts a NEW utterance: the whole old exchange (top + main)
     //      fades out, then main resets to the new live transcript
-    // Phase-3 transitions are the only ones that get an explicit fade — 1->2
-    // is just topText appearing (its own opacity/transform transition below)
-    // and later agent_text deltas update main directly, no re-fade needed.
+    // Phase-4 transitions are the only ones that get an explicit fade —
+    // every other change (topText appearing, main growing, or the caption
+    // window sliding) applies immediately; see isNewUtteranceSwap below.
     const isTerminal = !currentTurn || TERMINAL_STATUSES.has(currentTurn.status)
     const showingLiveUtterance = isTerminal && liveTranscript.length > 0
 
-    const targetTopText = showingLiveUtterance ? '' : currentTurn && currentTurn.agentText ? currentTurn.userText : ''
+    const targetTopText = showingLiveUtterance
+        ? ''
+        : agentCaption
+          ? ''
+          : currentTurn && currentTurn.agentText
+            ? currentTurn.userText
+            : ''
     const targetMainText = showingLiveUtterance
         ? liveTranscript
-        : currentTurn
-          ? currentTurn.agentText || currentTurn.userText
-          : ''
+        : agentCaption
+          ? agentCaption
+          : currentTurn
+            ? currentTurn.agentText || currentTurn.userText
+            : ''
     const targetMainKey = showingLiveUtterance
         ? 'user-live'
-        : currentTurn
-          ? currentTurn.agentText
-              ? `agent-${currentTurn.turnId}`
-              : `user-${currentTurn.turnId}`
-          : 'empty'
+        : agentCaption
+          ? agentCaptionKey
+          : currentTurn
+            ? currentTurn.agentText
+                ? `agent-${currentTurn.turnId}`
+                : `user-${currentTurn.turnId}`
+            : 'empty'
 
     const [slot, setSlot] = useState({ topText: '', mainText: '', mainKey: 'empty' })
     const [fadingOut, setFadingOut] = useState(false)
@@ -218,7 +246,7 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                             >
                                 {slot.topText}
                             </p>
-                            <p className="text-[24px] font-semibold leading-snug text-[var(--ink)]">
+                            <p className="whitespace-pre-line text-[24px] font-semibold leading-snug text-[var(--ink)]">
                                 {mainRevealed}
                                 {isTyping && (
                                     <span className="ml-0.5 inline-block h-5 w-[3px] animate-pulse bg-[var(--teal)] align-middle" />
