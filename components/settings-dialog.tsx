@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useUser, useAuth, useClerk, SignInButton } from '@clerk/nextjs'
@@ -1421,6 +1422,9 @@ function RedeemCodeRow({ onRedeem }: { onRedeem: (code: string) => Promise<Redee
                     </p>
                 )}
             </form>
+            <Link href="/get-free-credit" className="inline-block text-[13px] text-[var(--muted-foreground)] hover:text-[var(--accent)] hover:underline">
+                Ran out of credit? We may help — go grab a code.
+            </Link>
         </Row>
     )
 }
