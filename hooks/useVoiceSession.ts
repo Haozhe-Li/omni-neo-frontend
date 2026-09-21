@@ -55,23 +55,57 @@ const PLAYBACK_SAMPLE_RATE = 24000
 // imprecise), and that tiny timing jitter is audible as a click/pop at the
 // seam. Short enough not to read as its own tremolo.
 const CHUNK_FADE_S = 0.003
-// How many recent speech_chunk sentences/clauses stay on screen at once
-// (sliding by one as each becomes "current") — enough to read as a couple
-// lines without the whole reply piling up and overflowing.
+// How many recent caption chunks stay on screen at once (sliding by one as
+// each becomes "current") — enough to read as a couple lines without the
+// whole reply piling up and overflowing.
 const CAPTION_WINDOW = 3
-// Fish TTS's live protocol has no per-sentence audio boundary (only a
-// stream-ending "finish" — see omni's core/voice/fish_tts.py), so there's no
-// way to know exactly when a given chunk's audio starts playing. This
-// estimates it from character count instead, calibrated loosely for natural
-// Mandarin speech, and gets anchored to the turn's real playback clock (see
-// turnSpeechStartRef below) rather than trusted in isolation — each chunk is
-// only a sentence/clause, so estimation error can't drift far before the
-// next chunk boundary corrects it.
-const CHARS_PER_SECOND = 4.3
-const CHUNK_PAUSE_S = 0.18
+// Captions used to split on sentence/clause punctuation (mirroring how the
+// backend chunks text for TTS), but sentence lengths are wildly uneven — a
+// one-character sentence and a 60-character one get the same visual weight,
+// and the duration estimate below is far less accurate over a long
+// unpunctuated chunk than a short evenly-sized one. Splitting by a flat
+// character threshold instead makes chunk sizes (and so their estimated
+// durations) consistent, independent of the TTS-feeding chunking entirely.
+const CAPTION_CHUNK_CHARS = 14
+// No per-sentence audio boundary exists to sync against (Fish TTS's live
+// protocol only has a stream-ending "finish" — see omni's
+// core/voice/fish_tts.py), so this estimates duration from character count
+// instead. Only the first chunk is anchored to the turn's real playback
+// clock (turnSpeechStartRef below) — every chunk after that is pure
+// cumulative estimate, so a rate that's even a bit too slow compounds
+// across a whole reply instead of correcting itself. Tuned up from an
+// initial guess of 4.3 chars/s + 0.18s pause after real playback
+// consistently outran it — a couple hundred ms could still drift over a
+// long reply, but nowhere near what it was.
+const CHARS_PER_SECOND = 7.5
+const CHUNK_PAUSE_S = 0.05
 function estimateChunkSeconds(text: string): number {
     return text.length / CHARS_PER_SECOND + CHUNK_PAUSE_S
 }
+
+// Peels complete CAPTION_CHUNK_CHARS-sized pieces off the front of `buffer`.
+// Cuts at the last whitespace within the threshold window when there is one
+// (so an English word doesn't get split in half); CJK text has no spaces,
+// so this just falls through to a hard cut at the threshold, which is fine
+// at the character level. `force` (turn end) flushes whatever's left even
+// if it's under threshold, so the tail of a reply isn't silently dropped.
+function drainCaptionChunks(buffer: string, threshold: number, force = false): [string[], string] {
+    const chunks: string[] = []
+    let rest = buffer
+    while (rest.length >= threshold) {
+        const head = rest.slice(0, threshold)
+        const lastSpace = head.lastIndexOf(' ')
+        const cut = lastSpace > 0 ? lastSpace + 1 : threshold
+        chunks.push(rest.slice(0, cut))
+        rest = rest.slice(cut)
+    }
+    if (force && rest) {
+        chunks.push(rest)
+        rest = ''
+    }
+    return [chunks, rest]
+}
+
 const VOICE_INPUT_CONSTRAINTS: MediaTrackConstraints = {
     echoCancellation: true,
     noiseSuppression: true,
@@ -172,13 +206,16 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
     // first word.
     const readyRef = useRef(false)
     const pendingAudioRef = useRef<ArrayBuffer[]>([])
-    // Estimated-timing caption scheduling (see estimateChunkSeconds above):
-    // speechChunksRef accumulates this turn's speech_chunk messages with a
-    // running estimated start/end offset from turnSpeechStartRef, which is
-    // captured on the Web Audio clock the moment the turn's first audio
-    // buffer is actually scheduled (see playPcm16). runOrbLoop below checks
-    // this every frame against playCtx.currentTime and only triggers a
-    // render when the active chunk index actually changes.
+    // Estimated-timing caption scheduling (see estimateChunkSeconds and
+    // drainCaptionChunks above): captionBufferRef accumulates raw agent_text
+    // deltas until drainCaptionChunks peels a threshold-sized piece off the
+    // front; each piece lands in speechChunksRef with a running estimated
+    // start/end offset from turnSpeechStartRef, which is captured on the Web
+    // Audio clock the moment the turn's first audio buffer is actually
+    // scheduled (see playPcm16). runOrbLoop below checks this every frame
+    // against playCtx.currentTime and only triggers a render when the
+    // active chunk index actually changes.
+    const captionBufferRef = useRef('')
     const speechChunksRef = useRef<SpeechChunk[]>([])
     const turnSpeechStartRef = useRef<number | null>(null)
     const captionIdxRef = useRef(-1)
@@ -218,7 +255,24 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         setAgentCaptionKey(`agent-${turnId}-${idx}`)
     }, [])
 
+    // Appends one already-cut caption chunk to this turn's timeline.
+    const pushCaptionChunk = useCallback(
+        (turnId: number, text: string) => {
+            if (!text) return
+            const chunks = speechChunksRef.current
+            const prevEnd = chunks.length ? chunks[chunks.length - 1].cumEnd : 0
+            chunks.push({ text, cumStart: prevEnd, cumEnd: prevEnd + estimateChunkSeconds(text) })
+            // Surface the very first chunk right away instead of waiting for
+            // its audio to start (a few hundred ms later, once TTS has
+            // actually synthesized it) — a caption arriving a beat before
+            // its audio reads as anticipation, not lag.
+            if (captionIdxRef.current === -1) applyCaptionWindow(turnId, 0)
+        },
+        [applyCaptionWindow]
+    )
+
     const resetCaptionWindow = useCallback(() => {
+        captionBufferRef.current = ''
         speechChunksRef.current = []
         turnSpeechStartRef.current = null
         captionIdxRef.current = -1
@@ -526,20 +580,10 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                         if (msg.turn_id !== activeTurnIdRef.current) break
                         setMode('speaking')
                         patchCurrentTurn(msg.turn_id, (t) => ({ ...t, agentText: t.agentText + msg.delta, status: 'speaking' }))
-                        break
-                    }
-                    case 'speech_chunk': {
-                        if (msg.turn_id !== activeTurnIdRef.current) break
-                        const chunks = speechChunksRef.current
-                        const prevEnd = chunks.length ? chunks[chunks.length - 1].cumEnd : 0
-                        const text = msg.text || ''
-                        chunks.push({ text, cumStart: prevEnd, cumEnd: prevEnd + estimateChunkSeconds(text) })
-                        // Surface the very first chunk right away instead of
-                        // waiting for its audio to start (a few hundred ms
-                        // later, once TTS has actually synthesized it) — a
-                        // caption arriving a beat before its audio reads as
-                        // anticipation, not lag.
-                        if (captionIdxRef.current === -1) applyCaptionWindow(msg.turn_id, 0)
+                        captionBufferRef.current += msg.delta || ''
+                        const [ready, rest] = drainCaptionChunks(captionBufferRef.current, CAPTION_CHUNK_CHARS)
+                        captionBufferRef.current = rest
+                        for (const text of ready) pushCaptionChunk(msg.turn_id, text)
                         break
                     }
                     case 'tool_call':
@@ -549,6 +593,12 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                     case 'turn_end': {
                         patchCurrentTurn(msg.turn_id, (t) => ({ ...t, status: 'done' }))
                         if (msg.turn_id === activeTurnIdRef.current) {
+                            // Whatever's left in the caption buffer is shorter
+                            // than the threshold and would otherwise never get
+                            // flushed — the reply is done, so show it anyway.
+                            const [tail] = drainCaptionChunks(captionBufferRef.current, CAPTION_CHUNK_CHARS, true)
+                            captionBufferRef.current = ''
+                            for (const text of tail) pushCaptionChunk(msg.turn_id, text)
                             if (speakingEndTimerRef.current !== null) window.clearTimeout(speakingEndTimerRef.current)
                             const playCtx = playCtxRef.current
                             // All of this turn's audio chunks were already sent (the
@@ -634,7 +684,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         stopAllPlayback,
         getToken,
         fetchWithAuth,
-        applyCaptionWindow,
+        pushCaptionChunk,
         resetCaptionWindow,
     ])
 

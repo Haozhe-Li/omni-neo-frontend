@@ -125,12 +125,12 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
     // slot (large, bold — whatever is live right now). What occupies main
     // moves through three phases per turn:
     //   1. user is talking, no turn yet: main = live transcript, top = empty
-    //   2. agent starts replying but no speech_chunk has landed yet: the
+    //   2. agent starts replying but no caption chunk has landed yet: the
     //      user's now-finalized line slides up into top (small/grey), main
     //      shows the raw growing agent_text (agentCaption is still empty)
-    //   3. once speech_chunk audio-timed captions start (agentCaption,
+    //   3. once threshold-timed captions start (agentCaption,
     //      agentCaptionKey — see useVoiceSession), top collapses and main
-    //      becomes a sliding window of the last few sentences/clauses,
+    //      becomes a sliding window of the last few fixed-size chunks,
     //      timed to when the agent is actually speaking them rather than
     //      when the text arrived — a single ever-growing reply would run
     //      off the screen for anything longer than a couple sentences.
