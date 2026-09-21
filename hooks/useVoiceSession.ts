@@ -180,6 +180,11 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
     const [currentTurn, setCurrentTurn] = useState<VoiceTurn | null>(null)
     const [liveTranscript, setLiveTranscript] = useState('')
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
+    // The thread_id this call is actually running on — either freshly minted
+    // or, when start() is given a resumeThreadId, the same one an earlier
+    // call (or typed continuation) already used. Exposed so the caller can
+    // route back to /thread/{id} once the call ends (see voice-view.tsx).
+    const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
 
     const wsRef = useRef<WebSocket | null>(null)
     const micStreamRef = useRef<MediaStream | null>(null)
@@ -439,7 +444,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         setConnectionState((s) => (s === 'error' ? 'error' : 'closed'))
     }, [orbRef, setMode, stopAllPlayback, resetCaptionWindow])
 
-    const start = useCallback(async () => {
+    const start = useCallback(async (resumeThreadId?: string | null) => {
         setErrorMessage(null)
         setCurrentTurn(null)
         setLiveTranscript('')
@@ -454,11 +459,19 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             const token = await getToken()
             const guestId = token ? null : getOrCreateGuestId()
 
-            const threadRes = await fetchWithAuth(`${backendUrl}/get_thread_id?origin=voice`)
-            if (!threadRes.ok) throw new Error('Could not start the voice session')
-            const threadData = await threadRes.json()
-            const threadId = typeof threadData === 'string' ? threadData : threadData?.thread_id
+            // Continuing an existing voice-origin thread (see chat-view.tsx's
+            // "Resume voice call") reuses its thread_id as-is instead of
+            // minting a fresh one — same checkpointer, same thread, whether
+            // this turn ends up spoken or typed.
+            let threadId = resumeThreadId || ''
+            if (!threadId) {
+                const threadRes = await fetchWithAuth(`${backendUrl}/get_thread_id?origin=voice`)
+                if (!threadRes.ok) throw new Error('Could not start the voice session')
+                const threadData = await threadRes.json()
+                threadId = typeof threadData === 'string' ? threadData : threadData?.thread_id
+            }
             if (!threadId) throw new Error('Could not start the voice session')
+            setActiveThreadId(threadId)
 
             // Same personalization fields the main chat sends per turn
             // (buildPersonalization in chat-view.tsx), just the two that
@@ -699,6 +712,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         errorMessage,
         agentCaption,
         agentCaptionKey,
+        activeThreadId,
         start,
         stop,
         toggleMute,

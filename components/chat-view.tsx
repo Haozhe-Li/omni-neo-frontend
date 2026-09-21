@@ -1,7 +1,8 @@
 'use client'
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
-import { Menu, ArrowUp, ArrowRight, Mic, Square, Paperclip, Link2, Plus, SquarePen, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Menu, ArrowUp, ArrowRight, AudioLines, Mic, Square, Paperclip, Link2, Plus, SquarePen, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
@@ -73,6 +74,7 @@ interface ChatViewProps {
     is_locked?: boolean
     locked_reason?: string
     locked_at?: string
+    origin?: string | null
   } | null
 }
 
@@ -676,6 +678,37 @@ function fallbackFollowUps(seed: string): string[] {
   return out
 }
 
+/**
+ * Stands in for `<ModelPicker>` on a voice-origin thread — same `omni-tag`
+ * trigger so the composer reads as one consistent control, but there is
+ * only one real "model" (the voice agent), so opening it shows exactly one
+ * row instead of a real choice. No `onChange`: selecting the row does
+ * nothing but close the popover, since it's already what's running.
+ */
+function VoiceModelBadge({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(!open)} className="omni-tag select-none">
+        <span>Omni Voice</span>
+        <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 bottom-full mb-2 w-[220px] bg-[var(--paper-raised)] border border-[var(--line-strong)] rounded-[20px] shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)] py-2 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left text-[var(--accent)]"
+          >
+            <AudioLines className="h-[18px] w-[18px] shrink-0" />
+            <span className="flex-1 text-[14px] font-semibold leading-none">Omni Voice</span>
+            <Check className="h-4 w-4 shrink-0" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ChatView({
   query,
   threadId,
@@ -690,6 +723,7 @@ export function ChatView({
   setSidebarOpen,
   preloadedThread = null,
 }: ChatViewProps) {
+  const router = useRouter()
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
@@ -744,6 +778,13 @@ export function ChatView({
   // Set once this conversation trips the backend's safety guard — no more
   // sends/regenerates, but the existing history stays fully visible/readable.
   const [isLocked, setIsLocked] = useState(() => !!preloadedThread?.is_locked)
+  // A thread that started as a voice call (core/routers/voice.py) stays on
+  // that same simple ReAct agent for its whole life, whether a given turn
+  // arrives spoken or typed — no model choice, memory, rewind, skills, or
+  // file uploads, none of which that agent supports. Everything gated on
+  // this composes off it rather than threading a prop through separately.
+  const [threadOrigin, setThreadOrigin] = useState<string | null>(() => preloadedThread?.origin ?? null)
+  const isVoiceThread = threadOrigin === 'voice'
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -2028,18 +2069,93 @@ export function ChatView({
     [threadId, mode, buildPersonalization, fetchWithAuth, handleStream, syncToBackend]
   )
 
+  // ── send a turn (voice-origin threads only) ────────────────────────────
+  // Deliberately separate from runQuery/handleStream above: those assume the
+  // deep agent's full event surface (reasoning, artifacts, widgets, follow-
+  // ups, citation-matched inline sources) that the voice agent's much
+  // simpler ReAct loop doesn't produce — see core/routers/voice.py's
+  // /api/voice_threads/{id}/message, which streams a reduced version of the
+  // same text/tool_call/sources/done event shape core/stream.py does. No
+  // syncToBackend calls here: that endpoint persists the turn itself (see
+  // core/voice/persist.py), unlike /chat, which relies on the frontend to.
+  const runVoiceThreadQuery = useCallback(
+    async (queryText: string, baseHistory: ChatMessage[]) => {
+      setIsLoading(true)
+      setStreamingIndex(baseHistory.length)
+      try {
+        const personalization = await buildPersonalization()
+        const res = await fetchWithAuth(`${BACKEND_URL}/api/voice_threads/${threadId}/message`, {
+          method: 'POST',
+          body: JSON.stringify({
+            query: queryText,
+            user_location: personalization.user_location,
+            user_local_datetime: personalization.user_local_datetime,
+          }),
+        })
+        if (!res.ok || !res.body) {
+          const msg = getAiRequestErrorMessage(res.status)
+          toast.error(msg)
+          throw new Error(msg)
+        }
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+        let text = ''
+        const steps: TimelineStep[] = []
+        let sources: Source[] = []
+        const render = () => setMessages([...baseHistory, { role: 'assistant', content: text, steps: [...steps], sources }])
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const parts = buffer.split('\n\n')
+          buffer = parts.pop() || ''
+          for (const part of parts) {
+            if (!part.startsWith('data: ')) continue
+            let ev: any
+            try {
+              ev = JSON.parse(part.slice(6))
+            } catch {
+              continue
+            }
+            if (ev.type === 'text') {
+              text += ev.content || ''
+              render()
+            } else if (ev.type === 'tool_call') {
+              steps.push({ tool: ev.tool, args: ev.args, timestamp: Date.now() })
+              render()
+            } else if (ev.type === 'sources') {
+              sources = [...sources, ...(ev.sources || [])]
+            } else if (ev.type === 'done') {
+              sources = ev.sources || sources
+              render()
+            }
+          }
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Request failed.'
+        setMessages([...baseHistory, { role: 'assistant', content: msg }])
+      } finally {
+        setIsLoading(false)
+        setStreamingIndex(-1)
+      }
+    },
+    [threadId, buildPersonalization, fetchWithAuth]
+  )
+
   // Applies an already-fetched /api/threads/{id} payload: reconnects to a
   // background generation if one is in flight, otherwise just settles the
   // loading state. Shared by the preloaded path and the fetch-on-mount path
   // below so the two don't drift apart.
   const applyLoadedThread = useCallback(
-    async (data: { messages?: unknown; is_generating?: boolean; title?: string; is_locked?: boolean }) => {
+    async (data: { messages?: unknown; is_generating?: boolean; title?: string; is_locked?: boolean; origin?: string | null }) => {
       if (!Array.isArray(data?.messages) || data.messages.length === 0) return false
       const loadedMessages = data.messages as ChatMessage[]
       setMessages(loadedMessages)
       if (loadedMessages[0]?.mode) setMode(normalizeModelId(loadedMessages[0].mode))
       if (data.title?.trim()) setTitle(data.title.trim())
       setIsLocked(!!data.is_locked)
+      setThreadOrigin(data.origin ?? null)
 
       if (data.is_generating) {
         // A background generation is in progress — reconnect to it.
@@ -2389,6 +2505,21 @@ export function ChatView({
   // ── send from composer ─────────────────────────────────────────────────
   const handleSend = async () => {
     if (isLoading || isLocked) return
+    if (isVoiceThread) {
+      // No attachments/follow-ups/source-urls/skills — the voice agent
+      // doesn't support any of them (see runVoiceThreadQuery above).
+      if (!input.trim()) return
+      const userMsg: ChatMessage = { role: 'user', content: input }
+      const baseHistory = [...messages, userMsg]
+      const queryText = input
+      setInput('')
+      if (inputRef.current) inputRef.current.style.height = 'auto'
+      setMessages([...baseHistory, { role: 'assistant', content: '' }])
+      setStreamingIndex(baseHistory.length)
+      requestPin()
+      await runVoiceThreadQuery(queryText, baseHistory)
+      return
+    }
     if (attachedFiles.some((f) => f.status === 'uploading')) {
       toast.info('Please wait for the file to finish uploading.')
       return
@@ -2748,7 +2879,7 @@ export function ChatView({
                           >
                             <Copy size={13} strokeWidth={1.6} />
                           </button>
-                          {!isLoading && (
+                          {!isLoading && !isVoiceThread && (
                             <button
                               title="Edit and ask again"
                               onClick={() => { setEditingIndex(i); setEditText(msg.content); setTimeout(() => editRef.current?.focus(), 0) }}
@@ -3073,7 +3204,7 @@ export function ChatView({
                         {(parsed.text || msg.stoppedByUser) && turnDone ? (
                           <AnswerFooter
                             content={parsed.text}
-                            onRegenerate={isLocked ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
+                            onRegenerate={isLocked || isVoiceThread ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                             isSignedIn={!!isSignedIn}
                           />
@@ -3300,11 +3431,11 @@ export function ChatView({
                   <div>
                     <button
                       type="button"
-                      onClick={() => { if (!isLoading && !isLocked) setPlusMenuOpen(p => !p) }}
-                      disabled={isLoading || isLocked}
+                      onClick={() => { if (!isLoading && !isLocked && !isVoiceThread) setPlusMenuOpen(p => !p) }}
+                      disabled={isLoading || isLocked || isVoiceThread}
                       className={`
                         flex items-center justify-center h-9 w-9 rounded-full transition-all duration-200
-                        ${!isLoading && !isLocked
+                        ${!isLoading && !isLocked && !isVoiceThread
                           ? 'bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)]/80'
                           : 'bg-muted text-muted-foreground cursor-not-allowed'
                         }
@@ -3450,14 +3581,18 @@ export function ChatView({
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <ModelPicker
-                    model={mode}
-                    onChange={setMode}
-                    open={modelDropdownOpen}
-                    setOpen={setModelDropdownOpen}
-                    isSignedIn={!!isSignedIn}
-                    placement="up"
-                  />
+                  {isVoiceThread ? (
+                    <VoiceModelBadge open={modelDropdownOpen} setOpen={setModelDropdownOpen} />
+                  ) : (
+                    <ModelPicker
+                      model={mode}
+                      onChange={setMode}
+                      open={modelDropdownOpen}
+                      setOpen={setModelDropdownOpen}
+                      isSignedIn={!!isSignedIn}
+                      placement="up"
+                    />
+                  )}
 
                   <button
                     type="button"
@@ -3488,6 +3623,19 @@ export function ChatView({
                       aria-label="Stop generation"
                     >
                       <Square className="h-3.5 w-3.5 fill-current" />
+                    </button>
+                  ) : isVoiceThread && !input.trim() ? (
+                    // Nothing typed — offer to resume the live call on this
+                    // same thread instead of a send arrow that would just be
+                    // disabled (mirrors search-home.tsx's composer).
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/voice?thread=${threadId}`)}
+                      disabled={isLocked}
+                      className="omni-send h-9 w-9"
+                      aria-label="Resume voice call"
+                    >
+                      <AudioLines className="h-4 w-4" />
                     </button>
                   ) : (
                     <button

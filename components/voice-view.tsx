@@ -1,20 +1,24 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Menu, Mic, MicOff, Phone, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import { AlertTriangle, Menu, Mic, MicOff, Phone, X } from 'lucide-react'
 import { useVoiceSession } from '@/hooks/useVoiceSession'
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { cn } from '@/lib/utils'
 
 const TERMINAL_STATUSES = new Set(['done', 'interrupted', 'error'])
 const NEW_UTTERANCE_FADE_MS = 260
-const THANKS_DISPLAY_MS = 1200
-const LEAVE_FADE_MS = 500
 
-type EndPhase = 'active' | 'feedback' | 'thanks' | 'leaving'
-
-export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () => void; isMobile?: boolean }) {
+export function VoiceView({
+    onToggleSidebar,
+    isMobile,
+    resumeThreadId,
+}: {
+    onToggleSidebar?: () => void
+    isMobile?: boolean
+    resumeThreadId?: string | null
+}) {
     const router = useRouter()
     const orbRef = useRef<HTMLDivElement>(null)
     const autoStartedRef = useRef(false)
@@ -27,6 +31,7 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
         errorMessage,
         agentCaption,
         agentCaptionKey,
+        activeThreadId,
         start,
         stop,
         toggleMute,
@@ -41,70 +46,50 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
     useEffect(() => {
         if (autoStartedRef.current) return
         autoStartedRef.current = true
-        start()
+        start(resumeThreadId)
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     const connected = connectionState === 'connected'
     const inCall = connected || connectionState === 'connecting'
 
-    // Hanging up a real call asks for a quick thumbs up/down before leaving,
-    // instead of dropping straight back to the home page — cancelling a
-    // connection attempt that never went live has nothing to react to, so
-    // that one still leaves immediately. There is no "call ended, idle on
-    // this page" resting state at all: every way a live call stops ends up
-    // in this same feedback -> thanks -> fade -> home sequence.
-    const [endPhase, setEndPhase] = useState<EndPhase>('active')
+    // Once a call has actually connected, every way it ends — hang-up,
+    // dropped connection, server-side error — goes straight back to that
+    // thread's text transcript instead of lingering on this page. No
+    // feedback prompt: the thread itself is right there to read/continue.
     const wasConnectedRef = useRef(false)
+    // handleCallButton's explicit hangup and the disconnect-catching effect
+    // below can both fire for the same hangup (stop() flips connectionState,
+    // which the effect also reacts to) — guard so that only navigates once.
+    const hasNavigatedRef = useRef(false)
 
     useEffect(() => {
         if (connectionState === 'connected') wasConnectedRef.current = true
     }, [connectionState])
 
-    // Catches disconnects that aren't the user clicking the hang-up button
-    // (a dropped connection, a server-side error mid-call) — those would
-    // otherwise leave connectionState at 'closed'/'error' while endPhase is
-    // still 'active', which used to render as a bare idle orb with no way
-    // forward. Routes them into the same feedback flow as an explicit
-    // hangup, but only if the call had actually connected — a cancelled
-    // 'connecting' attempt has nothing to react to.
+    const goToThread = useCallback(() => {
+        if (hasNavigatedRef.current) return
+        hasNavigatedRef.current = true
+        router.push(activeThreadId ? `/thread/${activeThreadId}` : '/')
+    }, [router, activeThreadId])
+
     useEffect(() => {
-        if (endPhase !== 'active') return
         if ((connectionState === 'closed' || connectionState === 'error') && wasConnectedRef.current) {
             wasConnectedRef.current = false
-            setEndPhase('feedback')
+            goToThread()
         }
-    }, [connectionState, endPhase])
+    }, [connectionState, goToThread])
 
     const handleCallButton = () => {
         if (!inCall) {
-            start()
+            start(resumeThreadId)
             return
         }
         const hadRealCall = connected
         stop()
-        if (hadRealCall) setEndPhase('feedback')
+        if (hadRealCall) goToThread()
         else router.push('/')
     }
-
-    const handleFeedback = (_choice: 'up' | 'down') => {
-        // Frontend-only, same as the thumbs up/down on regular chat answers
-        // (components/answer-footer.tsx) — no backend feedback endpoint
-        // exists yet to send this to.
-        setEndPhase('thanks')
-    }
-
-    useEffect(() => {
-        if (endPhase !== 'thanks') return
-        const t = window.setTimeout(() => setEndPhase('leaving'), THANKS_DISPLAY_MS)
-        return () => window.clearTimeout(t)
-    }, [endPhase])
-
-    useEffect(() => {
-        if (endPhase !== 'leaving') return
-        const t = window.setTimeout(() => router.push('/'), LEAVE_FADE_MS)
-        return () => window.clearTimeout(t)
-    }, [endPhase, router])
 
     const visualState =
         connectionState === 'connecting' ? 'connecting' : connectionState !== 'connected' ? 'idle' : orbMode
@@ -227,136 +212,96 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                 </div>
             )}
 
-            {endPhase === 'active' ? (
-                <div className="flex w-full max-w-xl flex-1 flex-col items-center justify-center py-10">
-                    {hasText && (
-                        <div
-                            className={cn(
-                                'mb-6 w-full text-center transition-opacity duration-300 ease-out',
-                                fadingOut ? 'opacity-0' : 'opacity-100'
-                            )}
-                        >
-                            <p
-                                className={cn(
-                                    'text-[13px] leading-relaxed text-[var(--ink-faint)] transition-all duration-500 ease-out',
-                                    slot.topText
-                                        ? 'mb-2 max-h-8 -translate-y-0 opacity-100'
-                                        : 'mb-0 max-h-0 -translate-y-1 opacity-0'
-                                )}
-                            >
-                                {slot.topText}
-                            </p>
-                            <p className="whitespace-pre-line text-[24px] font-semibold leading-snug text-[var(--ink)]">
-                                {mainRevealed}
-                                {isTyping && (
-                                    <span className="ml-0.5 inline-block h-5 w-[3px] animate-pulse bg-[var(--teal)] align-middle" />
-                                )}
-                            </p>
-                            {currentTurn?.status === 'interrupted' && (
-                                <p className="mt-1.5 text-[12.5px] italic text-[var(--ink-faint)]">Interrupted</p>
-                            )}
-                            {currentTurn?.status === 'error' && (
-                                <p className="mt-1.5 text-[12.5px] text-[var(--destructive)]">
-                                    {currentTurn.errorDetail || 'Something went wrong'}
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    {/* The orb itself — connecting starts small and visibly
-                        responsive, then grows into its normal breathing/reactive
-                        size once the call is actually live (see the module docs
-                        on .omni-voice-orb in globals.css for the per-state
-                        animation tempo, and useVoiceSession's runOrbLoop for the
-                        live audio-reactive scale/glow on top of it). */}
+            <div className="flex w-full max-w-xl flex-1 flex-col items-center justify-center py-10">
+                {hasText && (
                     <div
                         className={cn(
-                            'flex items-center justify-center transition-[width,height] duration-500 ease-out',
-                            connectionState === 'connecting' ? 'h-24 w-24' : 'h-44 w-44'
+                            'mb-6 w-full text-center transition-opacity duration-300 ease-out',
+                            fadingOut ? 'opacity-0' : 'opacity-100'
                         )}
                     >
-                        <div ref={orbRef} className={cn('omni-voice-orb h-full w-full', `omni-voice-orb--${visualState}`)} />
-                    </div>
-
-                    <div className="mt-5 flex items-center gap-1.5 text-[14px] font-medium text-[var(--teal)]">
-                        <span>{statusLabel}</span>
-                        {orbMode === 'thinking' && connected && (
-                            <span className="omni-typing-dots">
-                                <span />
-                                <span />
-                                <span />
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="mt-9 flex items-center gap-4">
-                        <button
-                            onClick={handleCallButton}
+                        <p
                             className={cn(
-                                'flex h-14 w-14 items-center justify-center rounded-full transition-colors',
-                                inCall
-                                    ? 'bg-[var(--destructive)] text-white hover:opacity-90'
-                                    : 'bg-[var(--teal)] text-[var(--paper)] hover:bg-[var(--teal-hover)]'
+                                'text-[13px] leading-relaxed text-[var(--ink-faint)] transition-all duration-500 ease-out',
+                                slot.topText
+                                    ? 'mb-2 max-h-8 -translate-y-0 opacity-100'
+                                    : 'mb-0 max-h-0 -translate-y-1 opacity-0'
                             )}
-                            title={inCall ? 'End call' : 'Reconnect'}
                         >
-                            {inCall ? <X size={22} /> : <Phone size={20} />}
-                        </button>
-                        {connected && (
-                            <button
-                                onClick={toggleMute}
-                                className={cn(
-                                    'flex h-14 w-14 items-center justify-center rounded-full transition-colors',
-                                    muted
-                                        ? 'bg-[var(--destructive)]/15 text-[var(--destructive)]'
-                                        : 'bg-[var(--sand-deep)] text-[var(--ink)] hover:bg-[var(--sand)]'
-                                )}
-                                title={muted ? 'Unmute' : 'Mute microphone'}
-                            >
-                                {muted ? <MicOff size={20} /> : <Mic size={20} />}
-                            </button>
+                            {slot.topText}
+                        </p>
+                        <p className="whitespace-pre-line text-[24px] font-semibold leading-snug text-[var(--ink)]">
+                            {mainRevealed}
+                            {isTyping && (
+                                <span className="ml-0.5 inline-block h-5 w-[3px] animate-pulse bg-[var(--teal)] align-middle" />
+                            )}
+                        </p>
+                        {currentTurn?.status === 'interrupted' && (
+                            <p className="mt-1.5 text-[12.5px] italic text-[var(--ink-faint)]">Interrupted</p>
+                        )}
+                        {currentTurn?.status === 'error' && (
+                            <p className="mt-1.5 text-[12.5px] text-[var(--destructive)]">
+                                {currentTurn.errorDetail || 'Something went wrong'}
+                            </p>
                         )}
                     </div>
-                </div>
-            ) : (
-                // Post-hangup: a quick like/dislike, a thank-you, then a fade
-                // back to the home page — replaces this same content area
-                // rather than navigating away immediately.
+                )}
+
+                {/* The orb itself — connecting starts small and visibly
+                    responsive, then grows into its normal breathing/reactive
+                    size once the call is actually live (see the module docs
+                    on .omni-voice-orb in globals.css for the per-state
+                    animation tempo, and useVoiceSession's runOrbLoop for the
+                    live audio-reactive scale/glow on top of it). */}
                 <div
-                    // duration-500 here must match LEAVE_FADE_MS above —
-                    // Tailwind needs a static class, so it can't read the
-                    // constant directly; the effect that navigates home
-                    // waits LEAVE_FADE_MS so the fade actually finishes first.
                     className={cn(
-                        'flex flex-1 flex-col items-center justify-center gap-6 transition-opacity duration-500 ease-out',
-                        endPhase === 'leaving' ? 'opacity-0' : 'opacity-100'
+                        'flex items-center justify-center transition-[width,height] duration-500 ease-out',
+                        connectionState === 'connecting' ? 'h-24 w-24' : 'h-44 w-44'
                     )}
                 >
-                    {endPhase === 'feedback' ? (
-                        <>
-                            <p className="text-[16px] font-medium text-[var(--ink)]">How was the call?</p>
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => handleFeedback('up')}
-                                    title="Good"
-                                    className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sand-deep)] text-[var(--ink)] transition-colors hover:bg-[var(--teal-tint)] hover:text-[var(--teal)]"
-                                >
-                                    <ThumbsUp size={22} />
-                                </button>
-                                <button
-                                    onClick={() => handleFeedback('down')}
-                                    title="Not great"
-                                    className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sand-deep)] text-[var(--ink)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
-                                >
-                                    <ThumbsDown size={22} />
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <p className="text-[16px] font-medium text-[var(--teal)]">Thanks for the feedback!</p>
+                    <div ref={orbRef} className={cn('omni-voice-orb h-full w-full', `omni-voice-orb--${visualState}`)} />
+                </div>
+
+                <div className="mt-5 flex items-center gap-1.5 text-[14px] font-medium text-[var(--teal)]">
+                    <span>{statusLabel}</span>
+                    {orbMode === 'thinking' && connected && (
+                        <span className="omni-typing-dots">
+                            <span />
+                            <span />
+                            <span />
+                        </span>
                     )}
                 </div>
-            )}
+
+                <div className="mt-9 flex items-center gap-4">
+                    <button
+                        onClick={handleCallButton}
+                        className={cn(
+                            'flex h-14 w-14 items-center justify-center rounded-full transition-colors',
+                            inCall
+                                ? 'bg-[var(--destructive)] text-white hover:opacity-90'
+                                : 'bg-[var(--teal)] text-[var(--paper)] hover:bg-[var(--teal-hover)]'
+                        )}
+                        title={inCall ? 'End call' : 'Reconnect'}
+                    >
+                        {inCall ? <X size={22} /> : <Phone size={20} />}
+                    </button>
+                    {connected && (
+                        <button
+                            onClick={toggleMute}
+                            className={cn(
+                                'flex h-14 w-14 items-center justify-center rounded-full transition-colors',
+                                muted
+                                    ? 'bg-[var(--destructive)]/15 text-[var(--destructive)]'
+                                    : 'bg-[var(--sand-deep)] text-[var(--ink)] hover:bg-[var(--sand)]'
+                            )}
+                            title={muted ? 'Unmute' : 'Mute microphone'}
+                        >
+                            {muted ? <MicOff size={20} /> : <Mic size={20} />}
+                        </button>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }

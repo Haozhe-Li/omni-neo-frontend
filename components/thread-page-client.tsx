@@ -23,6 +23,7 @@ type PreloadedThread = {
   is_locked?: boolean
   locked_reason?: string
   locked_at?: string
+  origin?: string | null
 }
 
 export function ThreadPageClient({ threadId }: { threadId: string }) {
@@ -72,6 +73,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
             is_locked: !!data.is_locked,
             locked_reason: typeof data?.locked_reason === 'string' ? data.locked_reason : undefined,
             locked_at: typeof data?.locked_at === 'string' ? data.locked_at : undefined,
+            origin: typeof data?.origin === 'string' ? data.origin : null,
           })
           setStatus('ready')
         } else {
