@@ -401,10 +401,10 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             const guestId = token ? null : getOrCreateGuestId()
 
             const threadRes = await fetchWithAuth(`${backendUrl}/get_thread_id?origin=voice`)
-            if (!threadRes.ok) throw new Error('无法创建语音会话')
+            if (!threadRes.ok) throw new Error('Could not start the voice session')
             const threadData = await threadRes.json()
             const threadId = typeof threadData === 'string' ? threadData : threadData?.thread_id
-            if (!threadId) throw new Error('无法创建语音会话')
+            if (!threadId) throw new Error('Could not start the voice session')
 
             // Same personalization fields the main chat sends per turn
             // (buildPersonalization in chat-view.tsx), just the two that
@@ -476,7 +476,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             }
 
             ws.onerror = () => {
-                setErrorMessage('连接语音服务失败')
+                setErrorMessage('Failed to connect to the voice service')
                 setConnectionState('error')
             }
 
@@ -588,7 +588,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                             // Connection-level error (e.g. backend missing API keys) —
                             // nothing to recover from client-side, so surface it and
                             // tear the session down.
-                            setErrorMessage(msg.detail || '语音服务出错')
+                            setErrorMessage(msg.detail || 'The voice service ran into an error')
                             setConnectionState('error')
                             stop()
                         }
@@ -620,7 +620,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                 }
             }
         } catch (e: any) {
-            setErrorMessage(e?.message || '无法访问麦克风')
+            setErrorMessage(e?.message || 'Could not access the microphone')
             setConnectionState('error')
             stop()
         }

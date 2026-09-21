@@ -113,7 +113,7 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
         connectionState === 'connecting'
             ? 'Connecting…'
             : connectionState === 'error'
-              ? '连接出错'
+              ? 'Connection error'
               : orbMode === 'thinking'
                 ? 'Omni is thinking'
                 : orbMode === 'speaking'
@@ -253,11 +253,11 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                                 )}
                             </p>
                             {currentTurn?.status === 'interrupted' && (
-                                <p className="mt-1.5 text-[12.5px] italic text-[var(--ink-faint)]">已被打断</p>
+                                <p className="mt-1.5 text-[12.5px] italic text-[var(--ink-faint)]">Interrupted</p>
                             )}
                             {currentTurn?.status === 'error' && (
                                 <p className="mt-1.5 text-[12.5px] text-[var(--destructive)]">
-                                    {currentTurn.errorDetail || '出错了'}
+                                    {currentTurn.errorDetail || 'Something went wrong'}
                                 </p>
                             )}
                         </div>
@@ -298,7 +298,7 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                                     ? 'bg-[var(--destructive)] text-white hover:opacity-90'
                                     : 'bg-[var(--teal)] text-[var(--paper)] hover:bg-[var(--teal-hover)]'
                             )}
-                            title={inCall ? '结束通话' : '重新连接'}
+                            title={inCall ? 'End call' : 'Reconnect'}
                         >
                             {inCall ? <X size={22} /> : <Phone size={20} />}
                         </button>
@@ -311,7 +311,7 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                                         ? 'bg-[var(--destructive)]/15 text-[var(--destructive)]'
                                         : 'bg-[var(--sand-deep)] text-[var(--ink)] hover:bg-[var(--sand)]'
                                 )}
-                                title={muted ? '取消静音' : '静音麦克风'}
+                                title={muted ? 'Unmute' : 'Mute microphone'}
                             >
                                 {muted ? <MicOff size={20} /> : <Mic size={20} />}
                             </button>
@@ -334,18 +334,18 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                 >
                     {endPhase === 'feedback' ? (
                         <>
-                            <p className="text-[16px] font-medium text-[var(--ink)]">这次通话怎么样？</p>
+                            <p className="text-[16px] font-medium text-[var(--ink)]">How was the call?</p>
                             <div className="flex items-center gap-4">
                                 <button
                                     onClick={() => handleFeedback('up')}
-                                    title="不错"
+                                    title="Good"
                                     className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sand-deep)] text-[var(--ink)] transition-colors hover:bg-[var(--teal-tint)] hover:text-[var(--teal)]"
                                 >
                                     <ThumbsUp size={22} />
                                 </button>
                                 <button
                                     onClick={() => handleFeedback('down')}
-                                    title="不太好"
+                                    title="Not great"
                                     className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--sand-deep)] text-[var(--ink)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
                                 >
                                     <ThumbsDown size={22} />
@@ -353,7 +353,7 @@ export function VoiceView({ onToggleSidebar, isMobile }: { onToggleSidebar?: () 
                             </div>
                         </>
                     ) : (
-                        <p className="text-[16px] font-medium text-[var(--teal)]">谢谢你的反馈！</p>
+                        <p className="text-[16px] font-medium text-[var(--teal)]">Thanks for the feedback!</p>
                     )}
                 </div>
             )}
