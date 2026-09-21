@@ -49,6 +49,12 @@ import { getUserLocation } from '@/lib/location'
 
 const SEND_SAMPLE_RATE = 16000
 const PLAYBACK_SAMPLE_RATE = 24000
+// Anti-click fade applied at each streamed chunk's edges — separately
+// scheduled AudioBufferSourceNodes butted end-to-end can land a few samples
+// off from perfectly back-to-back (mobile Safari's scheduling is especially
+// imprecise), and that tiny timing jitter is audible as a click/pop at the
+// seam. Short enough not to read as its own tremolo.
+const CHUNK_FADE_S = 0.003
 const VOICE_INPUT_CONSTRAINTS: MediaTrackConstraints = {
     echoCancellation: true,
     noiseSuppression: true,
@@ -128,6 +134,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
     const micNodeRef = useRef<ScriptProcessorNode | null>(null)
     const playCtxRef = useRef<AudioContext | null>(null)
     const playAnalyserRef = useRef<AnalyserNode | null>(null)
+    const playElRef = useRef<HTMLAudioElement | null>(null)
     const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([])
     const nextPlayTimeRef = useRef(0)
     const activeTurnIdRef = useRef(0)
@@ -190,8 +197,15 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         buffer.copyToChannel(float32, 0)
         const src = playCtx.createBufferSource()
         src.buffer = buffer
-        src.connect(analyser)
+        const gain = playCtx.createGain()
+        src.connect(gain)
+        gain.connect(analyser)
         const startAt = Math.max(playCtx.currentTime, nextPlayTimeRef.current)
+        const fade = Math.min(CHUNK_FADE_S, buffer.duration / 2)
+        gain.gain.setValueAtTime(0, startAt)
+        gain.gain.linearRampToValueAtTime(1, startAt + fade)
+        gain.gain.setValueAtTime(1, startAt + buffer.duration - fade)
+        gain.gain.linearRampToValueAtTime(0, startAt + buffer.duration)
         src.start(startAt)
         nextPlayTimeRef.current = startAt + buffer.duration
         scheduledSourcesRef.current.push(src)
@@ -291,6 +305,11 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         playCtxRef.current?.close().catch(() => {})
         playCtxRef.current = null
         playAnalyserRef.current = null
+        if (playElRef.current) {
+            playElRef.current.pause()
+            playElRef.current.srcObject = null
+            playElRef.current = null
+        }
         wsRef.current?.close()
         wsRef.current = null
         readyRef.current = false
@@ -338,7 +357,19 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             playCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
             const analyser = playCtxRef.current.createAnalyser()
             analyser.fftSize = 512
-            analyser.connect(playCtxRef.current.destination)
+            // Route playback through a real <audio> element instead of
+            // straight to AudioContext.destination. iOS Safari's
+            // echoCancellation only reliably picks up HTMLMediaElement
+            // output as its AEC reference signal — a bare AudioContext
+            // output isn't tracked the same way — so speakerphone echo is
+            // much worse against a direct destination connection.
+            const playbackDest = playCtxRef.current.createMediaStreamDestination()
+            analyser.connect(playbackDest)
+            const audioEl = new Audio()
+            audioEl.srcObject = playbackDest.stream
+            audioEl.autoplay = true
+            audioEl.play().catch(() => {})
+            playElRef.current = audioEl
             playAnalyserRef.current = analyser
             nextPlayTimeRef.current = 0
 
