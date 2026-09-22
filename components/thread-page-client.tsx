@@ -93,14 +93,6 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
   const selectThread = useCallback((id: string) => router.push(`/thread/${id}`), [router])
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
-  if (status === 'checking') {
-    return (
-      <div className="flex h-[100dvh] w-full items-center justify-center bg-background">
-        <Spinner className="size-6 text-muted-foreground" />
-      </div>
-    )
-  }
-
   if (status === 'unauthenticated') {
     return (
       <ThreadStatusScreen
@@ -147,6 +139,10 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
     )
   }
 
+  // 'checking' and 'ready' share one shell, so the sidebar stays mounted
+  // while the thread loads instead of blinking out behind a full-screen
+  // spinner — most noticeable arriving here from a finished voice call.
+  const loading = status === 'checking'
   return (
     <div className="omni-app-shell flex h-[100dvh] w-full overflow-hidden relative">
       <AppSidebar
@@ -159,19 +155,25 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
         isMobile={isMobile}
       />
 
-      <main className="flex-1 min-w-0 h-full relative overflow-hidden">
-        <ChatView
-          key={threadId}
-          query={String(preloadedThread?.messages?.[0]?.content ?? '')}
-          threadId={threadId}
-          onNewSearch={goHome}
-          onToggleSidebar={toggleSidebar}
-          isMobile={isMobile}
-          initialMode={DEFAULT_MODEL}
-          sidebarOpen={sidebarOpen}
-          setSidebarOpen={setSidebarOpen}
-          preloadedThread={preloadedThread}
-        />
+      <main className={`flex-1 min-w-0 h-full relative overflow-hidden ${loading ? '' : 'omni-fade-in'}`}>
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <Spinner className="size-6 text-muted-foreground" />
+          </div>
+        ) : (
+          <ChatView
+            key={threadId}
+            query={String(preloadedThread?.messages?.[0]?.content ?? '')}
+            threadId={threadId}
+            onNewSearch={goHome}
+            onToggleSidebar={toggleSidebar}
+            isMobile={isMobile}
+            initialMode={DEFAULT_MODEL}
+            sidebarOpen={sidebarOpen}
+            setSidebarOpen={setSidebarOpen}
+            preloadedThread={preloadedThread}
+          />
+        )}
       </main>
     </div>
   )

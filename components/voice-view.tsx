@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils'
 
 const TERMINAL_STATUSES = new Set(['done', 'interrupted', 'error'])
 const NEW_UTTERANCE_FADE_MS = 260
+// Matches .omni-voice-orb-exit in globals.css, plus a beat for its last frame.
+const LEAVE_ANIM_MS = 560
 
 export function VoiceView({
     onToggleSidebar,
@@ -64,6 +66,9 @@ export function VoiceView({
     // the same hangup (stop() flips connectionState, which the effect also
     // reacts to) — guard so that only navigates once.
     const hasNavigatedRef = useRef(false)
+    // While true, the exit animation plays; the route change waits for it.
+    const [leaving, setLeaving] = useState(false)
+    const leaveTimerRef = useRef<number | null>(null)
 
     useEffect(() => {
         if (connectionState === 'connected') wasConnectedRef.current = true
@@ -76,8 +81,18 @@ export function VoiceView({
     const leaveCall = useCallback(() => {
         if (hasNavigatedRef.current) return
         hasNavigatedRef.current = true
-        router.push(hasTranscriptRef.current && activeThreadId ? `/thread/${activeThreadId}` : '/')
+        const dest = hasTranscriptRef.current && activeThreadId ? `/thread/${activeThreadId}` : '/'
+        router.prefetch(dest)
+        setLeaving(true)
+        leaveTimerRef.current = window.setTimeout(() => router.push(dest), LEAVE_ANIM_MS)
     }, [router, activeThreadId])
+
+    useEffect(
+        () => () => {
+            if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current)
+        },
+        []
+    )
 
     // A call that connected and then dropped leaves on its own. One that
     // never connected stays put so its error stays readable; hanging up
@@ -94,10 +109,10 @@ export function VoiceView({
         leaveCall()
     }
 
-    const visualState =
+    const liveVisualState =
         connectionState === 'connecting' ? 'connecting' : connectionState !== 'connected' ? 'idle' : orbMode
 
-    const statusLabel =
+    const liveStatusLabel =
         connectionState === 'connecting'
             ? 'Connecting…'
             : connectionState === 'error'
@@ -107,6 +122,21 @@ export function VoiceView({
                 : orbMode === 'speaking'
                   ? 'Omni is speaking'
                   : 'Say something'
+
+    // Hold the last in-call look once the call is over: stop() drops the orb
+    // straight to its grey idle state, which would otherwise flash in right
+    // as the exit animation starts shrinking it.
+    const callEnded = leaving || connectionState === 'closed'
+    // `shownConnected` too: the mute button vanishing mid-exit would shift
+    // the hang-up button sideways under the animation.
+    const shownStateRef = useRef({ visualState: liveVisualState, statusLabel: liveStatusLabel, shownConnected: connected })
+    if (!callEnded) {
+        shownStateRef.current = { visualState: liveVisualState, statusLabel: liveStatusLabel, shownConnected: connected }
+    }
+    const { visualState, statusLabel, shownConnected } = shownStateRef.current
+    // Whose turn it is, in color: rust while Omni speaks, teal otherwise —
+    // the orb (see .omni-voice-orb--speaking) and its label/caret agree.
+    const omniSpeaking = visualState === 'speaking'
 
     // ── The two-slot transcript display ────────────────────────────────────
     // One "top" slot (small, grey — a settled, past line) and one "main"
@@ -163,6 +193,10 @@ export function VoiceView({
     targetSnapshotRef.current = { topText: targetTopText, mainText: targetMainText, mainKey: targetMainKey }
 
     useEffect(() => {
+        // Freeze the transcript once the call is over — stop() resets the
+        // caption window, which would otherwise swap in the full reply text
+        // right as it fades out.
+        if (callEnded) return
         // A fresh utterance replacing a finished exchange — fade the old
         // one out first. Anything else (the push-up when the agent starts
         // replying, or agent text simply growing) applies immediately.
@@ -184,7 +218,7 @@ export function VoiceView({
         } else if (fadeTimerRef.current === null) {
             setSlot({ topText: targetTopText, mainText: targetMainText, mainKey: targetMainKey })
         }
-    }, [targetTopText, targetMainText, targetMainKey])
+    }, [targetTopText, targetMainText, targetMainKey, callEnded])
 
     useEffect(
         () => () => {
@@ -209,7 +243,12 @@ export function VoiceView({
             )}
 
             {errorMessage && (
-                <div className="absolute left-1/2 top-4 z-10 flex w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-3.5 py-2.5 text-[13px] text-[var(--destructive)]">
+                <div
+                    className={cn(
+                        'absolute left-1/2 top-4 z-10 flex w-[min(90%,26rem)] -translate-x-1/2 items-center gap-2 rounded-xl border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-3.5 py-2.5 text-[13px] text-[var(--destructive)] transition-opacity duration-300',
+                        leaving && 'opacity-0'
+                    )}
+                >
                     <AlertTriangle size={14} className="shrink-0" />
                     <span>{errorMessage}</span>
                 </div>
@@ -220,7 +259,7 @@ export function VoiceView({
                     <div
                         className={cn(
                             'mb-6 w-full text-center transition-opacity duration-300 ease-out',
-                            fadingOut ? 'opacity-0' : 'opacity-100'
+                            fadingOut || leaving ? 'opacity-0' : 'opacity-100'
                         )}
                     >
                         <p
@@ -236,7 +275,12 @@ export function VoiceView({
                         <p className="whitespace-pre-line text-[24px] font-semibold leading-snug text-[var(--ink)]">
                             {mainRevealed}
                             {isTyping && (
-                                <span className="ml-0.5 inline-block h-5 w-[3px] animate-pulse bg-[var(--teal)] align-middle" />
+                                <span
+                                    className={cn(
+                                        'ml-0.5 inline-block h-5 w-[3px] animate-pulse align-middle',
+                                        omniSpeaking ? 'bg-[var(--rust)]' : 'bg-[var(--teal)]'
+                                    )}
+                                />
                             )}
                         </p>
                         {currentTurn?.status === 'interrupted' && (
@@ -259,15 +303,22 @@ export function VoiceView({
                 <div
                     className={cn(
                         'flex items-center justify-center transition-[width,height] duration-500 ease-out',
-                        connectionState === 'connecting' ? 'h-24 w-24' : 'h-44 w-44'
+                        visualState === 'connecting' ? 'h-24 w-24' : 'h-44 w-44',
+                        leaving && 'omni-voice-orb-exit'
                     )}
                 >
                     <div ref={orbRef} className={cn('omni-voice-orb h-full w-full', `omni-voice-orb--${visualState}`)} />
                 </div>
 
-                <div className="mt-5 flex items-center gap-1.5 text-[14px] font-medium text-[var(--teal)]">
+                <div
+                    className={cn(
+                        'mt-5 flex items-center gap-1.5 text-[14px] font-medium transition-[color,opacity] duration-300',
+                        omniSpeaking ? 'text-[var(--rust)]' : 'text-[var(--teal)]',
+                        leaving && 'opacity-0'
+                    )}
+                >
                     <span>{statusLabel}</span>
-                    {orbMode === 'thinking' && connected && (
+                    {visualState === 'thinking' && shownConnected && (
                         <span className="omni-typing-dots">
                             <span />
                             <span />
@@ -276,7 +327,12 @@ export function VoiceView({
                     )}
                 </div>
 
-                <div className="mt-9 flex items-center gap-4">
+                <div
+                    className={cn(
+                        'mt-9 flex items-center gap-4 transition-opacity duration-200',
+                        leaving && 'pointer-events-none opacity-0'
+                    )}
+                >
                     <button
                         onClick={handleHangUp}
                         className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--destructive)] text-white transition-opacity hover:opacity-90"
@@ -284,7 +340,7 @@ export function VoiceView({
                     >
                         <X size={22} />
                     </button>
-                    {connected && (
+                    {shownConnected && (
                         <button
                             onClick={toggleMute}
                             className={cn(
