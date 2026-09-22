@@ -606,6 +606,23 @@ function ContinuedFromCard({ url }: { url: string }) {
   )
 }
 
+/** Hairline divider marking where a live voice call began or ended within a
+ * voice thread's transcript — everything between a pair was spoken, the rest
+ * typed. */
+function VoiceCallBanner({ kind }: { kind: 'start' | 'end' }) {
+  const label = kind === 'start' ? 'Voice call started' : 'Voice call ended'
+  return (
+    <div role="separator" aria-label={label} className="flex w-full items-center gap-3">
+      <span className="h-px flex-1 bg-[var(--line)]" />
+      <span className="omni-eyebrow flex shrink-0 items-center gap-1.5">
+        <AudioLines size={12} />
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-[var(--line)]" />
+    </div>
+  )
+}
+
 function ContinuedFromBanner({ urls }: { urls: string[] }) {
   const firstParty = urls.filter(isFirstPartyUrl)
   if (firstParty.length === 0) return null
@@ -2792,6 +2809,11 @@ export function ChatView({
                     : 'pb-8'
                 }`}
               >
+                {msg.voice_call === 'start' && (
+                  <div className="mb-8">
+                    <VoiceCallBanner kind="start" />
+                  </div>
+                )}
                 {msg.role === 'user' ? (
                   <>
                   {!!msg.sourceUrls?.length && <ContinuedFromBanner urls={msg.sourceUrls} />}
@@ -3212,6 +3234,11 @@ export function ChatView({
                       </div>
                     )
                   })()
+                )}
+                {msg.voice_call === 'end' && (
+                  <div className="mt-10">
+                    <VoiceCallBanner kind="end" />
+                  </div>
                 )}
               </div>
             ))})()}

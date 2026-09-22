@@ -215,6 +215,14 @@ export interface ChatError {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  /**
+   * Where a live voice call began (on its first user message) or ended (on
+   * its last reply) — written by the backend (core/voice/persist.py), drawn as
+   * "Voice call started/ended" banners. Kept on the messages themselves, not
+   * as separate entries, since the thread view assumes user/assistant turns
+   * throughout.
+   */
+  voice_call?: 'start' | 'end'
   attachedFiles?: { id: string; name: string; type: string }[]
   /** Whitelisted URLs the agent was asked to prioritize reading this turn. */
   sourceUrls?: string[]

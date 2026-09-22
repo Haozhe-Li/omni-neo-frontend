@@ -49,6 +49,13 @@ import { getUserLocation } from '@/lib/location'
 
 const SEND_SAMPLE_RATE = 16000
 const PLAYBACK_SAMPLE_RATE = 24000
+// How long hangUp() waits for the backend to confirm the transcript is saved
+// before hanging up regardless. Normally it answers well inside the exit
+// animation (voice-view.tsx), so this only bites when the backend is stuck.
+const HANGUP_ACK_TIMEOUT_MS = 1500
+// Slack after a goodbye's last scheduled sample before the call ends, so its
+// final syllable isn't clipped by the teardown.
+const END_CALL_TAIL_MS = 250
 // Anti-click fade applied at each streamed chunk's edges — separately
 // scheduled AudioBufferSourceNodes butted end-to-end can land a few samples
 // off from perfectly back-to-back (mobile Safari's scheduling is especially
@@ -235,6 +242,18 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
     // "Omni is speaking" doesn't disappear right as the reply starts being
     // heard.
     const speakingEndTimerRef = useRef<number | null>(null)
+    // The call is on its way out — the agent called end_call, or the user hung
+    // up. From here the mic stops feeding the call, so nothing said over the
+    // goodbye can start another turn.
+    const endingRef = useRef(false)
+    // Which turn called end_call: the call ends once that turn's goodbye has
+    // finished playing (see turn_end), signalled to the page as
+    // `callEndRequested`, which hangs up exactly like the hang-up button.
+    const endCallTurnRef = useRef<number | null>(null)
+    const endCallTimerRef = useRef<number | null>(null)
+    const [callEndRequested, setCallEndRequested] = useState(false)
+    // Resolves hangUp()'s wait for the backend's hangup_ack.
+    const hangupAckRef = useRef<(() => void) | null>(null)
 
     const setMode = useCallback((mode: VoiceOrbMode) => {
         modeRef.current = mode
@@ -416,6 +435,10 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             window.clearTimeout(speakingEndTimerRef.current)
             speakingEndTimerRef.current = null
         }
+        if (endCallTimerRef.current !== null) {
+            window.clearTimeout(endCallTimerRef.current)
+            endCallTimerRef.current = null
+        }
         micNodeRef.current?.disconnect()
         if (micNodeRef.current) micNodeRef.current.onaudioprocess = null
         micNodeRef.current = null
@@ -444,12 +467,49 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         setConnectionState((s) => (s === 'error' ? 'error' : 'closed'))
     }, [orbRef, setMode, stopAllPlayback, resetCaptionWindow])
 
+    // Ends the call once `delayMs` of already-queued goodbye audio has played.
+    const requestCallEnd = useCallback((delayMs: number) => {
+        if (endCallTimerRef.current !== null) window.clearTimeout(endCallTimerRef.current)
+        endCallTimerRef.current = window.setTimeout(() => {
+            endCallTimerRef.current = null
+            setCallEndRequested(true)
+        }, delayMs)
+    }, [])
+
+    /**
+     * Hang up with the backend's cooperation: silence everything at once, tell
+     * it the call is over, and only tear the socket down once it confirms the
+     * transcript (including the "Voice call ended" marker) is saved — the page
+     * goes straight to that thread's text view, and would otherwise load it
+     * a moment too early. Falls back to hanging up anyway if no ack comes.
+     */
+    const hangUp = useCallback(async () => {
+        endingRef.current = true
+        stopAllPlayback()
+        const ws = wsRef.current
+        if (ws && ws.readyState === WebSocket.OPEN && readyRef.current) {
+            await new Promise<void>((resolve) => {
+                const timer = window.setTimeout(resolve, HANGUP_ACK_TIMEOUT_MS)
+                hangupAckRef.current = () => {
+                    window.clearTimeout(timer)
+                    resolve()
+                }
+                ws.send(JSON.stringify({ type: 'hangup' }))
+            })
+            hangupAckRef.current = null
+        }
+        stop()
+    }, [stop, stopAllPlayback])
+
     const start = useCallback(async (resumeThreadId?: string | null) => {
         setErrorMessage(null)
         setCurrentTurn(null)
         setLiveTranscript('')
         activeTurnIdRef.current = 0
         readyRef.current = false
+        endingRef.current = false
+        endCallTurnRef.current = null
+        setCallEndRequested(false)
         pendingAudioRef.current = []
         resetCaptionWindow()
         setConnectionState('connecting')
@@ -539,6 +599,8 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             }
 
             ws.onclose = () => {
+                // A hangUp() waiting on its ack has nothing left to wait for.
+                hangupAckRef.current?.()
                 // stop() already ran (hang-up, a connection-level error) and
                 // detached this socket — nothing left to tear down.
                 if (wsRef.current !== ws) return
@@ -587,6 +649,13 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                         setLiveTranscript(msg.text || '')
                         break
                     case 'turn_start': {
+                        // Speech that was already in flight when the goodbye
+                        // started can still land as a turn and cancel it —
+                        // end now rather than sit muted on a live call.
+                        if (endingRef.current) {
+                            requestCallEnd(0)
+                            break
+                        }
                         activeTurnIdRef.current = msg.turn_id
                         setLiveTranscript('')
                         setMode('thinking')
@@ -610,8 +679,15 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                         break
                     }
                     case 'tool_call':
-                        // Not surfaced in the UI — only what the agent actually
-                        // says (already streaming via agent_text) matters here.
+                        // Only end_call matters here — for any other tool,
+                        // what the agent says is already streaming via
+                        // agent_text. end_call means the goodbye has been said:
+                        // stop listening, and hang up once it has played
+                        // (turn_end below).
+                        if (msg.tool === 'end_call' && msg.turn_id === activeTurnIdRef.current) {
+                            endingRef.current = true
+                            endCallTurnRef.current = msg.turn_id
+                        }
                         break
                     case 'turn_end': {
                         patchCurrentTurn(msg.turn_id, (t) => ({ ...t, status: 'done' }))
@@ -635,6 +711,9 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                                 // has taken over in the meantime.
                                 if (activeTurnIdRef.current === turnIdAtSchedule) setMode('listening')
                             }, remainingS * 1000 + 80)
+                            if (endCallTurnRef.current === msg.turn_id) {
+                                requestCallEnd(remainingS * 1000 + END_CALL_TAIL_MS)
+                            }
                         }
                         break
                     }
@@ -652,11 +731,16 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                         )
                         activeTurnIdRef.current = msg.turn_id
                         setMode('listening')
+                        if (endingRef.current) requestCallEnd(0)
                         break
                     }
+                    case 'hangup_ack':
+                        hangupAckRef.current?.()
+                        break
                     case 'error': {
                         if (msg.turn_id) {
                             patchCurrentTurn(msg.turn_id, (t) => ({ ...t, status: 'error', errorDetail: msg.detail }))
+                            if (msg.turn_id === endCallTurnRef.current) requestCallEnd(0)
                         } else {
                             // Connection-level error (e.g. backend missing API keys) —
                             // nothing to recover from client-side, so surface it and
@@ -672,7 +756,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
 
             node.onaudioprocess = (e) => {
                 const input = e.inputBuffer.getChannelData(0)
-                if (mutedRef.current) {
+                if (mutedRef.current || endingRef.current) {
                     userLevelRef.current = 0
                     return
                 }
@@ -709,6 +793,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         fetchWithAuth,
         pushCaptionChunk,
         resetCaptionWindow,
+        requestCallEnd,
     ])
 
     useEffect(() => () => stop(), [stop])
@@ -723,8 +808,10 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
         agentCaption,
         agentCaptionKey,
         activeThreadId,
+        callEndRequested,
         start,
         stop,
+        hangUp,
         toggleMute,
     }
 }

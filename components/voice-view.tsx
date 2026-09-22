@@ -34,8 +34,9 @@ export function VoiceView({
         agentCaption,
         agentCaptionKey,
         activeThreadId,
+        callEndRequested,
         start,
-        stop,
+        hangUp,
         toggleMute,
     } = useVoiceSession(orbRef)
 
@@ -78,14 +79,24 @@ export function VoiceView({
         if (currentTurn?.status === 'done') hasTranscriptRef.current = true
     }, [currentTurn?.status])
 
-    const leaveCall = useCallback(() => {
-        if (hasNavigatedRef.current) return
-        hasNavigatedRef.current = true
-        const dest = hasTranscriptRef.current && activeThreadId ? `/thread/${activeThreadId}` : '/'
-        router.prefetch(dest)
-        setLeaving(true)
-        leaveTimerRef.current = window.setTimeout(() => router.push(dest), LEAVE_ANIM_MS)
-    }, [router, activeThreadId])
+    // `until`: anything else the route change has to wait for besides the
+    // exit animation — a hang-up's transcript save (see useVoiceSession's
+    // hangUp). If the page unmounts first, the cleared timer means this never
+    // navigates at all.
+    const leaveCall = useCallback(
+        (until?: Promise<void>) => {
+            if (hasNavigatedRef.current) return
+            hasNavigatedRef.current = true
+            const dest = hasTranscriptRef.current && activeThreadId ? `/thread/${activeThreadId}` : '/'
+            router.prefetch(dest)
+            setLeaving(true)
+            const animationDone = new Promise<void>((resolve) => {
+                leaveTimerRef.current = window.setTimeout(resolve, LEAVE_ANIM_MS)
+            })
+            Promise.all([animationDone, until]).then(() => router.push(dest))
+        },
+        [router, activeThreadId]
+    )
 
     useEffect(
         () => () => {
@@ -104,10 +115,16 @@ export function VoiceView({
         }
     }, [connectionState, leaveCall])
 
-    const handleHangUp = () => {
-        stop()
-        leaveCall()
-    }
+    const handleHangUp = useCallback(() => {
+        if (hasNavigatedRef.current) return
+        leaveCall(hangUp())
+    }, [leaveCall, hangUp])
+
+    // The agent called end_call and its goodbye has finished playing — hang
+    // up exactly as the button would.
+    useEffect(() => {
+        if (callEndRequested) handleHangUp()
+    }, [callEndRequested, handleHangUp])
 
     const liveVisualState =
         connectionState === 'connecting' ? 'connecting' : connectionState !== 'connected' ? 'idle' : orbMode
