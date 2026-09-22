@@ -19,17 +19,17 @@ import { getUserLocation } from '@/lib/location'
  *                      uint32 big-endian) + PCM16 mono @ 24kHz
  *                      JSON text frames = control messages (see below)
  *
- * Turn detection and barge-in both live server-side (Deepgram's VAD): this
- * hook does not run its own voice-activity detection, it just streams
- * everything and reacts to the control messages that come back.
+ * Turn detection and barge-in both live server-side (core/voice/session.py,
+ * driven by the STT transcript stream): this hook does not run its own
+ * voice-activity detection, it just streams everything and reacts to the
+ * control messages that come back.
  *
  * Auth + thread_id match every other agent (see core/routers/voice.py):
- * `start()` mints a fresh thread_id from /get_thread_id (origin=voice, so it
- * stays out of the regular chat sidebar — same trick scheduled-task threads
- * use) every time a call starts, then opens the socket with identity +
- * thread_id in the URL's query string. One call = one thread — hanging up
- * always leads back to the home page (see voice-view.tsx's feedback flow),
- * so there's no "resume this same call" case to persist a thread_id for.
+ * `start()` mints a fresh thread_id from /get_thread_id (origin=voice, which
+ * pins the thread to the voice agent — see chat-view.tsx) unless it's handed
+ * one to resume, then opens the socket with identity + thread_id in the URL's
+ * query string. Hanging up leads to that thread's text transcript (see
+ * voice-view.tsx), which lists in the sidebar like any other thread.
  * Query string, not a header, because a browser WebSocket handshake can't
  * carry a custom Authorization header the way fetch() can — this is the
  * standard workaround, and it's why getOrCreateGuestId/getToken are read
@@ -204,7 +204,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
     const analyserBufRef = useRef<Uint8Array | null>(null)
     // The mic pipeline starts producing buffers as soon as getUserMedia
     // resolves — well before the WebSocket exists, let alone before the
-    // backend has finished auth/thread checks and connected to Deepgram
+    // backend has finished auth/thread checks and connected to its STT service
     // (see core/voice/session.py's "ready" message). Anything captured
     // before that arrives gets queued here instead of dropped, so a user
     // who starts talking the instant the call connects doesn't lose the
@@ -535,11 +535,21 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                 // Not "connected" yet — that's the 'ready' message below.
                 // The WS handshake completing only means the backend has
                 // accept()-ed; it still has to run auth/thread checks and
-                // connect to Deepgram before it's actually reading audio.
+                // connect to its STT service before it's actually reading audio.
             }
 
             ws.onclose = () => {
-                setConnectionState((s) => (s === 'error' ? s : 'closed'))
+                // stop() already ran (hang-up, a connection-level error) and
+                // detached this socket — nothing left to tear down.
+                if (wsRef.current !== ws) return
+                // Closed before 'ready' means the backend gave up during setup
+                // without sending an error of its own — say so instead of
+                // sitting on a dead call with the mic still captured.
+                if (!readyRef.current) {
+                    setErrorMessage((m) => m || 'The voice service disconnected before the call could start')
+                    setConnectionState('error')
+                }
+                stop()
             }
 
             ws.onerror = () => {
@@ -673,7 +683,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
                     wsRef.current.send(pcm)
                 } else {
                     // Not ready yet (backend still doing auth/thread checks
-                    // and connecting to Deepgram) — queue instead of
+                    // and connecting to its STT service) — queue instead of
                     // dropping, so speaking right as the call connects
                     // doesn't lose its first words. Flushed in the 'ready'
                     // handler above. Capped defensively; a real "ready"

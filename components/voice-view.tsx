@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Menu, Mic, MicOff, Phone, X } from 'lucide-react'
+import { AlertTriangle, Menu, Mic, MicOff, X } from 'lucide-react'
 import { useVoiceSession } from '@/hooks/useVoiceSession'
 import { useTypewriter } from '@/hooks/useTypewriter'
 import { cn } from '@/lib/utils'
@@ -51,44 +51,47 @@ export function VoiceView({
     }, [])
 
     const connected = connectionState === 'connected'
-    const inCall = connected || connectionState === 'connecting'
 
-    // Once a call has actually connected, every way it ends — hang-up,
-    // dropped connection, server-side error — goes straight back to that
-    // thread's text transcript instead of lingering on this page. No
-    // feedback prompt: the thread itself is right there to read/continue.
+    // Every way a call ends — hang-up, dropped connection, server-side
+    // error — leaves this page for the thread's text transcript. There is no
+    // "start"/"reconnect" button: entering the page is starting the call.
     const wasConnectedRef = useRef(false)
-    // handleCallButton's explicit hangup and the disconnect-catching effect
-    // below can both fire for the same hangup (stop() flips connectionState,
-    // which the effect also reacts to) — guard so that only navigates once.
+    // Whether the thread has anything to read: a resumed thread always does;
+    // a fresh one only once a reply finished (that's when the backend saves
+    // it). Otherwise the thread page would just say it's empty — go home.
+    const hasTranscriptRef = useRef(!!resumeThreadId)
+    // handleHangUp and the disconnect-catching effect below can both fire for
+    // the same hangup (stop() flips connectionState, which the effect also
+    // reacts to) — guard so that only navigates once.
     const hasNavigatedRef = useRef(false)
 
     useEffect(() => {
         if (connectionState === 'connected') wasConnectedRef.current = true
     }, [connectionState])
 
-    const goToThread = useCallback(() => {
+    useEffect(() => {
+        if (currentTurn?.status === 'done') hasTranscriptRef.current = true
+    }, [currentTurn?.status])
+
+    const leaveCall = useCallback(() => {
         if (hasNavigatedRef.current) return
         hasNavigatedRef.current = true
-        router.push(activeThreadId ? `/thread/${activeThreadId}` : '/')
+        router.push(hasTranscriptRef.current && activeThreadId ? `/thread/${activeThreadId}` : '/')
     }, [router, activeThreadId])
 
+    // A call that connected and then dropped leaves on its own. One that
+    // never connected stays put so its error stays readable; hanging up
+    // leaves from there.
     useEffect(() => {
         if ((connectionState === 'closed' || connectionState === 'error') && wasConnectedRef.current) {
             wasConnectedRef.current = false
-            goToThread()
+            leaveCall()
         }
-    }, [connectionState, goToThread])
+    }, [connectionState, leaveCall])
 
-    const handleCallButton = () => {
-        if (!inCall) {
-            start(resumeThreadId)
-            return
-        }
-        const hadRealCall = connected
+    const handleHangUp = () => {
         stop()
-        if (hadRealCall) goToThread()
-        else router.push('/')
+        leaveCall()
     }
 
     const visualState =
@@ -275,16 +278,11 @@ export function VoiceView({
 
                 <div className="mt-9 flex items-center gap-4">
                     <button
-                        onClick={handleCallButton}
-                        className={cn(
-                            'flex h-14 w-14 items-center justify-center rounded-full transition-colors',
-                            inCall
-                                ? 'bg-[var(--destructive)] text-white hover:opacity-90'
-                                : 'bg-[var(--teal)] text-[var(--paper)] hover:bg-[var(--teal-hover)]'
-                        )}
-                        title={inCall ? 'End call' : 'Reconnect'}
+                        onClick={handleHangUp}
+                        className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--destructive)] text-white transition-opacity hover:opacity-90"
+                        title="End call"
                     >
-                        {inCall ? <X size={22} /> : <Phone size={20} />}
+                        <X size={22} />
                     </button>
                     {connected && (
                         <button
