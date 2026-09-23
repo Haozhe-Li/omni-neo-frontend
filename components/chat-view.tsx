@@ -868,16 +868,24 @@ export function ChatView({
         toast.error('Check source is unavailable here')
         return
       }
-      // Harmless on desktop — nothing reads this state there — but on mobile
-      // it's what flips that turn's tab to Sources at the exact moment a
-      // claim is tapped, rather than updating a list the reader has already
-      // scrolled past. Dismissing the check result (not switching the tab
-      // back) falls back to that turn's own list instead of an empty one.
+      // The two state setters are harmless on desktop — nothing reads them
+      // there — but on mobile they flip that turn's tab to Sources at the
+      // exact moment a claim is tapped, rather than updating a list the
+      // reader has already scrolled past. Dismissing the check result (not
+      // switching the tab back) falls back to that turn's own list instead
+      // of an empty one.
       setMobileTab((prev) => (prev[turn] === 'sources' ? prev : { ...prev, [turn]: 'sources' }))
       setMobileSourcesTurn(turn)
-      document
-        .querySelector<HTMLElement>(`[data-message-index="${turn}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      // Scrolling to bring that tab into view is mobile-only too: on desktop
+      // the sources rail sits beside the answer and updates in place, so
+      // there is nothing to scroll to — running this unconditionally used to
+      // jump the reading column to the top of the answer on every check, one
+      // scroll short of landing back on the question above it.
+      if (isMobile) {
+        document
+          .querySelector<HTMLElement>(`[data-message-index="${turn}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
       setCheckSourceState({ status: 'loading', claim, matches: [] })
       try {
         const response = await fetchWithAuth(`${BACKEND_URL}/check_source`, {
@@ -897,7 +905,7 @@ export function ChatView({
         setCheckSourceState(null)
       }
     },
-    [threadId, fetchWithAuth]
+    [threadId, fetchWithAuth, isMobile]
   )
 
   // "Verify claim" dashed underlines — a silent, best-effort background
@@ -2674,7 +2682,7 @@ export function ChatView({
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-16 sm:px-10 sm:pt-6">
+        <div ref={scrollRef} className="omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-20 sm:px-10 sm:pt-16">
           {/* ── Reading column + sources rail ─────────────────────────────
               One column, wider than a chat's: the answer body is set at 17px
               and wants ~68 characters a line, and the question headings above
