@@ -326,6 +326,11 @@ function ToolContent({ message }: { message: SSEMessage }) {
           label: 'Reading Notes',
           detail: args.file ? <span className="text-muted-foreground/80">{args.file}</span> : null
         }
+      case 'load_skill':
+        return {
+          label: 'Loading skill',
+          detail: args.skill ? <span className="text-muted-foreground/80">{args.skill}</span> : null
+        }
       case 'edit_file':
         return {
           label: 'Updating Notes',
