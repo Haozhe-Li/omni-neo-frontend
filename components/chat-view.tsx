@@ -802,10 +802,6 @@ export function ChatView({
   // this composes off it rather than threading a prop through separately.
   const [threadOrigin, setThreadOrigin] = useState<string | null>(() => preloadedThread?.origin ?? null)
   const isVoiceThread = threadOrigin === 'voice'
-  const [isEditingTitle, setIsEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const titleInputRef = useRef<HTMLInputElement>(null)
-  const titlePanelRef = useRef<HTMLDivElement>(null)
   const [isRecording, setIsRecording] = useState(false)
   // Index of the assistant message currently being streamed (typewriter).
   const [streamingIndex, setStreamingIndex] = useState(-1)
@@ -1169,10 +1165,6 @@ export function ChatView({
     const last = messages[messages.length - 1]
     return !!last && last.role === 'assistant' && !!last.content?.trim()
   }, [isLoading, isLocked, messages])
-
-  // Turns, not messages: the header counts questions asked, which is what
-  // "Thread · 3" means to someone scrolled halfway down it.
-  const turnCount = useMemo(() => messages.filter((m) => m.role === 'user').length, [messages])
 
   const prevMergedSourcesRef = useRef<Source[]>([])
   const mergedSources = useMemo(() => {
@@ -2296,55 +2288,6 @@ export function ChatView({
     }
   }, [title, query])
 
-  // ── manual title editing ────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isEditingTitle) return
-    titleInputRef.current?.focus()
-    titleInputRef.current?.select()
-  }, [isEditingTitle])
-
-  // Close the title editor when clicking outside it or pressing Escape.
-  useEffect(() => {
-    if (!isEditingTitle) return
-    const onMouse = (e: MouseEvent) => {
-      if (titlePanelRef.current && !titlePanelRef.current.contains(e.target as Node)) {
-        setIsEditingTitle(false)
-      }
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsEditingTitle(false) }
-    document.addEventListener('mousedown', onMouse)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onMouse)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [isEditingTitle])
-
-  const startEditingTitle = useCallback(() => {
-    setTitleDraft(title || query)
-    setIsEditingTitle(true)
-  }, [title, query])
-
-  const cancelEditingTitle = useCallback(() => {
-    setIsEditingTitle(false)
-  }, [])
-
-  const commitEditingTitle = useCallback(() => {
-    const trimmed = titleDraft.trim()
-    const current = title || query
-    if (trimmed && trimmed !== current) {
-      setTitle(trimmed)
-      if (threadId) {
-        fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/title`, {
-          method: 'PATCH',
-          body: JSON.stringify({ title: trimmed }),
-        }).catch(() => {})
-        window.dispatchEvent(new CustomEvent('omni:title', { detail: { threadId, title: trimmed } }))
-      }
-    }
-    setIsEditingTitle(false)
-  }, [titleDraft, title, query, threadId, fetchWithAuth])
-
   // ── scroll model ────────────────────────────────────────────────────────
   // No autoscroll while streaming. Instead: when a query is sent we pin it near
   // the top of the viewport and leave it there as the answer fills in below.
@@ -2709,85 +2652,29 @@ export function ChatView({
           onCheckSource={handleCheckSource}
           allowedSelectors={ASSISTANT_MESSAGE_SELECTORS}
         />
-        {/* Header */}
-        {/* ── Thread bar ───────────────────────────────────────────────────
-            A left-aligned rail rather than a centered title: the mono turn
-            count anchors the left edge, the thread's own question runs beside
-            it as the one line of context you need while scrolled deep into an
-            answer, and the title stays editable in place on hover. */}
-        <header className="sticky top-0 z-30 flex h-[52px] flex-shrink-0 items-center gap-4 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_93%,transparent)] px-4 backdrop-blur-[8px] sm:px-10">
-          {isMobile && (
-            <button onClick={onToggleSidebar} className="-ml-2 rounded-full p-2 text-[var(--ink-muted)] hover:bg-[var(--sand)]">
+        {/* Mobile header — no bar, same as the search-home hero: nothing here
+            needs a title anymore, so two buttons float over the thread
+            instead of a full-width row. */}
+        {isMobile && (
+          <>
+            <button
+              onClick={onToggleSidebar}
+              className="fixed top-3 left-3 z-40 p-2.5 rounded-full text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
+            >
               <Menu size={20} />
             </button>
-          )}
-          <span className="omni-eyebrow shrink-0 hidden sm:block">
-            Thread · {turnCount}
-          </span>
-          <div className="group flex min-w-0 flex-1 items-center gap-1.5">
-            <span className="min-w-0 truncate text-[14px] text-[var(--ink-muted)]">{title || query}</span>
-            <button
-              title="Edit title"
-              onClick={startEditingTitle}
-              className="shrink-0 rounded-full p-1 text-[var(--ink-fainter)] opacity-0 transition-all duration-150 hover:text-[var(--teal)] group-hover:opacity-100 active:scale-95"
-            >
-              <Pencil size={12} strokeWidth={1.75} />
-            </button>
-          </div>
-          {isMobile && (
             <button
               onClick={onNewSearch}
               title="New thread"
-              className="-mr-2 shrink-0 rounded-full p-2 text-[var(--ink-muted)] hover:bg-[var(--sand)]"
+              className="fixed top-3 right-3 z-40 p-2.5 rounded-full text-muted-foreground hover:bg-[var(--secondary)] hover:text-[var(--foreground)] transition-colors"
             >
               <SquarePen size={20} />
             </button>
-          )}
-        </header>
-
-        {/* Title editor — drops down below the header instead of editing
-            in place, so typing never reflows the centered header row. Same
-            width as the answer column and the same Cancel/Done affordance
-            used when editing a query. */}
-        {isEditingTitle && (
-          <div className="absolute left-1/2 -translate-x-1/2 top-14 z-40 w-full max-w-2xl px-4 sm:px-6">
-            <div
-              ref={titlePanelRef}
-              className="mt-3 w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--card)] shadow-lg p-3 flex flex-col gap-3"
-            >
-              <div className="w-full rounded-2xl bg-[var(--secondary)] px-4 py-3">
-                <input
-                  ref={titleInputRef}
-                  value={titleDraft}
-                  onChange={(e) => setTitleDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); commitEditingTitle() }
-                    if (e.key === 'Escape') { e.preventDefault(); cancelEditingTitle() }
-                  }}
-                  className="w-full bg-transparent text-[15px] text-[var(--foreground)] outline-none"
-                />
-              </div>
-              <div className="flex justify-end items-center gap-2">
-                <button
-                  onClick={cancelEditingTitle}
-                  className="px-5 py-2 text-[14px] font-medium rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--secondary)] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={!titleDraft.trim()}
-                  onClick={commitEditingTitle}
-                  className="px-5 py-2 text-[14px] font-medium rounded-xl bg-[var(--accent)] text-[var(--accent-foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
+          </>
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-6 sm:px-10">
+        <div ref={scrollRef} className="omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-16 sm:px-10 sm:pt-6">
           {/* ── Reading column + sources rail ─────────────────────────────
               One column, wider than a chat's: the answer body is set at 17px
               and wants ~68 characters a line, and the question headings above
@@ -3363,8 +3250,7 @@ export function ChatView({
           <div className="relative w-full max-w-[760px]">
             {/* The scrim is scoped to the reading column, not the full width.
                 Spanning everything meant it also faded out the bottom of the
-                sources rail sitting to the right of it — including the "read
-                but not used" toggle, which is the one control down there. */}
+                sources rail sitting to the right of it. */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-x-[-28px] -top-8 bottom-[-40px] bg-[linear-gradient(to_top,var(--paper)_52%,transparent)]"

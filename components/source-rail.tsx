@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { BookOpen, ChevronDown, FileText, X } from 'lucide-react'
+import { BookOpen, FileText, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
-import { highlightExcerpt, type HighlightSegment } from '@/lib/highlight'
+import { canHighlightExcerpt, highlightExcerpt, type HighlightSegment } from '@/lib/highlight'
 import { isTrustedTier } from '@/lib/credibility'
 import { CredibilityTag } from '@/components/credibility-badge'
 import { ArguableTag } from '@/components/arguable-badge'
@@ -96,6 +95,24 @@ function windowAround(segments: HighlightSegment[]): HighlightSegment[] {
 /** Float official/trusted/first-party sources up without otherwise reshuffling. */
 function sortByTrust<T extends { credibility?: Source['credibility'] }>(list: T[]): T[] {
   return [...list].sort((a, b) => Number(isTrustedTier(b.credibility)) - Number(isTrustedTier(a.credibility)))
+}
+
+// A match whose excerpt can't be located in its own chunk (see
+// `canHighlightExcerpt`) falls back to a plain, unhighlighted prefix — the
+// least useful card in this view, since the whole point is showing which
+// exact words back the claim. Those sink to the bottom instead of being
+// interleaved with the ones that actually prove something, and the list is
+// capped short: five cards you can scan beats a dozen you have to.
+const CHECK_SOURCE_CAP = 5
+
+function rankedMatches(matches: CheckSourceMatch[]): CheckSourceMatch[] {
+  return [...matches]
+    .sort(
+      (a, b) =>
+        Number(canHighlightExcerpt(b.chunk, b.excerpt, b.title, b.url)) -
+        Number(canHighlightExcerpt(a.chunk, a.excerpt, a.title, a.url))
+    )
+    .slice(0, CHECK_SOURCE_CAP)
 }
 
 const notifyUploadedDocument = () =>
@@ -253,14 +270,21 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
 }
 
 function CheckSkeleton({ delay }: { delay: number }) {
+  // Two animations, kept on separate elements rather than combined into one
+  // `animation` shorthand: the outer div's `animate-in` is a one-shot mount
+  // transition (tw-animate-css's own `enter` keyframe), the inner div's pulse
+  // loops forever — stacking both on one element would mean one shorthand
+  // silently overwrites the other instead of running alongside it.
   return (
-    <div
-      className="flex flex-col gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] px-3.5 py-3"
-      style={{ animation: `omni-soft-pulse 1300ms ease-in-out ${delay}ms infinite` }}
-    >
-      <div className="h-2 w-1/2 rounded-full bg-[var(--line-strong)]" />
-      <div className="mt-1 h-2 w-4/5 rounded-full bg-[var(--line-strong)]" />
-      <div className="h-2 w-2/3 rounded-full bg-[var(--line-strong)]" />
+    <div className="animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards duration-300" style={{ animationDelay: `${delay}ms` }}>
+      <div
+        className="flex flex-col gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] px-3.5 py-3"
+        style={{ animation: `omni-soft-pulse 1300ms ease-in-out ${delay}ms infinite` }}
+      >
+        <div className="h-2 w-1/2 rounded-full bg-[var(--line-strong)]" />
+        <div className="mt-1 h-2 w-4/5 rounded-full bg-[var(--line-strong)]" />
+        <div className="h-2 w-2/3 rounded-full bg-[var(--line-strong)]" />
+      </div>
     </div>
   )
 }
@@ -294,27 +318,25 @@ export function SourcesRail({
   onDismissCheck,
   compact = false,
 }: SourcesRailProps) {
-  const [showUnused, setShowUnused] = useState(false)
-  // Collapse back down when the turn changes — "read but not used" is opened
-  // for one answer, not left open across the thread.
-  useEffect(() => setShowUnused(false), [cited, unused])
-
   if (checkSource) {
     const done = checkSource.status === 'done'
+    const shown = done ? rankedMatches(checkSource.matches) : []
     return (
-      <>
+      // `display: contents` keyed on the claim: header, quote and cards stay
+      // direct flex children of the rail (so the parent's `gap` still spaces
+      // them) while sharing one identity that changes with the claim —
+      // checking a second claim without dismissing the first unmounts and
+      // remounts this whole group, which is what replays the fade-in below
+      // instead of silently updating text in place.
+      <div key={checkSource.claim} className="contents">
         {/* ── Checking a claim ──────────────────────────────────────────────
             The rail becomes a single-question view: here is the sentence, and
             here is what says it. The header says which of the two states it
             is in, and the X is the only way out — this is a mode, not a
             filter on the list underneath. */}
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 animate-in fade-in duration-200">
           <span className="omni-eyebrow text-[var(--teal)]">
-            {done
-              ? checkSource.matches.length > 0
-                ? `Backed by ${checkSource.matches.length}`
-                : 'No direct match'
-              : 'Checking sources'}
+            {done ? (shown.length > 0 ? `Backed by ${shown.length}` : 'No direct match') : 'Checking sources'}
           </span>
           <button
             onClick={onDismissCheck}
@@ -332,7 +354,7 @@ export function SourcesRail({
             as a pull-quote demanding to be read rather than as the reference
             point for what follows. Clamped, because a long selection is
             recognisable from its opening. */}
-        <div className="rounded-[16px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-3.5 py-3">
+        <div className="rounded-[16px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-3.5 py-3 animate-in fade-in duration-200">
           <p
             className={`line-clamp-3 text-[var(--ink-body)] ${
               compact ? 'text-[12.5px] leading-[1.55]' : 'text-[14px] leading-[1.6]'
@@ -344,66 +366,49 @@ export function SourcesRail({
 
         {checkSource.status === 'loading' ? (
           [0, 1, 2].map((i) => <CheckSkeleton key={i} delay={i * 160} />)
-        ) : checkSource.matches.length > 0 ? (
-          checkSource.matches.map((m, i) => <CheckMatchCard key={`${m.url}-${i}`} match={m} compact={compact} />)
+        ) : shown.length > 0 ? (
+          shown.map((m, i) => (
+            <div
+              key={`${m.url}-${i}`}
+              className="animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards duration-300"
+              style={{ animationDelay: `${i * 70}ms` }}
+            >
+              <CheckMatchCard match={m} compact={compact} />
+            </div>
+          ))
         ) : (
-          <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--line-strong)] px-4 py-7 text-center">
+          <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--line-strong)] px-4 py-7 text-center animate-in fade-in duration-300">
             <BookOpen size={20} strokeWidth={1.25} className="text-[var(--ink-fainter)]" />
             <p className="text-[12.5px] leading-[1.55] text-[var(--ink-muted)]">
               Nothing here says this outright. It may combine several sources, or rest on general knowledge.
             </p>
           </div>
         )}
-      </>
+      </div>
     )
   }
 
   if (cited.length === 0 && unused.length === 0) return null
+
+  // Cited sources first, everything else the turn read after — one flat,
+  // uncollapsed list. There used to be a "N read but not used" toggle
+  // hiding the second half; that made a turn with zero citations (a summary
+  // that leans on general knowledge, say) show nothing at all even though it
+  // read a pile of sources. Ranking instead of hiding means there's always
+  // something to show as long as the turn fetched anything.
+  const ranked = [...sortByTrust(cited), ...sortByTrust(unused)]
 
   return (
     <>
       <div className="omni-eyebrow">
         {/* Mid-run the count is still climbing, so it reads as an activity
             rather than a total. */}
-        {researching ? `Reading · ${cited.length}` : `Sources · ${cited.length}`}
+        {researching ? `Reading · ${cited.length}` : `Sources · ${ranked.length}`}
       </div>
 
-      {sortByTrust(cited).map((s, i) => (
+      {ranked.map((s, i) => (
         <SourceCard key={`${s.url || 'doc'}-${i}`} source={s} compact={compact} />
       ))}
-
-      {/* Read but not used: everything the agent opened this turn and did not
-          end up citing. Worth keeping — it is the difference between "these
-          are the sources" and "these are the sources it chose" — but not
-          worth the same weight as the ones the answer rests on. Never shown
-          mid-run: until an answer exists, nothing has been "not used" yet. */}
-      {!researching && unused.length > 0 && (
-        <div className={cited.length > 0 ? 'mt-1' : ''}>
-          <button
-            type="button"
-            onClick={() => setShowUnused((v) => !v)}
-            className="omni-eyebrow flex w-full items-center gap-1.5 transition-colors hover:text-[var(--teal)]"
-          >
-            <ChevronDown
-              size={12}
-              className={`shrink-0 transition-transform duration-200 ${showUnused ? 'rotate-180' : ''}`}
-            />
-            {unused.length} read but not used
-          </button>
-          <div
-            className="grid transition-[grid-template-rows,opacity] duration-[280ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
-            style={{ gridTemplateRows: showUnused ? '1fr' : '0fr', opacity: showUnused ? 1 : 0 }}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <div className="flex flex-col gap-2.5 pt-2.5">
-                {sortByTrust(unused).map((s, i) => (
-                  <SourceCard key={`${s.url || 'doc'}-${i}`} source={s} compact={compact} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

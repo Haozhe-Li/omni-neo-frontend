@@ -56,7 +56,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
   },
   {
     id: 'luna',
-    label: 'GPT-5.6 Luna',
+    label: 'GPT-6 Luna',
     desc: "OpenAI's latest versatile model",
     credits: 3,
     requiresAuth: true,
