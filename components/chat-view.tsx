@@ -3070,6 +3070,17 @@ export function ChatView({
                                 </div>
                               )
                             )}
+                            {/* Bare blinking caret for the gap between a hidden-turn
+                                continuation starting and its first token landing —
+                                ToolActivity's "Thinking" card is suppressed here (see
+                                continuesHiddenTurn above), and with zero segments yet
+                                StreamingText itself isn't mounted, so without this the
+                                turn would show nothing at all for that gap. */}
+                            {continuesHiddenTurn && i === streamingIndex && isLoading && !parsed.text && (
+                              <div className="text-[16px] text-foreground">
+                                <span className="omni-caret" />
+                              </div>
+                            )}
                           </>
                         )}
 
