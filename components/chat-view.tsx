@@ -4,7 +4,7 @@ import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallb
 import { useRouter } from 'next/navigation'
 import { Menu, ArrowUp, ArrowRight, AudioLines, Mic, Square, Paperclip, Link2, Plus, SquarePen, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuth, useClerk } from '@clerk/nextjs'
+import { useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
@@ -32,6 +32,8 @@ import { parseQuestion } from '@/lib/question-parser'
 import { parseTextBlocks, type ParsedTextBlock } from '@/lib/textblock-parser'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
 import { TextBlockCard } from '@/components/text-block-card'
+import { parseScheduledResearch } from '@/lib/scheduled-research-parser'
+import { ScheduledResearchBlock, ScheduledResearchSkeleton } from '@/components/scheduled-research-block'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -744,6 +746,8 @@ export function ChatView({
   const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
   const clerk = useClerk()
+  const { user } = useUser()
+  const userEmail = user?.primaryEmailAddress?.emailAddress || ''
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
   const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
   const sourceUrlsCountRef = useRef(0)
@@ -1195,30 +1199,44 @@ export function ChatView({
   }, [messages])
 
   // Reports stream inline as <report> blocks; questions appear as <question>
-  // blocks; finished drafts (polish/translate/email) appear as <textblock>
-  // blocks. All three are stripped from the displayed text and rendered separately.
+  // blocks; a proposed recurring task appears as a <scheduled-research> block;
+  // finished drafts (polish/translate/email) appear as <textblock> blocks. All
+  // four are stripped from the displayed text and rendered separately.
   const parsedByIndex = useMemo(
     () =>
       messages.map((m, i) => {
         if (m.role !== 'assistant')
-          return { text: m.content || '', reports: [] as ParsedReport[], question: null, segments: [] as RenderSegment[] }
+          return {
+            text: m.content || '',
+            reports: [] as ParsedReport[],
+            question: null,
+            scheduledResearch: null,
+            scheduledResearchPending: false,
+            segments: [] as RenderSegment[],
+          }
         const withReports = parseReports(m.content || '', `m${i}`)
         const { text: questionStripped, question: textQuestion, questionPending: tqp } = parseQuestion(withReports.text)
-        // <question> and <textblock> only ever appear in narration text,
-        // never inside a report, so strip them out of whichever text
-        // segment holds them.
+        const { text: srStripped, scheduledResearch: textSR, pending: srPendingTop } = parseScheduledResearch(questionStripped)
+        // <question>, <scheduled-research> and <textblock> only ever appear in
+        // narration text, never inside a report, so strip them out of
+        // whichever text segment holds them.
         let question = textQuestion
         let questionPending = tqp
+        let scheduledResearch = textSR
+        let scheduledResearchPending = srPendingTop
         // `text` (used for the copy/share footer) needs every tag stripped too,
         // not just the segments used for inline rendering.
-        const text = parseTextBlocks(questionStripped, `m${i}`).text
+        const text = parseTextBlocks(srStripped, `m${i}`).text
         const segments: RenderSegment[] = withReports.segments
           .flatMap((seg, si): RenderSegment[] => {
             if (seg.type !== 'text') return [seg]
             const pq = parseQuestion(seg.content)
             if (pq.question) question = pq.question
             if (pq.questionPending) questionPending = true
-            const { segments: tbSegs } = parseTextBlocks(pq.text, `m${i}-s${si}`)
+            const psr = parseScheduledResearch(pq.text)
+            if (psr.scheduledResearch) scheduledResearch = psr.scheduledResearch
+            if (psr.pending) scheduledResearchPending = true
+            const { segments: tbSegs } = parseTextBlocks(psr.text, `m${i}-s${si}`)
             return tbSegs
           })
           .filter((seg) => seg.type !== 'text' || seg.content.trim())
@@ -1228,7 +1246,7 @@ export function ChatView({
         // this report gets it as a plain field instead of doing its own
         // lookup into `ChatMessage.reportVerifiedClaims`.
         const reports = withReports.reports.map((r) => ({ ...r, sources: mergedSources, verifiedClaims: m.reportVerifiedClaims?.[r.id] }))
-        return { text, reports, question, questionPending, segments }
+        return { text, reports, question, questionPending, scheduledResearch, scheduledResearchPending, segments }
       }),
     [messages, mergedSources]
   )
@@ -2367,6 +2385,25 @@ export function ChatView({
   )
 
   /**
+   * Report the user's confirm/decline decision on a <scheduled-research>
+   * proposal card back into the thread, as their own next message — the
+   * card (`components/scheduled-research-block.tsx`) already did the actual
+   * `POST /schedule_task` itself on Confirm, before calling this.
+   */
+  const handleScheduledResearchDecision = useCallback(
+    async (message: string) => {
+      if (isLoading || isLocked) return
+      const userMsg: ChatMessage = { role: 'user', content: message }
+      const baseHistory = [...messages, userMsg]
+      setMessages([...baseHistory, { role: 'assistant', content: '' }])
+      setStreamingIndex(baseHistory.length)
+      requestPin()
+      await runQuery(message, baseHistory)
+    },
+    [isLoading, isLocked, messages, runQuery, requestPin]
+  )
+
+  /**
    * Send one of the follow-up prompts offered under a finished answer.
    *
    * Same path as `handleQuestionSubmit` rather than typing into the composer
@@ -2945,7 +2982,9 @@ export function ChatView({
                                   }
                                   const qText = parseQuestion(seg.content).text
                                   if (!qText) return null
-                                  const { segments: tbSeg } = parseTextBlocks(qText, `m${i}-b${bi}-${si}`)
+                                  const srText = parseScheduledResearch(qText).text
+                                  if (!srText) return null
+                                  const { segments: tbSeg } = parseTextBlocks(srText, `m${i}-b${bi}-${si}`)
                                   return (
                                     <Fragment key={`text-${i}-${bi}-${si}`}>
                                       {tbSeg.map((tseg, ti) =>
@@ -3035,6 +3074,36 @@ export function ChatView({
                               key={`q-${i}`}
                               question={parsed.question}
                               onSubmit={handleQuestionSubmit}
+                              answered={!isInteractive}
+                              answeredText={answeredText}
+                            />
+                          )
+                        })()}
+
+                        {/* Skeleton shown while the <scheduled-research> block is mid-stream */}
+                        {!parsed.scheduledResearch && parsed.scheduledResearchPending && i === streamingIndex && isLoading && (
+                          <ScheduledResearchSkeleton />
+                        )}
+
+                        {/* scheduled-research proposal card — same guard/answered
+                            logic as the question block above. */}
+                        {parsed.scheduledResearch && !(i === streamingIndex && isLoading) && (() => {
+                          const hasUserAfter = messages.slice(i + 1).some((m) => m.role === 'user')
+                          const isLastAssistant = i === messages.length - 1
+                          const isInteractive = isLastAssistant && !hasUserAfter && !isLoading
+                          const answeredText = !isInteractive
+                            ? messages.slice(i + 1).find((m) => m.role === 'user')?.content
+                            : undefined
+                          return (
+                            <ScheduledResearchBlock
+                              key={`sr-${i}`}
+                              data={parsed.scheduledResearch!}
+                              email={userEmail}
+                              isSignedIn={!!isSignedIn}
+                              backendUrl={BACKEND_URL}
+                              fetchWithAuth={fetchWithAuth}
+                              onSignIn={() => clerk.openSignIn()}
+                              onDecision={handleScheduledResearchDecision}
                               answered={!isInteractive}
                               answeredText={answeredText}
                             />
