@@ -1046,7 +1046,7 @@ export function ChatView({
                       {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
                     </button>
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                    <ShareToPagesMenu title={r.title || 'report'} content={r.content || ''} sources={r.sources} />
+                    <ShareToPagesMenu title={r.title || 'report'} content={r.content || ''} sources={r.sources} onOpenDialog={() => setShareDropdownOpen(null)} />
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                     <button
                       onClick={() => {
