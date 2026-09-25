@@ -3196,8 +3196,15 @@ export function ChatView({
                           </div>
                         )}
 
-                        {/* footer: actions, once the turn is complete */}
-                        {(parsed.text || msg.stoppedByUser) && turnDone ? (
+                        {/* footer: actions, once the turn is complete.
+                            Suppressed when this turn continues into another
+                            assistant reply via a hidden decision message (a
+                            <question>/<scheduled-research> confirm/decline) —
+                            there's no visible query between the two, so they
+                            read as one answer and should show one footer,
+                            on the last message of the chain. */}
+                        {(parsed.text || msg.stoppedByUser) && turnDone &&
+                        !(messages[i + 1]?.role === 'user' && messages[i + 1]?.hidden) ? (
                           <AnswerFooter
                             content={parsed.text}
                             onRegenerate={isLocked || isVoiceThread ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
