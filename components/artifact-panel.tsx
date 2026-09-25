@@ -607,7 +607,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                   </span>
                 </button>
                 <div className="my-1 h-px bg-[var(--border-subtle)]/50" />
-                <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} sources={active.report?.sources} />
+                <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} sources={active.report?.sources} onOpenDialog={() => setShareOpen(false)} />
               </div>
             )}
           </div>

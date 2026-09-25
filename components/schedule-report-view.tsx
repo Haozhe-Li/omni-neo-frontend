@@ -205,7 +205,7 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
                     {copied ? 'Copied!' : 'Copy full text'}
                   </button>
                   <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                  <ShareToPagesMenu title={title} content={markdown} sources={sources} idSeed={`schedule:${runId}`} />
+                  <ShareToPagesMenu title={title} content={markdown} sources={sources} idSeed={`schedule:${runId}`} onOpenDialog={() => setShareOpen(false)} />
                   <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                   <button
                     onClick={() => { setShareOpen(false); handleDownload('markdown') }}
