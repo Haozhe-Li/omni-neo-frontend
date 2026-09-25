@@ -918,9 +918,19 @@ interface ToolActivityProps {
   /** Opens a script's code in the artifact side-panel (same handler as
    * report/chart cards — see `openPanel` in chat-view.tsx). */
   onOpenScript?: (id: string) => void
+  /**
+   * This turn continues straight on from a hidden <question>/
+   * <scheduled-research> decision message — no visible query introduced
+   * it. Suppresses the empty "Thinking" skeleton (which reads as "a new
+   * turn just started") for exactly the phase where nothing has arrived
+   * yet; once real steps land they still show normally; the streaming
+   * caret on the answer text itself carries the "still writing" feeling
+   * instead.
+   */
+  continuesHiddenTurn?: boolean
 }
 
-export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPrefix, onOpenScript }: ToolActivityProps) {
+export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPrefix, onOpenScript, continuesHiddenTurn }: ToolActivityProps) {
   // Thinking phase = streaming with no answer yet. The header shimmers and
   // previews live activity for exactly this phase, then settles once an
   // answer starts.
@@ -1035,7 +1045,14 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // expand and so no chevron. Rendered through the same `LiveRow` as every
   // other phase rather than as a bare label, so when the first step arrives
   // the text doesn't jump sideways into a gutter that suddenly exists.
+  //
+  // Skipped entirely when this turn continues a hidden decision message: no
+  // visible query introduced it, so this card's "something new just started"
+  // framing would contradict that — the answer's own streaming caret is what
+  // carries "still writing" here instead. Once a real step lands, `items`
+  // stops being empty and the normal live card below takes over as usual.
   if (thinking && items.length === 0 && !drafting) {
+    if (continuesHiddenTurn) return null
     return (
       // The same card, gap and row geometry as every later phase, so nothing
       // shifts when the first step lands. The two bars stand in for the step
