@@ -2869,6 +2869,13 @@ export function ChatView({
                     const parsed = parsedByIndex[i] ?? { text: msg.content || '', reports: [] as ParsedReport[], segments: [] as RenderSegment[] }
                     const reportDrafting = parsed.reports.some((r) => !r.complete)
                     const turnDone = !(i === streamingIndex && isLoading)
+                    // This reply follows a hidden <question>/<scheduled-research>
+                    // decision message — no visible query started it, so it reads
+                    // as a continuation of the turn above rather than a new one.
+                    // Passed to ToolActivity so it skips the "Thinking" skeleton
+                    // (which announces "a new turn is starting") and just lets the
+                    // streaming caret carry that feeling instead.
+                    const continuesHiddenTurn = messages[i - 1]?.role === 'user' && !!messages[i - 1]?.hidden
                     const tSources = sourcesByTurn.get(i)
                     const tSourceCount = (tSources?.cited.length ?? 0) + (tSources?.unused.length ?? 0)
                     const turnTab = mobileTab[i] ?? 'answer'
@@ -2900,6 +2907,7 @@ export function ChatView({
                                     drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
                                     idPrefix={`m${i}-b0`}
                                     onOpenScript={openPanel}
+                                    continuesHiddenTurn={continuesHiddenTurn}
                                   />
                                 )
                               })()
@@ -2912,6 +2920,7 @@ export function ChatView({
                                   drafting={reportDrafting ? 'report' : msg.drafting}
                                   idPrefix={`m${i}`}
                                   onOpenScript={openPanel}
+                                  continuesHiddenTurn={continuesHiddenTurn}
                                 />
                               )
                             )}
@@ -2972,6 +2981,7 @@ export function ChatView({
                                     drafting={isLastBlock ? (reportDrafting ? 'report' : msg.drafting) : null}
                                     idPrefix={`m${i}-b${bi}`}
                                     onOpenScript={openPanel}
+                                    continuesHiddenTurn={continuesHiddenTurn}
                                   />
                                 </div>
                               )
@@ -3036,6 +3046,7 @@ export function ChatView({
                                 drafting={reportDrafting ? 'report' : msg.drafting}
                                 idPrefix={`m${i}`}
                                 onOpenScript={openPanel}
+                                continuesHiddenTurn={continuesHiddenTurn}
                               />
                             </div>
                             {/* answer text and inline report/textblock cards, in source order */}
