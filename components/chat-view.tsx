@@ -2372,9 +2372,13 @@ export function ChatView({
   }, [pinTick, recomputeSpacer])
 
   // ── submit a question-block answer ────────────────────────────────────
+  // `hidden: true` — this turn still goes to the backend/agent like any other
+  // message, it just isn't drawn as a second query heading in the transcript,
+  // since the QuestionBlock itself already switches into its own "answered"
+  // summary showing this exact text (see the render loop below).
   const handleQuestionSubmit = useCallback(
     async (formattedAnswer: string) => {
-      const userMsg: ChatMessage = { role: 'user', content: formattedAnswer }
+      const userMsg: ChatMessage = { role: 'user', content: formattedAnswer, hidden: true }
       const baseHistory = [...messages, userMsg]
       setMessages([...baseHistory, { role: 'assistant', content: '' }])
       setStreamingIndex(baseHistory.length)
@@ -2388,12 +2392,14 @@ export function ChatView({
    * Report the user's confirm/decline decision on a <scheduled-research>
    * proposal card back into the thread, as their own next message — the
    * card (`components/scheduled-research-block.tsx`) already did the actual
-   * `POST /schedule_task` itself on Confirm, before calling this.
+   * `POST /schedule_task` itself on Confirm, before calling this. `hidden`
+   * for the same reason as `handleQuestionSubmit` above — the card's own
+   * answered state already shows this decision.
    */
   const handleScheduledResearchDecision = useCallback(
     async (message: string) => {
       if (isLoading || isLocked) return
-      const userMsg: ChatMessage = { role: 'user', content: message }
+      const userMsg: ChatMessage = { role: 'user', content: message, hidden: true }
       const baseHistory = [...messages, userMsg]
       setMessages([...baseHistory, { role: 'assistant', content: '' }])
       setStreamingIndex(baseHistory.length)
@@ -2737,7 +2743,7 @@ export function ChatView({
                 data-message-index={i}
                 className={`flex flex-col items-stretch scroll-mt-20 ${
                   msg.role === 'user'
-                    ? `pb-6 ${isFirstQuestion(i) ? 'pt-1' : 'pt-14'}`
+                    ? (msg.hidden ? '' : `pb-6 ${isFirstQuestion(i) ? 'pt-1' : 'pt-14'}`)
                     : 'pb-8'
                 }`}
               >
@@ -2746,7 +2752,11 @@ export function ChatView({
                     <VoiceCallBanner kind="start" />
                   </div>
                 )}
-                {msg.role === 'user' ? (
+                {/* A `hidden` user turn (an answered <question>/<scheduled-research>
+                    decision) still occupies this index — for `recomputeSpacer`'s
+                    scroll-pin lookup by data-message-index — but renders nothing:
+                    the originating block's own answered state already shows it. */}
+                {msg.role === 'user' && msg.hidden ? null : msg.role === 'user' ? (
                   <>
                   {!!msg.sourceUrls?.length && <ContinuedFromBanner urls={msg.sourceUrls} />}
                   <div className="group relative w-full">

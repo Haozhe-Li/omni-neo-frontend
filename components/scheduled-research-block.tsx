@@ -24,7 +24,7 @@ interface ScheduledResearchBlockProps {
 
 export function ScheduledResearchSkeleton() {
   return (
-    <div className="mt-3 w-full max-w-[520px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--paper-raised)] overflow-hidden animate-pulse">
+    <div className="mt-3 w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--paper-raised)] overflow-hidden animate-pulse">
       <div className="flex items-center gap-2.5 px-[18px] py-3 border-b border-[var(--line-hair)]">
         <div className="h-[15px] w-40 rounded-md bg-foreground/[0.07]" />
       </div>
@@ -98,7 +98,7 @@ export function ScheduledResearchBlock({
   if (answered) {
     const declined = !!answeredText && /decided not to/i.test(answeredText)
     return (
-      <div className="mt-3 w-full max-w-[520px] flex items-start gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--paper-raised)] px-4 py-3.5">
+      <div className="mt-3 w-full flex items-start gap-3 rounded-2xl border border-[var(--border-subtle)] bg-[var(--paper-raised)] px-4 py-3.5">
         <span
           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
             declined ? 'bg-foreground/[0.08]' : 'bg-accent/12'
@@ -125,7 +125,7 @@ export function ScheduledResearchBlock({
   // ── Interactive proposal card ───────────────────────────────────────────
   const busy = status === 'submitting'
   return (
-    <div className="mt-3 w-full max-w-[520px] rounded-2xl border border-[var(--border-subtle)] bg-[var(--paper-raised)] overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+    <div className="mt-3 w-full rounded-2xl border border-[var(--border-subtle)] bg-[var(--paper-raised)] overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2.5 px-[18px] py-3 border-b border-[var(--line-hair)] text-muted-foreground">
         <CalendarClock size={15} strokeWidth={1.75} className="shrink-0" />
         <span className="text-[13px] font-medium opacity-90 text-foreground">Scheduled research proposal</span>

@@ -216,6 +216,17 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   /**
+   * User-role only. True for a message synthesized by an inline interactive
+   * block (e.g. a `<question>` answer or a `<scheduled-research>` confirm/
+   * decline decision) rather than typed by the user — it still goes to the
+   * backend as a normal turn so the agent sees and responds to it, but the
+   * transcript doesn't render it as a second query heading, since the
+   * originating block already shows its own "answered" summary of the same
+   * content. See `handleQuestionSubmit`/`handleScheduledResearchDecision` in
+   * chat-view.tsx.
+   */
+  hidden?: boolean
+  /**
    * Where a live voice call began (on its first user message) or ended (on
    * its last reply) — written by the backend (core/voice/persist.py), drawn as
    * "Voice call started/ended" banners. Kept on the messages themselves, not
