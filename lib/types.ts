@@ -258,6 +258,14 @@ export interface ChatMessage {
   mode?: ChatModelId | 'fast' | 'pro'
   /** Set when this assistant message was produced by a rewind/regenerate. */
   regeneratedWith?: ChatModelId
+  /**
+   * The user's thumbs-up / thumbs-down on this answer. Persisted with the
+   * message so the highlighted state survives a refresh. The server is told
+   * separately (`POST /api/threads/{id}/feedback`); this field is only the
+   * UI's memory of what was clicked. A regenerate builds a fresh message, so
+   * it starts unrated — the backend drops the old turn's record at the same time.
+   */
+  feedback?: 'up' | 'down'
   /** Set when the user manually stopped generation mid-stream. */
   stoppedByUser?: boolean
   /** Set when this turn ended via a backend `error` SSE event. See `ChatError`. */

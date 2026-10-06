@@ -36,12 +36,15 @@ interface AnswerFooterProps {
   /** Guests can't regenerate on a signed-in-only model — those rows are hidden
    *  rather than shown locked, since this menu is an action list, not a picker. */
   isSignedIn?: boolean
+  /** Current thumbs state for this answer; `undefined` = unrated. */
+  feedback?: 'up' | 'down'
+  /** Called with the new state, or `undefined` when the user clicks the active
+   *  thumb again to take it back. */
+  onFeedback?: (next: 'up' | 'down' | undefined) => void
 }
 
-export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false }: AnswerFooterProps) {
+export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false, feedback, onFeedback }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
-  const [liked, setLiked] = useState(false)
-  const [disliked, setDisliked] = useState(false)
   const [regenOpen, setRegenOpen] = useState(false)
   const regenRef = useRef<HTMLDivElement>(null)
   // Close regen dropdown on outside click
@@ -62,8 +65,11 @@ export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedI
     setTimeout(() => setCopied(false), 1500)
   }
 
-  const handleLike = () => { setLiked(true); setDisliked(false) }
-  const handleDislike = () => { setDisliked(true); setLiked(false) }
+  const liked = feedback === 'up'
+  const disliked = feedback === 'down'
+  // Clicking the lit thumb again takes the rating back.
+  const handleLike = () => onFeedback?.(liked ? undefined : 'up')
+  const handleDislike = () => onFeedback?.(disliked ? undefined : 'down')
 
   return (
     /* No rule above the actions — whitespace already ends the answer, and a

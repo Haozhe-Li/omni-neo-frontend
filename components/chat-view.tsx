@@ -1554,6 +1554,36 @@ export function ChatView({
     [syncToBackend]
   )
 
+  // Thumbs up / down. The rating is persisted on the message like every other
+  // field (same eager-ref pattern as `persistVerifiedClaim`), and the backend is
+  // told separately: a thumbs-up on a luna answer is also recorded there as a
+  // fine-tuning example. Fire-and-forget — the buttons must never feel slow or
+  // fail loudly, and a turn the backend declines to record is not an error.
+  //
+  // `messageIndex` doubles as the turn number: an assistant message's list
+  // index equals the QueryRequest.turn of the question it answers.
+  const handleFeedback = useCallback(
+    (messageIndex: number, next: 'up' | 'down' | undefined) => {
+      const prev = messagesRef.current
+      if (!prev[messageIndex]) return
+      const updated = prev.map((m, i) => {
+        if (i !== messageIndex) return m
+        const { feedback: _old, ...rest } = m
+        return next ? { ...rest, feedback: next } : rest
+      })
+      messagesRef.current = updated
+      setMessages(updated)
+      syncToBackend(updated, titleRef.current)
+      // Voice threads run a different agent; nothing there is training data.
+      if (!threadId || isVoiceThread) return
+      fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify({ turn: messageIndex, rating: next ?? 'none' }),
+      }).catch(() => {})
+    },
+    [threadId, isVoiceThread, fetchWithAuth, syncToBackend]
+  )
+
   const runVerifyExtraction = useCallback(
     async (messageIndex: number, content: string) => {
       if (!threadId) return
@@ -3232,6 +3262,8 @@ export function ChatView({
                             onRegenerate={isLocked || isVoiceThread ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                             isSignedIn={!!isSignedIn}
+                            feedback={msg.feedback}
+                            onFeedback={(next) => handleFeedback(i, next)}
                           />
                         ) : null}
                       </div>
