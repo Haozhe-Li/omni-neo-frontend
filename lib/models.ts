@@ -82,10 +82,9 @@ const BY_ID = new Map(CHAT_MODELS.map((m) => [m.id, m]))
  * from the picker. All become `best` — the closest equivalent, and the only one
  * a guest whose preference was `pro` can still use.
  *
- * `gemma` is listed here but is NOT in the backend's `_LEGACY_ALIASES`: it is
- * still a resolvable model server-side so that a rewind of a thread created
- * while it was selectable does not 400. The two files diverge on this one id on
- * purpose — the frontend stops offering it, the backend keeps honouring it.
+ * `gemma` is in the backend's `_LEGACY_ALIASES` too (Cerebras archived the
+ * model, so it was removed there and maps to `best`), which keeps a rewind of a
+ * thread created while it was selectable from 400ing.
  *
  * `rix` is deliberately absent. It sat here while the fine-tune was offline,
  * and this set is consulted *before* the catalog lookup below — so leaving it
