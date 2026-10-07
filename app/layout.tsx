@@ -59,14 +59,6 @@ export const metadata: Metadata = {
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
     url: 'https://omniknows.xyz',
     siteName: 'Omni Knows',
-    images: [
-      {
-        url: '/omniknows_main.png',
-        width: 1200,
-        height: 630,
-        alt: 'Omni Knows',
-      },
-    ],
     locale: 'en_US',
     type: 'website',
   },
@@ -74,7 +66,6 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Omni Knows',
     description: 'Advanced AI-powered research agent that thinks, searches, and provides comprehensive answers for complex queries.',
-    images: ['/omniknows_main.png'],
     creator: '@omniknows',
   },
   /* All of these are the three-ring mark, generated from public/omni-mark.svg

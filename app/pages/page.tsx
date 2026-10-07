@@ -9,14 +9,12 @@ export const metadata: Metadata = {
     openGraph: {
         title: 'Explore Pages | Omni Knows',
         description: 'Explore research, insights, and comprehensive answers published by the Omni Knows community.',
-        images: ['/omniknows_pages_home.png'],
         type: 'website',
     },
     twitter: {
         card: 'summary_large_image',
         title: 'Explore Pages | Omni Knows',
         description: 'Explore research, insights, and comprehensive answers published by the Omni Knows community.',
-        images: ['/omniknows_pages_home.png'],
     }
 }
 

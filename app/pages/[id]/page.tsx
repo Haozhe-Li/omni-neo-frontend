@@ -10,7 +10,6 @@ interface PagesPageProps {
 
 const SITE_URL = 'https://omniknows.xyz'
 const SITE_NAME = 'Omni Knows'
-const COVER_URL = `${SITE_URL}/omniknows_canvas.png`
 
 export async function generateMetadata({ params }: PagesPageProps): Promise<Metadata> {
     const { id } = await params

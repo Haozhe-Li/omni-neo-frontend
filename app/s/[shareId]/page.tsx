@@ -9,6 +9,9 @@ interface SharedThreadPageProps {
 export async function generateMetadata(): Promise<Metadata> {
     return {
         title: { absolute: 'Shared conversation | Omni Knows' },
+        // What a chat app shows under the preview image when the link is pasted.
+        openGraph: { title: 'Check out this chat', siteName: 'OmniKnows', type: 'website' },
+        twitter: { card: 'summary_large_image', title: 'Check out this chat' },
         robots: { index: false, follow: false },
     }
 }
