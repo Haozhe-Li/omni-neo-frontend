@@ -73,3 +73,27 @@ This application follows a "invisible design" approach inspired by Perplexity:
 - **UI Components**: Shadcn/ui + Radix UI
 - **Markdown**: react-markdown for answer rendering
 - **Icons**: Lucide React
+
+## Collector (training-data collection)
+
+`/collect` is a password-protected tool for producing SFT candidates by hand: pick the
+time, location, answer language and memory Omni is told about (each has a shuffle and a
+lock), generate with the real agent over as many turns as you like, edit the answer in
+the markdown editor, and submit it as a training example. It is not linked from the
+product and is disallowed in `robots.ts`.
+
+Server-side env:
+
+```
+COLLECTOR_PASSWORD=...           # shared login password
+COLLECTOR_SESSION_SECRET=...     # >= 32 chars; changing it signs everyone out
+COLLECTOR_API_KEY=...            # same value as the backend's; never sent to the browser
+BACKEND_URL=https://...          # backend base URL (as for /api/chat)
+UPSTASH_REDIS_REST_URL / _TOKEN  # login attempts are throttled per IP (8 per 15 min)
+```
+
+`proxy.ts` bounces any `/collect` or `/api/collect` request without a valid signed
+session cookie; the API routes check it again. The browser only talks to `/api/collect/*`,
+which forwards an allowlist of backend routes. Formats of the four fields live in
+`lib/collector/fields.ts` and mirror production's; the backend rejects anything else. See
+`doc/collector.md` in the backend repo for how the data is kept identical to production.
