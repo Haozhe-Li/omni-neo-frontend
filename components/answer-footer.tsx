@@ -41,9 +41,13 @@ interface AnswerFooterProps {
   /** Called with the new state, or `undefined` when the user clicks the active
    *  thumb again to take it back. */
   onFeedback?: (next: 'up' | 'down' | undefined) => void
+  /** Opens the share-conversation dialog. Without it the Share icon is not shown. */
+  onShare?: () => void
+  /** A shared conversation someone else is reading: Copy only. */
+  readOnly?: boolean
 }
 
-export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false, feedback, onFeedback }: AnswerFooterProps) {
+export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedIn = false, feedback, onFeedback, onShare, readOnly = false }: AnswerFooterProps) {
   const [copied, setCopied] = useState(false)
   const [regenOpen, setRegenOpen] = useState(false)
   const regenRef = useRef<HTMLDivElement>(null)
@@ -84,9 +88,11 @@ export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedI
         <IconBtn onClick={handleCopy} title="Copy">
           {copied ? <Check size={16} strokeWidth={1.75} /> : <Copy size={16} strokeWidth={1.75} />}
         </IconBtn>
-        <IconBtn title="Share">
-          <Share2 size={16} strokeWidth={1.75} />
-        </IconBtn>
+        {onShare && !readOnly && (
+          <IconBtn onClick={onShare} title="Share conversation">
+            <Share2 size={16} strokeWidth={1.75} />
+          </IconBtn>
+        )}
 
         {/* Regenerate — available on any assistant message; the caller
             (chat-view) confirms with the user first if this isn't the last
@@ -116,14 +122,14 @@ export function AnswerFooter({ content, onRegenerate, regeneratedWith, isSignedI
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
+        {!readOnly && <div className="ml-auto flex items-center gap-1">
           <IconBtn onClick={handleLike} active={liked} title="Good response">
             <ThumbsUp size={16} strokeWidth={1.75} fill={liked ? 'currentColor' : 'none'} />
           </IconBtn>
           <IconBtn onClick={handleDislike} active={disliked} title="Bad response">
             <ThumbsDown size={16} strokeWidth={1.75} fill={disliked ? 'currentColor' : 'none'} />
           </IconBtn>
-        </div>
+        </div>}
       </div>
     </div>
   )

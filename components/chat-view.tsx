@@ -21,6 +21,7 @@ import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
+import { ShareThreadDialog } from '@/components/share-thread-dialog'
 import { StreamingText } from '@/components/streaming-text'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getAiRequestErrorMessage, getLocalISOString, handleUsageLimitResponse, parseThreadLockedResponse } from '@/lib/utils'
@@ -77,7 +78,18 @@ interface ChatViewProps {
     locked_reason?: string
     locked_at?: string
     origin?: string | null
+    /** Messages this thread inherited from a shared conversation it was copied from. */
+    inherited_messages?: number
   } | null
+  /**
+   * A shared conversation someone else is reading. No composer, no regenerate /
+   * edit / thumbs / share, nothing synced or sent to the backend; the composer is
+   * replaced by a "Continue this conversation" button (`onContinue`). Folded into
+   * `isLocked`, so every gate that already stops a locked thread stops this too.
+   */
+  readOnly?: boolean
+  onContinue?: () => void
+  continuing?: boolean
 }
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
@@ -741,6 +753,9 @@ export function ChatView({
   sidebarOpen,
   setSidebarOpen,
   preloadedThread = null,
+  readOnly = false,
+  onContinue,
+  continuing = false,
 }: ChatViewProps) {
   const router = useRouter()
   const { fetchWithAuth } = useApi()
@@ -798,7 +813,15 @@ export function ChatView({
   const [title, setTitle] = useState(() => preloadedThread?.title?.trim() || query)
   // Set once this conversation trips the backend's safety guard — no more
   // sends/regenerates, but the existing history stays fully visible/readable.
-  const [isLocked, setIsLocked] = useState(() => !!preloadedThread?.is_locked)
+  const [lockedByBackend, setIsLocked] = useState(() => !!preloadedThread?.is_locked)
+  // A shared conversation is read-only for the same practical purpose as a locked
+  // one — nothing may be sent, regenerated or edited — so it rides the same flag.
+  const isLocked = lockedByBackend || readOnly
+  // The first N messages of a thread copied from a shared link have no
+  // checkpoint history behind them (a fork holds one checkpoint, not a replay),
+  // so they cannot be regenerated or edited. Later turns are ordinary.
+  const inheritedMessages = preloadedThread?.inherited_messages ?? 0
+  const [shareOpen, setShareOpen] = useState(false)
   // A thread that started as a voice call (core/routers/voice.py) stays on
   // that same simple ReAct agent for its whole life, whether a given turn
   // arrives spoken or typed — no model choice, memory, rewind, skills, or
@@ -868,7 +891,8 @@ export function ChatView({
   // before that turn so an early answer can't "see" a later turn's sources.
   const handleCheckSource = useCallback(
     async (claim: string, turn: number) => {
-      if (!threadId) {
+      // A shared page has no source index behind it until it is copied.
+      if (!threadId || readOnly) {
         toast.error('Check source is unavailable here')
         return
       }
@@ -1491,7 +1515,7 @@ export function ChatView({
   // ── persistence ────────────────────────────────────────────────────────
   const syncToBackend = useCallback(
     (msgs: ChatMessage[], syncTitle?: string) => {
-      if (!threadId) return
+      if (!threadId || readOnly) return
       // Only the newest assistant turn keeps its suggestions. They are about
       // the answer in front of you and go stale the moment there is a newer
       // one, so stripping them here means older turns shed them on the next
@@ -1517,7 +1541,7 @@ export function ChatView({
         body: JSON.stringify(body),
       }).catch(() => {})
     },
-    [threadId, mode, fetchWithAuth]
+    [threadId, mode, fetchWithAuth, readOnly]
   )
 
   // "Verify claim" dashed underlines — a silent, best-effort background
@@ -1564,6 +1588,7 @@ export function ChatView({
   // index equals the QueryRequest.turn of the question it answers.
   const handleFeedback = useCallback(
     (messageIndex: number, next: 'up' | 'down' | undefined) => {
+      if (readOnly) return
       const prev = messagesRef.current
       if (!prev[messageIndex]) return
       const updated = prev.map((m, i) => {
@@ -1581,7 +1606,7 @@ export function ChatView({
         body: JSON.stringify({ turn: messageIndex, rating: next ?? 'none' }),
       }).catch(() => {})
     },
-    [threadId, isVoiceThread, fetchWithAuth, syncToBackend]
+    [threadId, isVoiceThread, fetchWithAuth, syncToBackend, readOnly]
   )
 
   const runVerifyExtraction = useCallback(
@@ -2727,12 +2752,17 @@ export function ChatView({
           panel goes fullscreen: it hands the panel the entire row via flex,
           same as the report card's "Open" overlay hands it 62% otherwise. */}
       <div className={panelOpen && panelFullscreen ? 'hidden' : 'flex flex-col h-full relative min-w-0 flex-1 transition-all duration-300'}>
-        <TextSelectionMenu
-          containerRef={scrollRef}
-          onFollowUp={handleAskOmni}
-          onCheckSource={handleCheckSource}
-          allowedSelectors={ASSISTANT_MESSAGE_SELECTORS}
-        />
+        {!readOnly && (
+          <TextSelectionMenu
+            containerRef={scrollRef}
+            onFollowUp={handleAskOmni}
+            onCheckSource={handleCheckSource}
+            allowedSelectors={ASSISTANT_MESSAGE_SELECTORS}
+          />
+        )}
+        {!readOnly && !isVoiceThread && (
+          <ShareThreadDialog isOpen={shareOpen} onClose={() => setShareOpen(false)} threadId={threadId} title={title} />
+        )}
         {/* Mobile header — no bar, same as the search-home hero: nothing here
             needs a title anymore, so two buttons float over the thread
             instead of a full-width row. */}
@@ -2873,7 +2903,7 @@ export function ChatView({
                           >
                             <Copy size={13} strokeWidth={1.6} />
                           </button>
-                          {!isLoading && !isVoiceThread && (
+                          {!isLoading && !isVoiceThread && !readOnly && i >= inheritedMessages && (
                             <button
                               title="Edit and ask again"
                               onClick={() => { setEditingIndex(i); setEditText(msg.content); setTimeout(() => editRef.current?.focus(), 0) }}
@@ -3259,11 +3289,20 @@ export function ChatView({
                         !(messages[i + 1]?.role === 'user' && messages[i + 1]?.hidden) ? (
                           <AnswerFooter
                             content={parsed.text}
-                            onRegenerate={isLocked || isVoiceThread ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
+                            onRegenerate={isLocked || isVoiceThread || i < inheritedMessages ? undefined : (rewindMode) => handleRewind(i, undefined, rewindMode)}
                             regeneratedWith={msg.regeneratedWith}
                             isSignedIn={!!isSignedIn}
                             feedback={msg.feedback}
                             onFeedback={(next) => handleFeedback(i, next)}
+                            readOnly={readOnly}
+                            onShare={
+                              isLocked || isVoiceThread
+                                ? undefined
+                                : () => {
+                                    if (!isSignedIn) { clerk.openSignIn(); return }
+                                    setShareOpen(true)
+                                  }
+                            }
                           />
                         ) : null}
                       </div>
@@ -3404,6 +3443,24 @@ export function ChatView({
               className="pointer-events-none absolute inset-x-[-28px] -top-8 bottom-[-40px] bg-[linear-gradient(to_top,var(--paper)_52%,transparent)]"
             />
             <div className="pointer-events-auto relative">
+            {readOnly && (
+              <div className="flex flex-col items-start gap-3 rounded-[26px] bg-[var(--paper-raised)] px-5 py-4 shadow-[0_0_0_1px_var(--line-strong),0_14px_34px_-26px_color-mix(in_srgb,var(--ink)_40%,transparent)] sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-[14px] text-[var(--ink)]">Shared conversation</div>
+                  <div className="mt-0.5 text-[12.5px] text-[var(--ink-muted)]">
+                    Continue it to get your own private copy. The original stays as it is.
+                  </div>
+                </div>
+                <button
+                  onClick={onContinue}
+                  disabled={continuing || !onContinue}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-[var(--teal)] px-5 text-[14px] text-[var(--accent-foreground)] transition-colors hover:bg-[var(--teal-hover)] disabled:opacity-60"
+                >
+                  {continuing ? <Loader2 size={15} className="animate-spin" /> : null}
+                  {continuing ? 'Copying…' : 'Continue this conversation'}
+                </button>
+              </div>
+            )}
             <div
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={(e) => { e.preventDefault(); setIsDragging(false) }}
@@ -3414,6 +3471,7 @@ export function ChatView({
               }}
               className={`
                 relative flex flex-col rounded-[26px] bg-[var(--paper-raised)] transition-all duration-300
+                ${readOnly ? 'hidden' : ''}
                 ${isFocused || isDragging
                   ? 'shadow-[0_0_0_1px_var(--teal),0_14px_34px_-24px_color-mix(in_srgb,var(--ink)_50%,transparent)]'
                   : 'shadow-[0_0_0_1px_var(--line-strong),0_14px_34px_-26px_color-mix(in_srgb,var(--ink)_40%,transparent)] hover:shadow-[0_0_0_1px_var(--line-strong),0_16px_38px_-24px_color-mix(in_srgb,var(--ink)_46%,transparent)]'

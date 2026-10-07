@@ -24,6 +24,7 @@ type PreloadedThread = {
   locked_reason?: string
   locked_at?: string
   origin?: string | null
+  inherited_messages?: number
 }
 
 export function ThreadPageClient({ threadId }: { threadId: string }) {
@@ -74,6 +75,7 @@ export function ThreadPageClient({ threadId }: { threadId: string }) {
             locked_reason: typeof data?.locked_reason === 'string' ? data.locked_reason : undefined,
             locked_at: typeof data?.locked_at === 'string' ? data.locked_at : undefined,
             origin: typeof data?.origin === 'string' ? data.origin : null,
+            inherited_messages: typeof data?.inherited_messages === 'number' ? data.inherited_messages : 0,
           })
           setStatus('ready')
         } else {
