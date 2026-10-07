@@ -40,6 +40,7 @@ import { getUserLocation, LocationData } from '@/lib/location'
 import { useMemory } from '@/hooks/useMemory'
 import { useUsage, type RedeemError, type RedeemResult } from '@/hooks/useUsage'
 import { useApi } from '@/hooks/useApi'
+import { sharedLinkUrl, useSharedLinks } from '@/hooks/useSharedLinks'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
     Select,
@@ -1240,6 +1241,8 @@ function ChatHistorySection() {
                 </Row>
             )}
 
+            <SharedConversationsRows />
+
             <ConfirmDialog
                 open={!!threadToDelete}
                 onOpenChange={(open) => !open && setThreadToDelete(null)}
@@ -1260,6 +1263,139 @@ function ChatHistorySection() {
                 isPending={isDeleting}
             />
         </Section>
+    )
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Shared conversations — every link you have made, across all threads
+   ════════════════════════════════════════════════════════════════ */
+
+function SharedConversationsRows() {
+    const { isSignedIn } = useAuth()
+    // Guests cannot share (the backend refuses), so there is nothing to manage.
+    const { links, loading, loaded, revoke } = useSharedLinks({ enabled: !!isSignedIn })
+    const [revokingId, setRevokingId] = useState<string | null>(null)
+    const [toRevoke, setToRevoke] = useState<string | null>(null)
+    const [revokeAllOpen, setRevokeAllOpen] = useState(false)
+    const [isRevokingAll, setIsRevokingAll] = useState(false)
+
+    if (!isSignedIn) return null
+
+    const handleRevoke = async () => {
+        const id = toRevoke
+        if (!id) return
+        setToRevoke(null)
+        setRevokingId(id)
+        const error = await revoke(id)
+        setRevokingId(null)
+        if (error) toast.error(error)
+        else toast.success('Link revoked — it no longer opens')
+    }
+
+    const handleRevokeAll = async () => {
+        setIsRevokingAll(true)
+        let failed = 0
+        for (const l of links) {
+            if (await revoke(l.share_id)) failed += 1
+        }
+        setIsRevokingAll(false)
+        setRevokeAllOpen(false)
+        if (failed) toast.error(`${failed} link${failed === 1 ? '' : 's'} couldn’t be revoked`)
+        else toast.success('All links revoked')
+    }
+
+    return (
+        <>
+            <Row
+                title="Shared conversations"
+                description="Anyone with one of these links can read that conversation, and continue it as a private copy of their own. Deleting the original conversation doesn't remove its link — revoke it here."
+                stacked
+            >
+                {!loaded || (loading && links.length === 0) ? (
+                    <div className="flex items-center justify-center py-8 rounded-xl border border-[var(--border-subtle)]">
+                        <Loader2 size={16} className="animate-spin text-[var(--muted-foreground)]" />
+                    </div>
+                ) : links.length === 0 ? (
+                    <div className="py-8 text-center text-[13px] text-[var(--muted-foreground)] rounded-xl border border-dashed border-[var(--border-subtle)]">
+                        You haven&apos;t shared any conversations yet.
+                    </div>
+                ) : (
+                    <div className="space-y-2.5">
+                        {links.map((link) => {
+                            const url = sharedLinkUrl(link.share_id)
+                            const turns = Math.ceil(link.n_messages / 2)
+                            return (
+                                <div
+                                    key={link.share_id}
+                                    className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-[var(--border-subtle)] hover:bg-[var(--secondary)]/30 transition-colors"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-[var(--foreground)] truncate">
+                                            {link.title || 'Untitled conversation'}
+                                        </p>
+                                        <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                                            Shared {formatDistanceToNow(new Date(link.created_at), { addSuffix: true })}
+                                            <span className="opacity-50"> · </span>
+                                            {turns} {turns === 1 ? 'turn' : 'turns'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            onClick={() => window.open(url, '_blank')}
+                                            className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-lg transition-colors"
+                                            title="Open link"
+                                        >
+                                            <ExternalLink size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => { navigator.clipboard.writeText(url); toast.success('Link copied') }}
+                                            className="p-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--secondary)] rounded-lg transition-colors"
+                                            title="Copy link"
+                                        >
+                                            <Copy size={14} />
+                                        </button>
+                                        <button
+                                            onClick={() => setToRevoke(link.share_id)}
+                                            disabled={revokingId === link.share_id}
+                                            className="p-2 text-[var(--muted-foreground)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                                            title="Stop sharing"
+                                        >
+                                            {revokingId === link.share_id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                        </button>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                    </div>
+                )}
+            </Row>
+
+            {links.length > 0 && (
+                <Row title="Stop sharing everything" description="Revoke every shared conversation link at once">
+                    <SettingButton variant="danger" onClick={() => setRevokeAllOpen(true)}>
+                        Revoke all
+                    </SettingButton>
+                </Row>
+            )}
+
+            <ConfirmDialog
+                open={!!toRevoke}
+                onOpenChange={(open) => !open && setToRevoke(null)}
+                title="Stop sharing this conversation?"
+                description="The link will stop working. People who already continued it keep their own copies."
+                confirmLabel="Stop sharing"
+                onConfirm={handleRevoke}
+            />
+            <ConfirmDialog
+                open={revokeAllOpen}
+                onOpenChange={setRevokeAllOpen}
+                title="Revoke all shared links?"
+                description={`All ${links.length} of your shared conversation links will stop working. People who already continued one keep their own copies.`}
+                confirmLabel="Revoke all"
+                onConfirm={handleRevokeAll}
+                isPending={isRevokingAll}
+            />
+        </>
     )
 }
 

@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { X, Link2, Check, Loader2, Copy, ExternalLink, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useApi } from '@/hooks/useApi'
+import { sharedLinkUrl, useSharedLinks } from '@/hooks/useSharedLinks'
 
 const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
@@ -15,16 +17,7 @@ interface ShareThreadDialogProps {
     title: string
 }
 
-interface SharedLink {
-    share_id: string
-    title: string | null
-    n_messages: number
-    created_at: string
-}
-
 type Phase = 'form' | 'creating' | 'done'
-
-const linkFor = (shareId: string) => `${window.location.origin}/s/${shareId}`
 
 async function errorDetail(res: Response, fallback: string): Promise<string> {
     try {
@@ -42,29 +35,21 @@ async function errorDetail(res: Response, fallback: string): Promise<string> {
  * person pressing the button is the only one who can decide that.
  */
 export function ShareThreadDialog({ isOpen, onClose, threadId, title }: ShareThreadDialogProps) {
+    const router = useRouter()
     const { fetchWithAuth } = useApi()
     const [phase, setPhase] = useState<Phase>('form')
     const [shareUrl, setShareUrl] = useState<string | null>(null)
     const [copied, setCopied] = useState<string | null>(null)
-    const [links, setLinks] = useState<SharedLink[]>([])
     const [revoking, setRevoking] = useState<string | null>(null)
-
-    const loadLinks = useCallback(async () => {
-        try {
-            const res = await fetchWithAuth(`${BACKEND_URL}/api/shares`)
-            if (res.ok) setLinks((await res.json()).shares ?? [])
-        } catch (e) {
-            console.error('Load shared links failed', e)
-        }
-    }, [fetchWithAuth])
+    // Only this conversation's links; everything else is managed in Settings.
+    const { links, reload: loadLinks, revoke: revokeLink } = useSharedLinks({ threadId, enabled: isOpen })
 
     useEffect(() => {
         if (!isOpen) return
         setPhase('form')
         setShareUrl(null)
         setCopied(null)
-        loadLinks()
-    }, [isOpen, loadLinks])
+    }, [isOpen])
 
     if (!isOpen) return null
 
@@ -86,7 +71,7 @@ export function ShareThreadDialog({ isOpen, onClose, threadId, title }: ShareThr
                 return
             }
             const { share_id } = await res.json()
-            const url = linkFor(share_id)
+            const url = sharedLinkUrl(share_id)
             setShareUrl(url)
             // Best-effort and not awaited: the clipboard API can stall (a pending
             // permission prompt, an unfocused window), and the link must show
@@ -104,23 +89,17 @@ export function ShareThreadDialog({ isOpen, onClose, threadId, title }: ShareThr
 
     const revoke = async (shareId: string) => {
         setRevoking(shareId)
-        try {
-            const res = await fetchWithAuth(`${BACKEND_URL}/api/shares/${shareId}`, { method: 'DELETE' })
-            if (!res.ok) {
-                toast.error(await errorDetail(res, 'Couldn’t revoke that link'))
-                return
-            }
-            setLinks((prev) => prev.filter((l) => l.share_id !== shareId))
-            if (shareUrl && shareUrl.endsWith(`/${shareId}`)) {
-                setShareUrl(null)
-                setPhase('form')
-            }
-            toast.success('Link revoked')
-        } catch {
-            toast.error('Couldn’t revoke that link')
-        } finally {
-            setRevoking(null)
+        const error = await revokeLink(shareId)
+        setRevoking(null)
+        if (error) {
+            toast.error(error)
+            return
         }
+        if (shareUrl && shareUrl.endsWith(`/${shareId}`)) {
+            setShareUrl(null)
+            setPhase('form')
+        }
+        toast.success('Link revoked — it no longer opens')
     }
 
     return (
@@ -180,7 +159,7 @@ export function ShareThreadDialog({ isOpen, onClose, threadId, title }: ShareThr
                                 <li>Your saved memory and your location are removed.</li>
                                 <li>
                                     It’s a snapshot of right now. Later messages aren’t included, and deleting this conversation
-                                    <span className="text-foreground"> doesn’t remove the link</span> — you can revoke links from this dialog.
+                                    <span className="text-foreground"> doesn’t remove the link</span> — revoke it here.
                                 </li>
                                 <li>Anyone who continues it gets their own private copy. Yours stays as it is.</li>
                             </ul>
@@ -196,10 +175,10 @@ export function ShareThreadDialog({ isOpen, onClose, threadId, title }: ShareThr
 
                     {links.length > 0 && (
                         <div className="space-y-2 border-t border-border pt-4">
-                            <span className="block text-[12px] font-medium text-muted-foreground">Your shared links</span>
+                            <span className="block text-[12px] font-medium text-muted-foreground">Links to this conversation</span>
                             <ul className="space-y-1.5">
                                 {links.map((l) => {
-                                    const url = linkFor(l.share_id)
+                                    const url = sharedLinkUrl(l.share_id)
                                     return (
                                         <li key={l.share_id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-secondary/20 px-3 py-2">
                                             <div className="min-w-0 flex-1">
@@ -231,6 +210,17 @@ export function ShareThreadDialog({ isOpen, onClose, threadId, title }: ShareThr
                             </ul>
                         </div>
                     )}
+
+                    <p className="border-t border-border pt-3 text-[11.5px] leading-snug text-muted-foreground">
+                        Every link you’ve shared, across all conversations, is in{' '}
+                        <button
+                            onClick={() => { onClose(); router.push('/settings/chat-history') }}
+                            className="text-foreground underline underline-offset-2 hover:text-[var(--teal)]"
+                        >
+                            Settings → Chat history
+                        </button>
+                        .
+                    </p>
                 </div>
             </div>
         </div>

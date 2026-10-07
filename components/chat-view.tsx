@@ -21,7 +21,9 @@ import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
+import { PublishDialog } from '@/components/publish-dialog'
 import { ShareThreadDialog } from '@/components/share-thread-dialog'
+import { ThreadActions } from '@/components/thread-actions'
 import { StreamingText } from '@/components/streaming-text'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getAiRequestErrorMessage, getLocalISOString, handleUsageLimitResponse, parseThreadLockedResponse } from '@/lib/utils'
@@ -866,6 +868,9 @@ export function ChatView({
   const [panelFullscreen, setPanelFullscreen] = useState(false)
   
   const [shareDropdownOpen, setShareDropdownOpen] = useState<string | null>(null)
+  // The report whose "Publish to Pages" dialog is open. Lives here rather than in
+  // the report card's Share dropdown, which unmounts the moment it closes.
+  const [publishReport, setPublishReport] = useState<ReportArtifact | null>(null)
   const [shareCopied, setShareCopied] = useState<string | null>(null)
 
   // "Check source" takes the sources rail over rather than opening a panel of
@@ -1074,7 +1079,7 @@ export function ChatView({
                       {shareCopied === r.id ? 'Copied!' : 'Copy full text'}
                     </button>
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                    <ShareToPagesMenu title={r.title || 'report'} content={r.content || ''} sources={r.sources} onOpenDialog={() => setShareDropdownOpen(null)} />
+                    <ShareToPagesMenu onSelect={() => { setShareDropdownOpen(null); setPublishReport(r) }} />
                     <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                     <button
                       onClick={() => {
@@ -2763,6 +2768,29 @@ export function ChatView({
         {!readOnly && !isVoiceThread && (
           <ShareThreadDialog isOpen={shareOpen} onClose={() => setShareOpen(false)} threadId={threadId} title={title} />
         )}
+        {/* Share + the three-dot menu (rename, sharing, delete). On mobile the
+            new-thread button already holds the top-right corner, so these sit
+            just inside it. Not shown on a shared page someone else is reading,
+            or before the thread has anything in it. */}
+        {!readOnly && messages.length > 0 && (
+          <ThreadActions
+            threadId={threadId}
+            title={title}
+            canShare={!isLocked && !isVoiceThread}
+            generating={isLoading}
+            onShare={() => setShareOpen(true)}
+            onRenamed={setTitle}
+            onDeleted={onNewSearch}
+            className={isMobile ? 'fixed right-14 top-3 z-40' : 'absolute right-4 top-3 z-30'}
+          />
+        )}
+        <PublishDialog
+          isOpen={!!publishReport}
+          onClose={() => setPublishReport(null)}
+          title={publishReport?.title || 'report'}
+          content={publishReport?.content || ''}
+          sources={publishReport?.sources}
+        />
         {/* Mobile header — no bar, same as the search-home hero: nothing here
             needs a title anymore, so two buttons float over the thread
             instead of a full-width row. */}

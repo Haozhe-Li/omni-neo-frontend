@@ -7,6 +7,7 @@ import { useAuth, useClerk } from '@clerk/nextjs'
 import dynamic from 'next/dynamic'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
+import { PublishDialog } from '@/components/publish-dialog'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { SourcesRail } from '@/components/source-rail'
 import { useEdgeFade } from '@/hooks/useEdgeFade'
@@ -121,6 +122,8 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   const [linkCopied, setLinkCopied] = useState(false)
   const [quickSharing, setQuickSharing] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  // Owned here, not by the Share dropdown, which unmounts when it closes.
+  const [publishOpen, setPublishOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [isPdfLoading, setIsPdfLoading] = useState(false)
@@ -530,6 +533,15 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
         drawer of their own. A second surface sliding out of a surface that
         is already a slide-over was two sets of chrome for one question. */
     <div className="relative flex h-full w-full flex-col border-l border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[-30px_0_60px_-40px_color-mix(in_srgb,var(--ink)_45%,transparent)]">
+      {active.kind === 'report' && (
+        <PublishDialog
+          isOpen={publishOpen}
+          onClose={() => setPublishOpen(false)}
+          title={active.report?.title || 'report'}
+          content={active.report?.content || ''}
+          sources={active.report?.sources}
+        />
+      )}
       {/* Header */}
       <div className="relative z-20 flex h-[52px] shrink-0 items-center gap-3 border-b border-[var(--line-hair)] px-5">
         {/* Title — takes all remaining space, truncates */}
@@ -607,7 +619,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                   </span>
                 </button>
                 <div className="my-1 h-px bg-[var(--border-subtle)]/50" />
-                <ShareToPagesMenu title={active.report?.title || 'report'} content={active.report?.content || ''} sources={active.report?.sources} onOpenDialog={() => setShareOpen(false)} />
+                <ShareToPagesMenu onSelect={() => { setShareOpen(false); setPublishOpen(true) }} />
               </div>
             )}
           </div>

@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 import { MarkdownBlogView } from '@/components/markdown-blog-view'
 import { SourcesRail } from '@/components/source-rail'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
+import { PublishDialog } from '@/components/publish-dialog'
 import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
@@ -44,6 +45,8 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
   const router = useRouter()
   const [viewMode, setViewMode] = useState<'view' | 'code'>('view')
   const [shareOpen, setShareOpen] = useState(false)
+  // Owned here, not by the Share dropdown, which unmounts when it closes.
+  const [publishOpen, setPublishOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isPdfLoading, setIsPdfLoading] = useState(false)
   // Narrow-width only: which of Report/Sources is showing. Ignored once the
@@ -145,6 +148,14 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
 
   return (
     <div className="relative flex h-full w-full overflow-hidden bg-[var(--background)]">
+      <PublishDialog
+        isOpen={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        title={title}
+        content={markdown}
+        sources={sources}
+        idSeed={`schedule:${runId}`}
+      />
       <div className="flex flex-col h-full min-w-0 flex-1 relative">
         {/* Toolbar */}
         <div className="flex items-center h-14 px-4 border-b border-[var(--border-subtle)] bg-[var(--background)] shrink-0 z-20 relative gap-3">
@@ -205,7 +216,7 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
                     {copied ? 'Copied!' : 'Copy full text'}
                   </button>
                   <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
-                  <ShareToPagesMenu title={title} content={markdown} sources={sources} idSeed={`schedule:${runId}`} onOpenDialog={() => setShareOpen(false)} />
+                  <ShareToPagesMenu onSelect={() => { setShareOpen(false); setPublishOpen(true) }} />
                   <div className="h-px bg-[var(--border-subtle)]/50 my-1 mx-2" />
                   <button
                     onClick={() => { setShareOpen(false); handleDownload('markdown') }}

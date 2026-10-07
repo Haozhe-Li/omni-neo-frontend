@@ -426,6 +426,26 @@ export function AppSidebar({
         setThreadToDelete(threadId)
     }
 
+    // A thread deleted from its own header menu (components/thread-actions.tsx):
+    // the sidebar did not make that request, so it has to be told.
+    useEffect(() => {
+        const onDeleted = (e: Event) => {
+            const { threadId } = (e as CustomEvent<{ threadId: string }>).detail
+            removeThreadLocalCache(threadId)
+            setHistory(prev => prev.filter(item => item.thread_id !== threadId))
+            setSearchResults(prev => prev ? prev.filter(item => item.thread_id !== threadId) : prev)
+            setOptimisticThreads(prev => {
+                if (!prev.has(threadId)) return prev
+                const next = new Map(prev)
+                next.delete(threadId)
+                return next
+            })
+            syncFromBackend()
+        }
+        window.addEventListener('omni:thread:deleted', onDeleted)
+        return () => window.removeEventListener('omni:thread:deleted', onDeleted)
+    }, [removeThreadLocalCache, syncFromBackend])
+
     const handleDeleteConfirm = async () => {
         if (!threadToDelete) return
         setIsDeleting(true)
