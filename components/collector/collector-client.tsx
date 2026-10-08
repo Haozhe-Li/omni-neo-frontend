@@ -6,6 +6,8 @@ import { toast } from 'sonner'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { AnswerEditor } from '@/components/collector/answer-editor'
 import { FieldsPanel } from '@/components/collector/fields-panel'
+import { QueryPicker } from '@/components/collector/query-picker'
+import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
 import {
   ApiError,
   COLLECTOR_MODELS,
@@ -30,6 +32,7 @@ import {
   randomLanguage,
   randomMemory,
   randomPlace,
+  randomSkill,
   offsetOfIso,
   shuffleFields,
   validateFields,
@@ -37,7 +40,10 @@ import {
   type FieldKey,
   type TimeRange,
 } from '@/lib/collector/fields'
-import type { Source } from '@/lib/types'
+import { parseQuestion } from '@/lib/question-parser'
+import type { PreparedQuery } from '@/lib/collector/queries'
+import { NO_FILTER, draw, findByText, skillFor, type QueryFilter } from '@/lib/collector/query-pool'
+import type { QuestionBlock as QuestionBlockType, Source } from '@/lib/types'
 
 type Phase = 'compose' | 'generating' | 'review' | 'failed'
 
@@ -68,6 +74,43 @@ function mergeSources(prev: Source[], next: Source[]): Source[] {
   return [...prev, ...next.filter((s) => !seen.has(s.url || `n:${s.n}`))]
 }
 
+const USED_KEY = 'omni_collector_used_queries'
+
+function loadUsed(): Set<string> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(USED_KEY) ?? '[]')
+    return new Set(Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+/** A turn's answer split the way the chat splits it: prose, and the question form if there is one. */
+function AnswerWithQuestion({ answer, sources, replyTo, onReply }: {
+  answer: string
+  sources: Source[]
+  /** The reply that was sent, when this question has been answered. */
+  replyTo?: string
+  /** Given: the form is live and calls this with the formatted reply. */
+  onReply?: (formatted: string) => void
+}) {
+  const parsed = useMemo(() => parseQuestion(answer), [answer])
+  return (
+    <div className="space-y-3">
+      {parsed.text.trim() && <MarkdownMessage content={parsed.text} sources={sources} />}
+      {parsed.question && (
+        <QuestionBlock
+          key={JSON.stringify(parsed.question)}
+          question={parsed.question as QuestionBlockType}
+          onSubmit={(a) => onReply?.(a)}
+          answered={replyTo !== undefined}
+          answeredText={replyTo}
+        />
+      )}
+    </div>
+  )
+}
+
 export function CollectorClient({ annotator }: { annotator: string }) {
   // ── the inputs ───────────────────────────────────────────────────────────
   const [fields, setFields] = useState<CollectorFields>(() => defaultFields())
@@ -75,6 +118,11 @@ export function CollectorClient({ annotator }: { annotator: string }) {
   const [range, setRange] = useState<TimeRange>('near')
   const [model, setModel] = useState<CollectorModel>('best')
   const [query, setQuery] = useState('')
+  const [queryFilter, setQueryFilter] = useState<QueryFilter>(NO_FILTER)
+  const [usedIds, setUsedIds] = useState<Set<string>>(new Set())
+  const [drawn, setDrawn] = useState<PreparedQuery | null>(null)
+  const [turnIsReply, setTurnIsReply] = useState(false)
+  const [replyNonce, setReplyNonce] = useState(0)
 
   // ── the conversation ─────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>('compose')
@@ -95,6 +143,8 @@ export function CollectorClient({ annotator }: { annotator: string }) {
   const threadRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   threadRef.current = threadId
+
+  useEffect(() => { setUsedIds(loadUsed()) }, [])
 
   const memoryAllowed = turns.length === 0
   const inputsOpen = phase === 'compose'
@@ -134,6 +184,8 @@ export function CollectorClient({ annotator }: { annotator: string }) {
           return { ...f, language: randomLanguage() }
         case 'memory':
           return { ...f, memory: randomMemory() }
+        case 'skill':
+          return { ...f, skill: randomSkill() }
       }
     })
   }, [locked.datetime, range])
@@ -209,11 +261,32 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     await settle(id, out.error)
   }, [applyEvent, settle])
 
-  const runTurn = useCallback(async (opts: { fresh?: boolean; queryOverride?: string } = {}) => {
+  const runTurn = useCallback(async (opts: {
+    fresh?: boolean
+    queryOverride?: string
+    /** For callers that have just changed the inputs and are running before React re-renders. */
+    fieldsOverride?: CollectorFields
+    firstTurn?: boolean
+    /** This turn's query is the formatted answer to a <question> form. */
+    reply?: boolean
+  } = {}) => {
     const q = (opts.queryOverride ?? query).trim()
     if (!q) return setError('Write a query first.')
-    if (errors.length) return
+    const f = opts.fieldsOverride ?? fields
+    const first = opts.firstTurn ?? memoryAllowed
+    const problems = opts.fieldsOverride ? validateFields({ ...f, memory: first ? f.memory : '' }) : errors
+    if (problems.length) return setError(problems[0])
     setError(null)
+    setTurnIsReply(!!opts.reply)
+    // A prepared query that actually gets run is spent: random draws skip it from now on.
+    const prepared = findByText(q)
+    if (prepared) {
+      setUsedIds((u) => {
+        const next = new Set(u).add(prepared.id)
+        try { localStorage.setItem(USED_KEY, JSON.stringify([...next])) } catch {}
+        return next
+      })
+    }
     setSubmitted(null)
     const ctl = new AbortController()
     abortRef.current = ctl
@@ -228,7 +301,7 @@ export function CollectorClient({ annotator }: { annotator: string }) {
       setLive(EMPTY_LIVE)
       setPhase('generating')
       const res = await openGenerate(
-        toGenerateBody({ query: q, threadId: id, fields, model, includeMemory: memoryAllowed }),
+        toGenerateBody({ query: q, threadId: id, fields: f, model, includeMemory: first }),
         ctl.signal,
       )
       await consume(res, id, ctl)
@@ -239,6 +312,7 @@ export function CollectorClient({ annotator }: { annotator: string }) {
       setPhase(e instanceof ApiError && e.status < 500 ? 'compose' : 'failed')
     }
   }, [query, errors, fields, model, memoryAllowed, consume])
+
 
   const stop = async () => {
     if (!threadId) return
@@ -256,6 +330,7 @@ export function CollectorClient({ annotator }: { annotator: string }) {
   const resetConversation = () => {
     setTurns([]); setPhase('compose'); setLive(EMPTY_LIVE); setSources([]); setOriginal(''); setSaved('')
     setDraft(''); setNote(''); setSubmitted(null); setError(null); setQuery(''); setTurnQuery(''); setTurnNumber(0)
+    setTurnIsReply(false); setDrawn(null)
   }
 
   const newConversation = async () => {
@@ -296,20 +371,70 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     }
   }
 
-  const continueConversation = async () => {
+  /** Save this turn's edit and move to the next one. With `nextQuery` (a reply to the
+   *  question form) the next turn is started straight away, as the chat does. */
+  const continueConversation = async (opts: { nextQuery?: string } = {}) => {
     if (!threadId) return
     setBusy('continue')
     setError(null)
     try {
       await flushEdit(threadId)
+      const nextFields = locked.datetime ? fields : { ...fields, datetime: advanceDatetime(fields.datetime) }
       setTurns((t) => [...t, { turn: turnNumber, query: turnQuery, fields, answer: draft, edited: draft !== original }])
-      setFields((f) => (locked.datetime ? f : { ...f, datetime: advanceDatetime(f.datetime) }))
-      setQuery(''); setNote(''); setLive(EMPTY_LIVE); setPhase('compose')
+      setFields(nextFields)
+      setNote(''); setLive(EMPTY_LIVE); setPhase('compose')
+      if (opts.nextQuery !== undefined) {
+        setBusy(null)
+        await runTurn({ queryOverride: opts.nextQuery, fieldsOverride: nextFields, firstTurn: false, reply: true })
+      } else {
+        setQuery('')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the edit.')
+      setReplyNonce((n) => n + 1) // a form that thinks it was answered must be answerable again
     } finally {
       setBusy(null)
     }
+  }
+
+  /** The form's reply. In review the edit is saved first; in compose (the annotator skipped
+   *  ahead) the turn is already filed and the reply is simply the next query. */
+  const replyToQuestion = (formatted: string) => {
+    if (phase === 'review') void continueConversation({ nextQuery: formatted })
+    else if (phase === 'compose') void runTurn({ queryOverride: formatted, reply: true })
+  }
+
+  // ── choosing a prepared query ────────────────────────────────────────────
+  const pickQuery = useCallback((q: PreparedQuery) => {
+    setQuery(q.text)
+    setDrawn(q)
+    setFields((f) => (locked.skill ? f : { ...f, skill: skillFor(q) || f.skill }))
+  }, [locked.skill])
+
+  const randomQuery = useCallback((): PreparedQuery | null => {
+    const q = draw(queryFilter, usedIds)
+    if (!q) {
+      setError('Every prepared query matching this filter has been used. Reset the used list or change the filter.')
+      return null
+    }
+    setError(null)
+    pickQuery(q)
+    return q
+  }, [queryFilter, usedIds, pickQuery])
+
+  const randomEverything = () => {
+    const q = randomQuery()
+    if (!q) return
+    // shuffle the context too; the drawn query's own skill (if its design had one) wins over a random one
+    setFields((f) => {
+      const next = shuffleFields(f, locked, { range, memoryAllowed }, Math.random)
+      return locked.skill ? next : { ...next, skill: skillFor(q) || next.skill }
+    })
+  }
+
+  const resetUsed = () => {
+    setUsedIds(new Set())
+    try { localStorage.removeItem(USED_KEY) } catch {}
   }
 
   const submit = async () => {
@@ -378,8 +503,13 @@ export function CollectorClient({ annotator }: { annotator: string }) {
         </aside>
 
         <section className="min-w-0 space-y-8">
-          {turns.map((t) => (
-            <details key={t.turn} className="group rounded-xl border border-[var(--line)] bg-[var(--paper-raised)]">
+          {turns.map((t, idx) => {
+            // The reply to this turn's question form is the next turn's query — already
+            // run (it is in `turns`), or running / reviewed now (`turnQuery`), or not given yet.
+            const nextQuery = turns[idx + 1]?.query ?? (phase !== 'compose' ? turnQuery : undefined)
+            const awaitingReply = idx === turns.length - 1 && phase === 'compose'
+            return (
+            <details key={t.turn} open={awaitingReply && !!parseQuestion(t.answer).question} className="group rounded-xl border border-[var(--line)] bg-[var(--paper-raised)]">
               <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
                 <ChevronDown size={15} className="shrink-0 text-[var(--ink-faint)] transition-transform group-open:rotate-180" />
                 <span className="truncate text-[14px] text-[var(--ink)]">{t.query}</span>
@@ -388,25 +518,38 @@ export function CollectorClient({ annotator }: { annotator: string }) {
               </summary>
               <div className="space-y-3 border-t border-[var(--line)] px-4 py-4">
                 <p className="font-[family-name:var(--font-plex-mono)] text-[11.5px] text-[var(--ink-muted)]">
-                  {t.fields.datetime}{t.fields.location ? ` · ${t.fields.location}` : ''} · {t.fields.language || 'auto'}
+                  {t.fields.datetime}{t.fields.location ? ` · ${t.fields.location}` : ''} · {t.fields.language || 'auto'}{t.fields.skill ? ` · skill: ${t.fields.skill}` : ''}
                 </p>
-                <MarkdownMessage content={t.answer} sources={sources} />
+                <AnswerWithQuestion
+                  answer={t.answer}
+                  sources={sources}
+                  replyTo={awaitingReply ? undefined : nextQuery}
+                  onReply={awaitingReply ? replyToQuestion : undefined}
+                />
               </div>
             </details>
-          ))}
+            )
+          })}
 
           {phase !== 'compose' && (
             <div className="space-y-1">
-              <p className="omni-eyebrow">Query</p>
-              <p className="whitespace-pre-wrap font-[family-name:var(--font-instrument)] text-[26px] leading-tight text-[var(--ink)]">{turnQuery}</p>
+              <p className="omni-eyebrow">{turnIsReply ? 'Reply to the question' : 'Query'}</p>
+              <p className={`whitespace-pre-wrap text-[var(--ink)] ${turnIsReply ? 'text-[15px] leading-relaxed' : 'font-[family-name:var(--font-instrument)] text-[26px] leading-tight'}`}>{turnQuery}</p>
             </div>
           )}
 
           {phase === 'compose' && (
             <div className="space-y-3">
               <label className="omni-eyebrow">{turns.length ? `Follow-up (turn ${turns.length * 2 + 1})` : 'Query'}</label>
+              {turns.length === 0 && (
+                <QueryPicker
+                  filter={queryFilter} onFilter={setQueryFilter} used={usedIds}
+                  onRandom={randomQuery} onRandomAll={randomEverything} onPick={pickQuery} onResetUsed={resetUsed}
+                  drawn={drawn}
+                />
+              )}
               <textarea
-                value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onComposerKey}
+                value={query} onChange={(e) => { setQuery(e.target.value); if (drawn && e.target.value.trim() !== drawn.text) setDrawn(null) }} onKeyDown={onComposerKey}
                 placeholder={turns.length ? 'Ask the follow-up…' : 'Ask anything…'}
                 rows={4}
                 className="w-full resize-y rounded-xl border border-[var(--line-strong)] bg-[var(--paper-raised)] p-4 text-[15px] leading-relaxed text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--teal)]"
@@ -439,7 +582,17 @@ export function CollectorClient({ annotator }: { annotator: string }) {
                   ))}
                 </ul>
               )}
-              {live.text && <MarkdownMessage content={live.text} sources={sources} hideCitations />}
+              {(() => {
+                // The chat draws a <question> block as a form, never as text; while it is
+                // still streaming in, a skeleton stands where the form will be.
+                const p = parseQuestion(live.text)
+                return (
+                  <>
+                    {p.text.trim() && <MarkdownMessage content={p.text} sources={sources} hideCitations />}
+                    {p.questionPending && <QuestionSkeleton />}
+                  </>
+                )
+              })()}
             </div>
           )}
 
@@ -460,6 +613,24 @@ export function CollectorClient({ annotator }: { annotator: string }) {
 
               <AnswerEditor value={draft} original={original} saved={saved} onChange={setDraft} sources={sources} disabled={busy !== null} />
 
+              {(() => {
+                const q = parseQuestion(draft).question
+                if (!q) return null
+                return (
+                  <div className="space-y-1.5">
+                    <p className="omni-eyebrow">The agent asked a question — reply here to continue</p>
+                    <QuestionBlock
+                      key={`${replyNonce}:${JSON.stringify(q)}`}
+                      question={q as QuestionBlockType}
+                      onSubmit={replyToQuestion}
+                    />
+                    <p className="text-[12px] text-[var(--ink-faint)]">
+                      Your reply is sent as the next turn exactly as the chat sends it, after saving any edit above.
+                    </p>
+                  </div>
+                )
+              })()}
+
               {sources.length > 0 && (
                 <details className="rounded-lg border border-[var(--line)] px-3 py-2">
                   <summary className="cursor-pointer text-[12.5px] text-[var(--ink-soft)]">{sources.length} source{sources.length > 1 ? 's' : ''} — check the [n] markers against these</summary>
@@ -477,7 +648,7 @@ export function CollectorClient({ annotator }: { annotator: string }) {
               <div className="flex flex-wrap items-center gap-3">
                 <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} placeholder="Note (optional)"
                   className="min-w-[180px] flex-1 rounded-lg border border-[var(--line-strong)] bg-[var(--paper-raised)] px-3 py-2 text-[13px] text-[var(--ink)] outline-none focus:border-[var(--teal)]" />
-                <button onClick={continueConversation} disabled={busy !== null}
+                <button onClick={() => continueConversation()} disabled={busy !== null}
                   className="inline-flex items-center gap-2 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-4 py-2.5 text-[13.5px] text-[var(--ink)] hover:bg-[var(--sand)] disabled:opacity-50">
                   {busy === 'continue' && <Loader2 size={14} className="animate-spin" />} Next turn
                 </button>

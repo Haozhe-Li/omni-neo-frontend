@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { Bold, Code, Heading2, Italic, Link2, List, ListOrdered, Quote, RotateCcw } from 'lucide-react'
 import { MarkdownMessage } from '@/components/markdown-message'
+import { parseQuestion } from '@/lib/question-parser'
 import type { Source } from '@/lib/types'
 
 type Wrap = { before: string; after: string; placeholder: string }
@@ -81,6 +82,10 @@ export function AnswerEditor({
     }
   }
 
+  // The chat never prints a `<question>` block as markdown: it takes it out of the text
+  // and draws it as a form. The preview does the same (the form itself is shown below
+  // the editor, where the reply is made), so what is previewed is what a user would read.
+  const parsed = parseQuestion(value)
   const modified = value !== original
   const unsaved = value !== saved
 
@@ -125,9 +130,10 @@ export function AnswerEditor({
           aria-label="Answer markdown"
         />
         <div className="max-h-[70vh] min-h-[360px] overflow-y-auto p-4">
-          {value.trim()
-            ? <MarkdownMessage content={value} sources={sources} />
-            : <p className="text-[13px] text-[var(--ink-faint)]">Nothing to preview.</p>}
+          {parsed.text.trim()
+            ? <MarkdownMessage content={parsed.text} sources={sources} />
+            : <p className="text-[13px] text-[var(--ink-faint)]">{parsed.question ? 'Only a question block — see the form below.' : 'Nothing to preview.'}</p>}
+          {parsed.question && <p className="mt-3 text-[12px] text-[var(--ink-faint)]">+ a question block (form below the editor)</p>}
         </div>
       </div>
     </div>

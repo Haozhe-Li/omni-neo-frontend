@@ -6,6 +6,7 @@ import {
   MAX_MEMORY_CHARS,
   MEMORY_SAMPLES,
   PLACES,
+  SKILLS,
   TIME_RANGES,
   formatLocation,
   isoAtOffset,
@@ -177,6 +178,13 @@ export function FieldsPanel(p: FieldsPanelProps) {
       <Row label="Answer language" field="language" locked={!!p.locked.language} onLock={p.onToggleLock} onShuffle={p.onShuffleField}>
         <select className={INPUT} value={fields.language} onChange={(e) => onChange({ language: e.target.value as CollectorFields['language'] })}>
           {LANGUAGES.map((l) => <option key={l.value || 'auto'} value={l.value}>{l.label}</option>)}
+        </select>
+      </Row>
+
+      <Row label="Skill" field="skill" locked={!!p.locked.skill} onLock={p.onToggleLock} onShuffle={p.onShuffleField}
+        hint="The skill switched on in the chat's picker for this turn. It stays on until you clear it, as in the product.">
+        <select className={INPUT} value={fields.skill} onChange={(e) => onChange({ skill: e.target.value as CollectorFields['skill'] })}>
+          {SKILLS.map((k) => <option key={k.value || 'none'} value={k.value}>{k.label}</option>)}
         </select>
       </Row>
 

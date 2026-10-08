@@ -13,11 +13,24 @@
  *   language   components/settings-dialog.tsx:    en | zh-CN | zh-TW | ja | ko
  *                                                 ("Auto-detect" is *omitted*)
  *   memory     core/memories_update_llm.py:       markdown sections, <= 3000 chars
+ *   skill      components/chat-view.tsx SKILLS:   deep-research | trip-advisor | guided-learning
+ *                                                 (or none; the picker's wire ids, not the
+ *                                                 on-disk names — the backend resolves them)
  *
  * No imports on purpose, so the pools can be exercised outside the app.
  */
 
 export type Language = 'en' | 'zh-CN' | 'zh-TW' | 'ja' | 'ko'
+
+/** The skills a user can switch on in the chat (its `SKILLS` picker). The agent can
+ *  load others by itself, but those are never *requested*, so they are not offered. */
+export type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
+export const SKILLS: { value: SkillId | ''; label: string }[] = [
+  { value: '', label: 'None' },
+  { value: 'deep-research', label: 'Deep Research' },
+  { value: 'trip-advisor', label: 'Trip Advisor' },
+  { value: 'guided-learning', label: 'Guided Learning' },
+]
 
 export interface CollectorFields {
   /** getLocalISOString() format. Always sent. */
@@ -28,6 +41,8 @@ export interface CollectorFields {
   language: Language | ''
   /** Free text for the first turn only; '' = no memory block. */
   memory: string
+  /** The skill switched on for this turn; '' = none (field omitted). */
+  skill: SkillId | ''
 }
 
 export type FieldKey = keyof CollectorFields
@@ -58,6 +73,7 @@ export function validateFields(f: CollectorFields, opts: { memoryAllowed: boolea
   if (f.location && !LOCATION_RE.test(f.location)) {
     errors.push('Location must end in "(IP Approximate)" or "(GPS Precise Location)", e.g. "Tokyo, Japan (IP Approximate)".')
   }
+  if (f.skill && !SKILLS.some((k) => k.value === f.skill)) errors.push('Unknown skill.')
   if (f.memory.trim().length > MAX_MEMORY_CHARS) errors.push(`Memory is over ${MAX_MEMORY_CHARS} characters.`)
   if (!opts.memoryAllowed && f.memory.trim()) errors.push('Memory can only be set on the first turn.')
   return errors
@@ -224,6 +240,17 @@ export function randomDatetime(
   return isoAtOffset(ms, tz ? zoneOffsetMinutes(tz, ms) : opts.fallbackOffset)
 }
 
+// ── skill ───────────────────────────────────────────────────────────────────
+
+/** Most turns in production have no skill on; of the ones that do, deep research is
+ *  the most used. */
+export function randomSkill(rng: Rng = Math.random): SkillId | '' {
+  return weighted<SkillId | ''>(
+    [['', 70], ['deep-research', 14], ['guided-learning', 8], ['trip-advisor', 8]],
+    rng,
+  )
+}
+
 // ── memory ──────────────────────────────────────────────────────────────────
 
 // Written in the shape the memory curator produces (core/memories_update_llm.py):
@@ -363,6 +390,7 @@ export function shuffleFields(
   if (!locked.location) next.location = randomPlace(rng).location
   if (!locked.language) next.language = randomLanguage(rng)
   if (!locked.memory && opts.memoryAllowed) next.memory = randomMemory(rng)
+  if (!locked.skill) next.skill = randomSkill(rng)
   if (!locked.datetime) {
     next.datetime = randomDatetime(
       { location: next.location, fallbackOffset: offsetOfIso(current.datetime) ?? 0, range: opts.range },
@@ -376,5 +404,5 @@ export function shuffleFields(
 /** What the page starts with: "now", here, auto language, no memory. */
 export function defaultFields(now: number = Date.now()): CollectorFields {
   const offset = -new Date(now).getTimezoneOffset()
-  return { datetime: isoAtOffset(now, offset), location: '', language: '', memory: '' }
+  return { datetime: isoAtOffset(now, offset), location: '', language: '', memory: '', skill: '' }
 }
