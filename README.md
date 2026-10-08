@@ -82,6 +82,15 @@ lock), generate with the real agent over as many turns as you like, edit the ans
 the markdown editor, and submit it as a training example. It is not linked from the
 product and is disallowed in `robots.ts`.
 
+- **Prepared queries**: the 180 queries of the backend's `finetune/pro_agent/queries.yaml`
+  (`lib/collector/queries.ts`) can be drawn at random ("Random query", or "Random query +
+  context" to shuffle the inputs too), filtered by category / language, or picked by hand.
+  Ones already run are skipped (remembered in the browser).
+- **Skill**: the three skills the chat's picker offers (Deep Research, Trip Advisor, Guided
+  Learning), sent as the picker sends them. Like in the product it stays on until cleared.
+- **Ask-question**: a `<question>` block in an answer is drawn as the chat's own form
+  (`QuestionBlock`); submitting it sends the formatted reply as the next turn.
+
 Server-side env:
 
 ```

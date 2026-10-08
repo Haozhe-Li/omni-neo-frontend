@@ -53,6 +53,8 @@ export interface GenerateBody {
   thread_id: string
   personalization: { user_local_datetime: string; user_location?: string; response_language?: string }
   model: CollectorModel
+  /** The picker's id, sent only while a skill is on — as chat-view does. */
+  skill?: string
   memory?: string
 }
 
@@ -73,6 +75,7 @@ export function toGenerateBody(args: {
     personalization,
     model: args.model,
   }
+  if (fields.skill) body.skill = fields.skill
   if (args.includeMemory && fields.memory.trim()) body.memory = fields.memory
   return body
 }
@@ -85,7 +88,7 @@ export interface ThreadState {
   complete: boolean
   /** The newest answer exactly as the checkpoint holds it — what a training row ends on. */
   final_text: string | null
-  turns: { turn: number; model: string | null; personalization: Record<string, string>; memory: string | null; edited: boolean }[]
+  turns: { turn: number; model: string | null; personalization: Record<string, string>; memory: string | null; skill: string | null; edited: boolean }[]
 }
 
 export interface SubmitResult {
