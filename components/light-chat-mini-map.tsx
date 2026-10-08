@@ -2,9 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Star } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, AttributionControl, Marker, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+
+// CARTO basemaps require an API key (https://carto.com/basemaps/apikey/); without it
+// every tile is stamped "API KEY REQUIRED". The key is public by design (it ships in
+// the browser), so restrict it to our domains in the CARTO dashboard.
+const CARTO_API_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY ?? ''
+const TILE_URL = `https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${
+  CARTO_API_KEY ? `?key=${encodeURIComponent(CARTO_API_KEY)}` : ''
+}`
+const TILE_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 
 /* ─── types ─── */
 
@@ -119,7 +129,8 @@ export function LightChatMiniMap({ points }: { points: LightChatMapPoint[] }) {
           zoomControl={false}
           attributionControl={false}
         >
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+          <TileLayer url={TILE_URL} attribution={TILE_ATTRIBUTION} />
+          <AttributionControl position="bottomright" prefix={false} />
           <FitBounds points={points} />
           <MapResizeSync />
 
