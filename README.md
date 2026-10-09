@@ -88,6 +88,13 @@ product and is disallowed in `robots.ts`.
   Ones already run are skipped (remembered in the browser).
 - **Skill**: the three skills the chat's picker offers (Deep Research, Trip Advisor, Guided
   Learning), sent as the picker sends them. Like in the product it stays on until cleared.
+- **Files, images and pinned URLs**: "Attach file or image" (or drop / paste into the box), up to
+  5 per message, 20 MB each, the same types the chat accepts (`lib/upload-types.ts`); and "Add URL"
+  (up to 5; URLs typed or pasted in the box are picked up as well). They go through the same
+  upload path as a user's attachment and are recorded as the model saw them: images are kept with
+  the example, documents appear in the `read_file` results. As in the chat, a first message with no
+  words gets "Please read this file / source", and a later one may be files only. Needs the backend's
+  `python -m scripts.init_db` after deploy.
 - **Ask-question**: a `<question>` block in an answer is drawn as the chat's own form
   (`QuestionBlock`); submitting it sends the formatted reply as the next turn.
 

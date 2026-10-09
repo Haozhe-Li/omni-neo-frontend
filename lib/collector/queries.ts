@@ -3,15 +3,15 @@
  * `finetune/pro_agent/queries.yaml` (the teacher-collection source of truth), so the
  * collector can draw from the same questions that file was written for.
  *
- * Only `id`, `cat`, `lang`, `text` and `block` are kept. `block` records which extra
+ * Only `id`, `cat`, `lang`, `text`, `block` and (for pinned-URL queries) `source_url` are kept. `block` records which extra
  * input the original design gave the query:
  *   requested_skill      the user picked a skill first       -> the collector pre-selects one
  *   user_memory          a memory block was present          -> use the Memory field
- *   attached_files       a document was uploaded             -> not available in the collector
- *   priority_sources     a URL was pinned                    -> not available in the collector
+ *   attached_files       a document was uploaded             -> attach your own file (the original is not in this repo)
+ *   priority_sources     a URL was pinned                    -> `source_url` below pre-fills the URL list
  *   follow_up_selection  a passage of the last answer was quoted -> not available in the collector
- * The query text stands on its own in every case, so all of them can be drawn; the last
- * three are tagged in the UI so you can leave them out.
+ * The query text stands on its own in every case, so all of them can be drawn; the ones
+ * that needed an attachment or a quote are tagged in the UI so you can leave them out.
  *
  * Regenerate after the yaml changes (yaml -> json.dumps of those five keys, in file order).
  */
@@ -22,6 +22,8 @@ export interface PreparedQuery {
   lang: 'zh' | 'en'
   text: string
   block?: 'requested_skill' | 'user_memory' | 'attached_files' | 'priority_sources' | 'follow_up_selection'
+  /** `priority_sources` only: the URLs the original design pinned for this query. */
+  source_url?: string[]
 }
 
 export const PREPARED_QUERIES: PreparedQuery[] = [
@@ -31,11 +33,11 @@ export const PREPARED_QUERIES: PreparedQuery[] = [
   {"id": "dr-04", "cat": "deep-research", "lang": "en", "text": "Research the state of lab-grown meat: cost curves, regulatory approvals, and who is actually shipping.", "block": "attached_files"},
   {"id": "dr-05", "cat": "deep-research", "lang": "zh", "text": "深入研究一下欧洲碳边境调节机制对中国出口企业的实际影响"},
   {"id": "dr-06", "cat": "deep-research", "lang": "en", "text": "Give me a thorough look at the current state of RISC-V adoption outside of China."},
-  {"id": "dr-07", "cat": "deep-research", "lang": "zh", "text": "研究一下这几年城市轨道交通的建设放缓,原因和后果都讲清楚", "block": "priority_sources"},
+  {"id": "dr-07", "cat": "deep-research", "lang": "zh", "text": "研究一下这几年城市轨道交通的建设放缓,原因和后果都讲清楚", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Rapid_transit"]},
   {"id": "dr-08", "cat": "deep-research", "lang": "en", "text": "Deep research on desalination: which technologies won, what they cost, and where they are deployed."},
   {"id": "dr-09", "cat": "deep-research", "lang": "zh", "text": "系统研究一下抗生素耐药性目前的全球态势和新药管线", "block": "requested_skill"},
   {"id": "dr-10", "cat": "deep-research", "lang": "en", "text": "Investigate how remote sensing is changing crop yield forecasting, with the numbers.", "block": "requested_skill"},
-  {"id": "dr-11", "cat": "deep-research", "lang": "zh", "text": "深度研究一下日本便利店行业的饱和与转型", "block": "priority_sources"},
+  {"id": "dr-11", "cat": "deep-research", "lang": "zh", "text": "深度研究一下日本便利店行业的饱和与转型", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Convenience_store"]},
   {"id": "dr-12", "cat": "deep-research", "lang": "en", "text": "Research the economics of vertical farming — why so many operators went bankrupt."},
   {"id": "dr-13", "cat": "deep-research", "lang": "zh", "text": "帮我研究一下新能源车电池回收产业链现在到底跑通了没有", "block": "user_memory"},
   {"id": "dr-14", "cat": "deep-research", "lang": "en", "text": "Do thorough research on the state of green hydrogen projects announced versus actually built."},
@@ -43,7 +45,7 @@ export const PREPARED_QUERIES: PreparedQuery[] = [
   {"id": "be-01", "cat": "budget-exhausted", "lang": "zh", "text": "全面分析一下全球锂矿供应格局的变化,包括产地、企业、价格和政策"},
   {"id": "be-02", "cat": "budget-exhausted", "lang": "en", "text": "Comprehensively analyze the global semiconductor equipment market: players, chokepoints, export controls, and outlook."},
   {"id": "be-03", "cat": "budget-exhausted", "lang": "zh", "text": "把印度制造业崛起这件事讲透,产业、政策、基础设施、劳动力都要覆盖"},
-  {"id": "be-04", "cat": "budget-exhausted", "lang": "zh", "text": "全面梳理一下红海航运受阻之后全球海运业的格局变化", "block": "priority_sources"},
+  {"id": "be-04", "cat": "budget-exhausted", "lang": "zh", "text": "全面梳理一下红海航运受阻之后全球海运业的格局变化", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Red_Sea"]},
   {"id": "be-05", "cat": "budget-exhausted", "lang": "zh", "text": "全面研究一下老龄化对东亚各国养老金体系的冲击", "block": "user_memory"},
   {"id": "be-06", "cat": "budget-exhausted", "lang": "en", "text": "Thoroughly analyze the rare earth supply chain: mining, refining, substitution, and geopolitics.", "block": "attached_files"},
   {"id": "be-07", "cat": "budget-exhausted", "lang": "zh", "text": "详细分析一下全球粮食贸易格局这几年的重构"},
@@ -51,7 +53,7 @@ export const PREPARED_QUERIES: PreparedQuery[] = [
   {"id": "be-09", "cat": "budget-exhausted", "lang": "zh", "text": "全面梳理一下光伏产业从上游硅料到组件的产能过剩情况"},
   {"id": "be-10", "cat": "budget-exhausted", "lang": "zh", "text": "完整分析一下流媒体时代唱片公司、音乐人和平台之间的分账经济学变化"},
   {"id": "be-11", "cat": "budget-exhausted", "lang": "zh", "text": "把全球水资源短缺问题分区域讲清楚,成因、现状、应对都要"},
-  {"id": "be-12", "cat": "budget-exhausted", "lang": "en", "text": "Comprehensively cover the state of nuclear waste disposal across every country that has a program.", "block": "priority_sources"},
+  {"id": "be-12", "cat": "budget-exhausted", "lang": "en", "text": "Comprehensively cover the state of nuclear waste disposal across every country that has a program.", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Radioactive_waste"]},
   {"id": "be-13", "cat": "budget-exhausted", "lang": "zh", "text": "全面分析一下跨境电商这几年的政策变化和平台格局"},
   {"id": "be-14", "cat": "budget-exhausted", "lang": "en", "text": "Analyze in depth how insurance markets are repricing climate risk across regions and lines of business."},
   {"id": "be-15", "cat": "budget-exhausted", "lang": "zh", "text": "详尽研究一下全球航空业疫情后的恢复情况和结构性变化"},
@@ -61,7 +63,7 @@ export const PREPARED_QUERIES: PreparedQuery[] = [
   {"id": "be-19", "cat": "budget-exhausted", "lang": "zh", "text": "全面研究一下全球高铁网络的建设经济性,各国对比"},
   {"id": "be-20", "cat": "budget-exhausted", "lang": "en", "text": "Cover the entire landscape of carbon capture projects: technology, cost per tonne, and what actually got built."},
   {"id": "sf-01", "cat": "search-fact", "lang": "zh", "text": "现在国内新能源车的购置税优惠政策是怎么规定的?"},
-  {"id": "sf-02", "cat": "search-fact", "lang": "en", "text": "What did the EU AI Act's latest implementation timeline end up being?", "block": "priority_sources"},
+  {"id": "sf-02", "cat": "search-fact", "lang": "en", "text": "What did the EU AI Act's latest implementation timeline end up being?", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Artificial_Intelligence_Act"]},
   {"id": "sf-03", "cat": "search-fact", "lang": "zh", "text": "今年诺贝尔物理学奖颁给了谁,获奖理由是什么?"},
   {"id": "sf-04", "cat": "search-fact", "lang": "en", "text": "How many countries currently have a central bank digital currency in full production?", "block": "user_memory"},
   {"id": "sf-05", "cat": "search-fact", "lang": "zh", "text": "最新一代 HBM 内存的带宽和上一代比提升了多少?"},
@@ -91,7 +93,7 @@ export const PREPARED_QUERIES: PreparedQuery[] = [
   {"id": "ch-02", "cat": "chart", "lang": "en", "text": "Show me how smartphone market share shifted among the top five vendors over the last five years."},
   {"id": "ch-03", "cat": "chart", "lang": "zh", "text": "把主要经济体这几年的通胀率放一起比较一下", "block": "user_memory"},
   {"id": "ch-04", "cat": "chart", "lang": "zh", "text": "对比一下前沿大模型训练成本这些年的变化趋势"},
-  {"id": "ch-05", "cat": "chart", "lang": "zh", "text": "展示一下这几年全球集装箱运价指数的波动", "block": "priority_sources"},
+  {"id": "ch-05", "cat": "chart", "lang": "zh", "text": "展示一下这几年全球集装箱运价指数的波动", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Containerization"]},
   {"id": "ch-06", "cat": "chart", "lang": "en", "text": "Break down where global CO2 emissions come from by sector."},
   {"id": "ch-07", "cat": "chart", "lang": "zh", "text": "对比几个主要城市的房价收入比", "block": "requested_skill"},
   {"id": "ch-08", "cat": "chart", "lang": "en", "text": "Visualize how average US mortgage rates moved over the past three years.", "block": "follow_up_selection"},
@@ -153,12 +155,12 @@ export const PREPARED_QUERIES: PreparedQuery[] = [
   {"id": "pl-06", "cat": "places", "lang": "en", "text": "Any good vegetarian restaurants near the Mission in San Francisco?", "block": "attached_files"},
   {"id": "pl-07", "cat": "places", "lang": "zh", "text": "成都春熙路附近有什么本地人常去的火锅店?"},
   {"id": "pl-08", "cat": "places", "lang": "en", "text": "Recommend a few museums worth visiting in central Berlin."},
-  {"id": "ru-01", "cat": "read-url", "lang": "zh", "text": "读一下这个页面,帮我总结成几个要点:https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)", "block": "priority_sources"},
-  {"id": "ru-02", "cat": "read-url", "lang": "en", "text": "Read this page and summarize it for me: https://en.wikipedia.org/wiki/Photovoltaics", "block": "priority_sources"},
-  {"id": "ru-03", "cat": "read-url", "lang": "zh", "text": "这个页面讲了什么?我主要想知道成本相关的部分:https://en.wikipedia.org/wiki/Desalination", "block": "priority_sources"},
-  {"id": "ru-04", "cat": "read-url", "lang": "en", "text": "Have a look at https://omniknows.xyz/benchmark/llms.txt and tell me what it actually measures.", "block": "priority_sources"},
-  {"id": "ru-05", "cat": "read-url", "lang": "zh", "text": "这两个页面对比着看一下,主要差别在哪:https://en.wikipedia.org/wiki/Lithium-ion_battery 和 https://en.wikipedia.org/wiki/Sodium-ion_battery", "block": "priority_sources"},
-  {"id": "ru-06", "cat": "read-url", "lang": "en", "text": "Summarize this for me and tell me what it leaves out: https://en.wikipedia.org/wiki/Heat_pump", "block": "priority_sources"},
+  {"id": "ru-01", "cat": "read-url", "lang": "zh", "text": "读一下这个页面,帮我总结成几个要点:https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"]},
+  {"id": "ru-02", "cat": "read-url", "lang": "en", "text": "Read this page and summarize it for me: https://en.wikipedia.org/wiki/Photovoltaics", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Photovoltaics"]},
+  {"id": "ru-03", "cat": "read-url", "lang": "zh", "text": "这个页面讲了什么?我主要想知道成本相关的部分:https://en.wikipedia.org/wiki/Desalination", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Desalination"]},
+  {"id": "ru-04", "cat": "read-url", "lang": "en", "text": "Have a look at https://omniknows.xyz/benchmark/llms.txt and tell me what it actually measures.", "block": "priority_sources", "source_url": ["https://omniknows.xyz/benchmark/llms.txt"]},
+  {"id": "ru-05", "cat": "read-url", "lang": "zh", "text": "这两个页面对比着看一下,主要差别在哪:https://en.wikipedia.org/wiki/Lithium-ion_battery 和 https://en.wikipedia.org/wiki/Sodium-ion_battery", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Lithium-ion_battery", "https://en.wikipedia.org/wiki/Sodium-ion_battery"]},
+  {"id": "ru-06", "cat": "read-url", "lang": "en", "text": "Summarize this for me and tell me what it leaves out: https://en.wikipedia.org/wiki/Heat_pump", "block": "priority_sources", "source_url": ["https://en.wikipedia.org/wiki/Heat_pump"]},
   {"id": "cp-01", "cat": "compute", "lang": "zh", "text": "一笔 80 万的房贷,利率 4.1%,30 年等额本息,每月还多少、总利息多少?", "block": "attached_files"},
   {"id": "cp-02", "cat": "compute", "lang": "en", "text": "If I invest $500 a month at 7% annual return for 25 years, what do I end up with?"},
   {"id": "cp-03", "cat": "compute", "lang": "zh", "text": "一个班 25 个人,随机分成 5 组,某两个人分到同一组的概率是多少?"},

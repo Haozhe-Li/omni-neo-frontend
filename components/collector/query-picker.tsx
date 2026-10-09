@@ -11,8 +11,8 @@ const SELECT =
 const BLOCK_NOTE: Record<string, string> = {
   requested_skill: 'a skill was picked first',
   user_memory: 'had a memory block',
-  attached_files: 'needed an attachment',
-  priority_sources: 'needed a pinned URL',
+  attached_files: 'needed an attachment (attach your own)',
+  priority_sources: 'had pinned URLs (pre-filled)',
   follow_up_selection: 'quoted the last answer',
 }
 
@@ -77,9 +77,9 @@ export function QueryPicker({
             </optgroup>
           ))}
         </select>
-        <label className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ink-muted)]" title="Some prepared queries were designed around an attachment, a pinned URL or a quoted passage, which the collector has no field for">
+        <label className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ink-muted)]" title="Some prepared queries were designed around an attached document or a quoted passage of the last answer, which the collector cannot supply">
           <input type="checkbox" checked={filter.skipUnavailable} onChange={(e) => onFilter({ ...filter, skipUnavailable: e.target.checked })} />
-          skip ones that need an attachment / URL / quote
+          skip ones that need an attachment / quote
         </label>
       </div>
 

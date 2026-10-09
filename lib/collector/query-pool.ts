@@ -13,14 +13,15 @@ export interface QueryFilter {
   cat: string
   /** '' = both languages. */
   lang: '' | 'zh' | 'en'
-  /** Leave out queries whose original design needed an input the collector has no field for. */
+  /** Leave out queries whose original design needed an input the collector cannot supply. */
   skipUnavailable: boolean
 }
 
 export const NO_FILTER: QueryFilter = { cat: '', lang: '', skipUnavailable: true }
 
-// attached_files / priority_sources / follow_up_selection: see queries.ts.
-const UNAVAILABLE = new Set(['attached_files', 'priority_sources', 'follow_up_selection'])
+// attached_files needs a document that is not in this repo, and follow_up_selection a quoted
+// passage (no field for it): see queries.ts. priority_sources is supported (its URLs pre-fill).
+const UNAVAILABLE = new Set(['attached_files', 'follow_up_selection'])
 
 export function matches(q: PreparedQuery, f: QueryFilter): boolean {
   if (f.cat && q.cat !== f.cat) return false
