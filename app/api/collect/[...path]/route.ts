@@ -24,7 +24,15 @@ const ROUTES: { method: string; re: RegExp }[] = [
   { method: 'GET', re: new RegExp(`^threads/${ID}/state$`) },
   { method: 'PUT', re: new RegExp(`^threads/${ID}/final$`) },
   { method: 'POST', re: new RegExp(`^threads/${ID}/submit$`) },
+  { method: 'POST', re: new RegExp(`^threads/${ID}/restart$`) },
+  { method: 'POST', re: new RegExp(`^threads/${ID}/uploads$`) },
+  { method: 'POST', re: /^uploads\/confirm$/ },
 ]
+
+// The one route that takes a query string. Anything else in it is dropped, and the id
+// must be the shape the upload endpoint mints, so the proxy cannot be used to smuggle
+// parameters (or a path) to the backend.
+const FILE_ID_RE = /^user_uploads\/[a-z0-9_-]{1,40}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function backendBase(): string {
   const base = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'
@@ -43,6 +51,13 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
+  let search = ''
+  if (path === 'uploads/confirm') {
+    const fileId = req.nextUrl.searchParams.get('file_id') ?? ''
+    if (!FILE_ID_RE.test(fileId)) return NextResponse.json({ error: 'bad file id' }, { status: 400 })
+    search = `?file_id=${encodeURIComponent(fileId)}`
+  }
+
   const hasBody = req.method === 'POST' || req.method === 'PUT'
   if (hasBody && !req.headers.get('content-type')?.includes('application/json')) {
     return NextResponse.json({ error: 'expected application/json' }, { status: 415 })
@@ -50,7 +65,7 @@ async function forward(req: NextRequest, ctx: { params: Promise<{ path: string[]
 
   let upstream: Response
   try {
-    upstream = await fetch(`${backendBase()}/api/collector/${path}`, {
+    upstream = await fetch(`${backendBase()}/api/collector/${path}${search}`, {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',

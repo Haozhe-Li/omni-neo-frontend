@@ -55,6 +55,10 @@ export interface GenerateBody {
   model: CollectorModel
   /** The picker's id, sent only while a skill is on — as chat-view does. */
   skill?: string
+  /** `[{ [file_id]: filename }]`, one dict per ready file — chat-view's `fileIds`. */
+  attached_file_ids?: Record<string, string>[]
+  /** The "Add URL" list. */
+  source_url?: string[]
   memory?: string
 }
 
@@ -64,6 +68,8 @@ export function toGenerateBody(args: {
   fields: CollectorFields
   model: CollectorModel
   includeMemory: boolean
+  files?: { id: string; name: string }[]
+  urls?: string[]
 }): GenerateBody {
   const { fields } = args
   const personalization: GenerateBody['personalization'] = { user_local_datetime: fields.datetime }
@@ -76,6 +82,8 @@ export function toGenerateBody(args: {
     model: args.model,
   }
   if (fields.skill) body.skill = fields.skill
+  if (args.files?.length) body.attached_file_ids = args.files.map((f) => ({ [f.id]: f.name }))
+  if (args.urls?.length) body.source_url = args.urls
   if (args.includeMemory && fields.memory.trim()) body.memory = fields.memory
   return body
 }
@@ -88,7 +96,15 @@ export interface ThreadState {
   complete: boolean
   /** The newest answer exactly as the checkpoint holds it — what a training row ends on. */
   final_text: string | null
-  turns: { turn: number; model: string | null; personalization: Record<string, string>; memory: string | null; skill: string | null; edited: boolean }[]
+  turns: { turn: number; model: string | null; personalization: Record<string, string>; memory: string | null; skill: string | null; attachments: AttachmentMeta[]; source_urls: string[]; edited: boolean }[]
+}
+
+export interface AttachmentMeta {
+  file_id: string
+  filename: string
+  category: 'image' | 'document'
+  file_type: string
+  size_bytes: number
 }
 
 export interface SubmitResult {
@@ -104,6 +120,9 @@ export const saveFinal = (id: string, text: string) =>
   json<{ status: string; turn: number; changed: boolean }>(`threads/${id}/final`, { method: 'PUT', body: JSON.stringify({ text }) })
 export const submitThread = (id: string, note?: string) =>
   json<SubmitResult>(`threads/${id}/submit`, { method: 'POST', body: JSON.stringify({ note: note || null }) })
+/** Start the conversation over on a fresh checkpoint, carrying the staged files along. */
+export const restartThread = (id: string) =>
+  json<{ thread_id: string }>(`threads/${id}/restart`, { method: 'POST', body: '{}' }).then((r) => r.thread_id)
 export const stopThread = (id: string) => json(`threads/${id}/stop`, { method: 'POST', body: '{}' })
 export const discardThread = (id: string) => json(`threads/${id}`, { method: 'DELETE' })
 
@@ -182,4 +201,27 @@ export async function openReconnect(threadId: string, signal?: AbortSignal): Pro
   const res = await fetch(`${BASE}/threads/${threadId}/stream`, { signal })
   if (!res.ok) throw await failure(res)
   return res
+}
+
+// ── uploads ─────────────────────────────────────────────────────────────────
+// The same three steps as hooks/useFileUpload.ts — presigned URL, direct PUT to S3,
+// confirm — with the first and last going through the collector proxy.
+
+/** Upload one file to a collector thread; resolves with its file id once it is ready. */
+export async function uploadFile(
+  threadId: string,
+  file: File,
+  onProgress?: (id: string, progress: number) => void,
+): Promise<string> {
+  const minted = await json<{ upload_url: string; file_id: string }>(`threads/${threadId}/uploads`, {
+    method: 'POST',
+    body: JSON.stringify({ filename: file.name, file_type: file.type, file_size_bytes: file.size }),
+  })
+  onProgress?.(minted.file_id, 33)
+  // Direct to S3, not through fetchWithAuth: an external URL, and the body can be 20 MB.
+  const put = await fetch(minted.upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+  if (!put.ok) throw new ApiError(put.status, 'Direct upload to S3 failed.')
+  onProgress?.(minted.file_id, 66)
+  await json(`uploads/confirm?file_id=${encodeURIComponent(minted.file_id)}`, { method: 'POST', body: '{}' })
+  return minted.file_id
 }

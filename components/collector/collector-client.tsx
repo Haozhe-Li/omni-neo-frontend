@@ -1,11 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, Loader2, LogOut, Plus, Send, Square, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Link2, Loader2, LogOut, Paperclip, Plus, Send, Square, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { AnswerEditor } from '@/components/collector/answer-editor'
 import { FieldsPanel } from '@/components/collector/fields-panel'
+import { AddUrlPopover } from '@/components/add-url-popover'
+import { FileUploadArea } from '@/components/file-upload-area'
+import { SourceUrlArea, hostAndPath } from '@/components/source-url-area'
 import { QueryPicker } from '@/components/collector/query-picker'
 import { QuestionBlock, QuestionSkeleton } from '@/components/question-block'
 import {
@@ -13,6 +16,7 @@ import {
   COLLECTOR_MODELS,
   createThread,
   discardThread,
+  restartThread,
   getState,
   openGenerate,
   openReconnect,
@@ -41,6 +45,10 @@ import {
   type TimeRange,
 } from '@/lib/collector/fields'
 import { parseQuestion } from '@/lib/question-parser'
+import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
+import { MAX_SOURCE_URLS, extractUrls, lastCompletedUrlToken, normalizeUrl, useSourceUrls, type SourceUrlEntry } from '@/hooks/useSourceUrls'
+import type { AttachedFile } from '@/hooks/useFileUpload'
+import { useCollectorUploads } from '@/lib/collector/use-uploads'
 import type { PreparedQuery } from '@/lib/collector/queries'
 import { NO_FILTER, draw, findByText, skillFor, type QueryFilter } from '@/lib/collector/query-pool'
 import type { QuestionBlock as QuestionBlockType, Source } from '@/lib/types'
@@ -53,6 +61,8 @@ interface TurnRecord {
   fields: CollectorFields
   answer: string
   edited: boolean
+  files: string[]
+  urls: string[]
 }
 
 interface Live {
@@ -75,6 +85,37 @@ function mergeSources(prev: Source[], next: Source[]): Source[] {
 }
 
 const USED_KEY = 'omni_collector_used_queries'
+
+// search-home.tsx's limits and its stand-in text for a first message with no words.
+const MAX_FILES = 5
+const MAX_FILE_BYTES = 20 * 1024 * 1024
+function fallbackQuery(nFiles: number, nUrls: number): string {
+  return nFiles > 1 ? 'Please read these files'
+    : nFiles === 1 ? 'Please read this file'
+    : nUrls > 1 ? 'Please read these sources'
+    : nUrls === 1 ? 'Please read this source'
+    : ''
+}
+const FALLBACKS = new Set(['Please read these files', 'Please read this file', 'Please read these sources', 'Please read this source'])
+
+/** What a turn carried, as small pills (the chat shows the same on a sent message). */
+function AttachmentPills({ files, urls }: { files: string[]; urls: string[] }) {
+  if (!files.length && !urls.length) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {files.map((f, i) => (
+        <span key={`f${i}`} className="inline-flex max-w-[220px] items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-2.5 py-1 text-[12px] text-[var(--ink-soft)]">
+          <Paperclip size={12} strokeWidth={1.75} className="shrink-0" /><span className="truncate">{f}</span>
+        </span>
+      ))}
+      {urls.map((u, i) => (
+        <span key={`u${i}`} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-2.5 py-1 text-[12px] text-[var(--ink-soft)]">
+          <Link2 size={12} strokeWidth={1.75} className="shrink-0" /><span className="truncate">{hostAndPath(u).host}{hostAndPath(u).path !== '/' ? hostAndPath(u).path : ''}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 function loadUsed(): Set<string> {
   try {
@@ -124,6 +165,18 @@ export function CollectorClient({ annotator }: { annotator: string }) {
   const [turnIsReply, setTurnIsReply] = useState(false)
   const [replyNonce, setReplyNonce] = useState(0)
 
+  // What the next message will carry: files uploaded to this conversation, pinned URLs.
+  const uploads = useCollectorUploads()
+  const { sourceUrls, addUrls, removeUrl, clearUrls, setSourceUrls } = useSourceUrls()
+  const sourceUrlsCountRef = useRef(0)
+  sourceUrlsCountRef.current = sourceUrls.length
+  const [addUrlOpen, setAddUrlOpen] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const prefilledUrlsRef = useRef<Set<string>>(new Set())
+  // What the turn on screen was sent with — kept so a regenerate can send it again.
+  const [turnAttach, setTurnAttach] = useState<{ files: AttachedFile[]; urls: SourceUrlEntry[] }>({ files: [], urls: [] })
+
   // ── the conversation ─────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>('compose')
   const [threadId, setThreadId] = useState<string | null>(null)
@@ -152,6 +205,13 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     () => validateFields({ ...fields, memory: memoryAllowed ? fields.memory : '' }, { memoryAllowed: true }),
     [fields, memoryAllowed],
   )
+  const readyFiles = uploads.files.filter((f) => f.status === 'ready').length
+  // chat-view: a later message may go with files and no words, never with a URL alone; the
+  // first one falls back to "Please read this source".
+  const canSend =
+    errors.length === 0 &&
+    !uploads.files.some((f) => f.status === 'uploading') &&
+    (!!query.trim() || readyFiles > 0 || (turns.length === 0 && sourceUrls.length > 0))
 
   // Warn before closing a tab that holds work nobody filed.
   useEffect(() => {
@@ -261,6 +321,64 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     await settle(id, out.error)
   }, [applyEvent, settle])
 
+  /** The conversation's thread, created on first need — an upload needs one before any turn runs. */
+  const ensureThread = useCallback(async (): Promise<string> => {
+    if (threadRef.current) return threadRef.current
+    const id = await createThread()
+    setThreadId(id)
+    threadRef.current = id
+    return id
+  }, [])
+
+  const addFiles = useCallback(async (list: FileList | File[]) => {
+    const files = Array.from(list)
+    if (!files.length) return
+    if (uploads.files.length + files.length > MAX_FILES) {
+      toast.error(`You can only attach up to ${MAX_FILES} files per message.`)
+      return
+    }
+    let id: string
+    try { id = await ensureThread() } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start a conversation.')
+      return
+    }
+    for (const file of files) {
+      if (file.size > MAX_FILE_BYTES) { toast.error(`${file.name} is too large. Maximum size is 20MB.`); continue }
+      if (!isAllowedUploadFile(file)) { toast.error(`${file.name} is not a supported file type.`); continue }
+      uploads.upload(file, id).catch((e) => toast.error(`${file.name}: ${e instanceof Error ? e.message : 'upload failed'}`))
+    }
+  }, [uploads, ensureThread])
+
+  // Auto-detect sweetener, as in search-home.tsx: a URL pasted or typed into the box is
+  // queued as a pinned source on its own, the text left untouched.
+  const autoDetectUrls = useCallback((candidates: string[]) => {
+    if (!candidates.length) return
+    if (sourceUrlsCountRef.current >= MAX_SOURCE_URLS) {
+      toast.error(`You can only add up to ${MAX_SOURCE_URLS} sources per message.`)
+      return
+    }
+    sourceUrlsCountRef.current += candidates.length
+    addUrls(candidates)
+  }, [addUrls])
+
+  const onComposerPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = e.clipboardData?.files
+    if (files && files.length > 0) {
+      e.preventDefault()
+      void addFiles(files)
+      return
+    }
+    const text = e.clipboardData?.getData('text')
+    if (text) autoDetectUrls(extractUrls(text))
+  }
+
+  const onQueryChange = (val: string) => {
+    setQuery(val)
+    if (drawn && val.trim() !== drawn.text) setDrawn(null)
+    const completed = lastCompletedUrlToken(val)
+    if (completed) autoDetectUrls([completed])
+  }
+
   const runTurn = useCallback(async (opts: {
     fresh?: boolean
     queryOverride?: string
@@ -269,11 +387,22 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     firstTurn?: boolean
     /** This turn's query is the formatted answer to a <question> form. */
     reply?: boolean
+    /** Files / URLs to send instead of the staged ones (a regenerate sends the same again). */
+    files?: AttachedFile[]
+    urls?: SourceUrlEntry[]
   } = {}) => {
-    const q = (opts.queryOverride ?? query).trim()
-    if (!q) return setError('Write a query first.')
-    const f = opts.fieldsOverride ?? fields
     const first = opts.firstTurn ?? memoryAllowed
+    if (!opts.files && uploads.files.some((f) => f.status === 'uploading')) {
+      return setError('Please wait for the file to finish uploading.')
+    }
+    const sendFiles = (opts.files ?? uploads.files).filter((f) => f.status === 'ready')
+    const sendUrls = opts.urls ?? sourceUrls
+    // The first message with no words gets search-home's stand-in text; a later one may be
+    // empty only if it has files, and cannot be sent on URLs alone (chat-view's send).
+    const typed = (opts.queryOverride ?? query).trim()
+    const q = typed || (first ? fallbackQuery(sendFiles.length, sendUrls.length) : '')
+    if (!q && sendFiles.length === 0) return setError(first ? 'Write a query, or attach a file or a URL.' : 'Write a query, or attach a file.')
+    const f = opts.fieldsOverride ?? fields
     const problems = opts.fieldsOverride ? validateFields({ ...f, memory: first ? f.memory : '' }) : errors
     if (problems.length) return setError(problems[0])
     setError(null)
@@ -290,18 +419,21 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     setSubmitted(null)
     const ctl = new AbortController()
     abortRef.current = ctl
+    // What is staged goes out with this message and is cleared, as in the chat; a refused
+    // request puts it back.
+    const sent = { files: sendFiles, urls: sendUrls }
     try {
-      let id = opts.fresh ? null : threadRef.current
-      if (!id) {
-        id = await createThread()
-        setThreadId(id)
-        threadRef.current = id
-      }
+      const id = await ensureThread()
       setTurnQuery(q)
+      setTurnAttach(sent)
+      uploads.clear(); clearUrls(); setAddUrlOpen(false)
       setLive(EMPTY_LIVE)
       setPhase('generating')
       const res = await openGenerate(
-        toGenerateBody({ query: q, threadId: id, fields: f, model, includeMemory: first }),
+        toGenerateBody({
+          query: q, threadId: id, fields: f, model, includeMemory: first,
+          files: sendFiles.map((x) => ({ id: x.id, name: x.name })), urls: sendUrls.map((x) => x.url),
+        }),
         ctl.signal,
       )
       await consume(res, id, ctl)
@@ -309,9 +441,11 @@ export function CollectorClient({ annotator }: { annotator: string }) {
       if (ctl.signal.aborted) return
       setError(e instanceof ApiError || e instanceof Error ? e.message : 'Request failed.')
       // A refused request (400/409/422) leaves the thread usable; anything after the model started does not.
-      setPhase(e instanceof ApiError && e.status < 500 ? 'compose' : 'failed')
+      const refused = e instanceof ApiError && e.status < 500
+      if (refused) { uploads.setFiles(sent.files); setSourceUrls(sent.urls) }
+      setPhase(refused ? 'compose' : 'failed')
     }
-  }, [query, errors, fields, model, memoryAllowed, consume])
+  }, [query, errors, fields, model, memoryAllowed, consume, uploads, sourceUrls, ensureThread, clearUrls, setSourceUrls])
 
 
   const stop = async () => {
@@ -337,31 +471,53 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     const unfiled = threadId && phase !== 'compose' && !(submitted && submitted.turn === turnNumber && draft === saved)
     if (unfiled && !window.confirm('This conversation has not been submitted. Discard it?')) return
     setBusy('discard')
-    await dropThread()
+    await dropThread()   // the server deletes the conversation's uploads with it
     resetConversation()
+    uploads.clear(); clearUrls(); setTurnAttach({ files: [], urls: [] }); setAddUrlOpen(false)
     setBusy(null)
+  }
+
+  /** A fresh checkpoint for the same conversation: the staged files follow to a new thread. */
+  const restartKeepingFiles = async () => {
+    const id = threadRef.current
+    abortRef.current?.abort()
+    if (!id) return
+    const next = await restartThread(id)
+    setThreadId(next)
+    threadRef.current = next
   }
 
   /** Turn 1 only: throw the thread away and generate the same query again. */
   const regenerate = async () => {
     if (draft !== original && !window.confirm('Regenerating discards your edits. Continue?')) return
     const q = turnQuery
+    const att = turnAttach
     setBusy('discard')
-    await dropThread()
+    try { await restartKeepingFiles() } catch (e) {
+      setBusy(null)
+      return setError(e instanceof Error ? e.message : 'Could not restart.')
+    }
     setBusy(null)
     setSources([])
-    await runTurn({ fresh: true, queryOverride: q })
+    await runTurn({ queryOverride: q, files: att.files, urls: att.urls })
   }
 
   /** Turn 1 only: back to the inputs, keeping them and the query, to change something and run again. */
   const backToInputs = async () => {
     if (draft !== original && !window.confirm('Going back discards your edits. Continue?')) return
     const q = turnQuery
+    const att = turnAttach
     setBusy('discard')
-    await dropThread()
+    try { await restartKeepingFiles() } catch (e) {
+      setBusy(null)
+      return setError(e instanceof Error ? e.message : 'Could not restart.')
+    }
     setBusy(null)
     resetConversation()
-    setQuery(q)
+    // back in the composer exactly as it was: the words (not the stand-in text), the files, the URLs
+    setQuery(FALLBACKS.has(q) && (att.files.length || att.urls.length) ? '' : q)
+    uploads.setFiles(att.files)
+    setSourceUrls(att.urls)
   }
 
   const flushEdit = async (id: string) => {
@@ -380,7 +536,10 @@ export function CollectorClient({ annotator }: { annotator: string }) {
     try {
       await flushEdit(threadId)
       const nextFields = locked.datetime ? fields : { ...fields, datetime: advanceDatetime(fields.datetime) }
-      setTurns((t) => [...t, { turn: turnNumber, query: turnQuery, fields, answer: draft, edited: draft !== original }])
+      setTurns((t) => [...t, {
+        turn: turnNumber, query: turnQuery, fields, answer: draft, edited: draft !== original,
+        files: turnAttach.files.map((x) => x.name), urls: turnAttach.urls.map((x) => x.url),
+      }])
       setFields(nextFields)
       setNote(''); setLive(EMPTY_LIVE); setPhase('compose')
       if (opts.nextQuery !== undefined) {
@@ -408,8 +567,16 @@ export function CollectorClient({ annotator }: { annotator: string }) {
   const pickQuery = useCallback((q: PreparedQuery) => {
     setQuery(q.text)
     setDrawn(q)
+    // A query designed around pinned URLs brings them; the previous query's go away.
+    const stale = prefilledUrlsRef.current
+    if (stale.size) setSourceUrls((prev) => prev.filter((e) => !stale.has(e.url)))
+    prefilledUrlsRef.current = new Set()
+    if (q.source_url?.length) {
+      addUrls(q.source_url)
+      prefilledUrlsRef.current = new Set(q.source_url.map((u) => normalizeUrl(u)).filter((u): u is string => !!u))
+    }
     setFields((f) => (locked.skill ? f : { ...f, skill: skillFor(q) || f.skill }))
-  }, [locked.skill])
+  }, [locked.skill, addUrls, setSourceUrls])
 
   const randomQuery = useCallback((): PreparedQuery | null => {
     const q = draw(queryFilter, usedIds)
@@ -512,7 +679,7 @@ export function CollectorClient({ annotator }: { annotator: string }) {
             <details key={t.turn} open={awaitingReply && !!parseQuestion(t.answer).question} className="group rounded-xl border border-[var(--line)] bg-[var(--paper-raised)]">
               <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
                 <ChevronDown size={15} className="shrink-0 text-[var(--ink-faint)] transition-transform group-open:rotate-180" />
-                <span className="truncate text-[14px] text-[var(--ink)]">{t.query}</span>
+                <span className="truncate text-[14px] text-[var(--ink)]">{t.query || t.files[0] || t.urls[0]}</span>
                 {t.edited && <span className="shrink-0 rounded-full bg-[var(--rust-tint)] px-2 py-0.5 text-[11.5px] text-[var(--rust)]">edited</span>}
                 <span className="ml-auto shrink-0 font-[family-name:var(--font-plex-mono)] text-[11px] text-[var(--ink-faint)]">turn {t.turn}</span>
               </summary>
@@ -520,6 +687,7 @@ export function CollectorClient({ annotator }: { annotator: string }) {
                 <p className="font-[family-name:var(--font-plex-mono)] text-[11.5px] text-[var(--ink-muted)]">
                   {t.fields.datetime}{t.fields.location ? ` · ${t.fields.location}` : ''} · {t.fields.language || 'auto'}{t.fields.skill ? ` · skill: ${t.fields.skill}` : ''}
                 </p>
+                <AttachmentPills files={t.files} urls={t.urls} />
                 <AnswerWithQuestion
                   answer={t.answer}
                   sources={sources}
@@ -534,7 +702,8 @@ export function CollectorClient({ annotator }: { annotator: string }) {
           {phase !== 'compose' && (
             <div className="space-y-1">
               <p className="omni-eyebrow">{turnIsReply ? 'Reply to the question' : 'Query'}</p>
-              <p className={`whitespace-pre-wrap text-[var(--ink)] ${turnIsReply ? 'text-[15px] leading-relaxed' : 'font-[family-name:var(--font-instrument)] text-[26px] leading-tight'}`}>{turnQuery}</p>
+              {turnQuery && <p className={`whitespace-pre-wrap text-[var(--ink)] ${turnIsReply ? 'text-[15px] leading-relaxed' : 'font-[family-name:var(--font-instrument)] text-[26px] leading-tight'}`}>{turnQuery}</p>}
+              <AttachmentPills files={turnAttach.files.map((x) => x.name)} urls={turnAttach.urls.map((x) => x.url)} />
             </div>
           )}
 
@@ -548,19 +717,46 @@ export function CollectorClient({ annotator }: { annotator: string }) {
                   drawn={drawn}
                 />
               )}
+              {(uploads.files.length > 0 || sourceUrls.length > 0) && (
+                <div className="space-y-2">
+                  <FileUploadArea files={uploads.files} onRemove={uploads.remove} />
+                  <SourceUrlArea urls={sourceUrls} onRemove={removeUrl} />
+                </div>
+              )}
               <textarea
-                value={query} onChange={(e) => { setQuery(e.target.value); if (drawn && e.target.value.trim() !== drawn.text) setDrawn(null) }} onKeyDown={onComposerKey}
+                value={query} onChange={(e) => onQueryChange(e.target.value)} onKeyDown={onComposerKey} onPaste={onComposerPaste}
+                onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { setDragOver(false); if (e.dataTransfer.files.length) { e.preventDefault(); void addFiles(e.dataTransfer.files) } }}
                 placeholder={turns.length ? 'Ask the follow-up…' : 'Ask anything…'}
                 rows={4}
-                className="w-full resize-y rounded-xl border border-[var(--line-strong)] bg-[var(--paper-raised)] p-4 text-[15px] leading-relaxed text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--teal)]"
+                className={`w-full resize-y rounded-xl border bg-[var(--paper-raised)] p-4 text-[15px] leading-relaxed text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] focus:border-[var(--teal)] ${dragOver ? 'border-[var(--teal)] bg-[var(--teal-tint)]' : 'border-[var(--line-strong)]'}`}
               />
-              <div className="flex items-center gap-3">
-                <button onClick={() => runTurn()} disabled={!query.trim() || errors.length > 0}
+              <input ref={fileInputRef} type="file" multiple accept={UPLOAD_ACCEPT_ATTR} className="hidden"
+                onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = '' }} />
+              <div className="relative flex flex-wrap items-center gap-3">
+                <button onClick={() => runTurn()} disabled={!canSend}
                   className="inline-flex items-center gap-2 rounded-full bg-[var(--teal)] px-5 py-2.5 text-[13.5px] text-[var(--accent-foreground)] transition-all hover:bg-[var(--teal-hover)] active:scale-[0.98] disabled:opacity-40">
                   <Send size={14} strokeWidth={1.75} /> Generate
                 </button>
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploads.files.length >= MAX_FILES}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-3.5 py-2 text-[12.5px] text-[var(--ink)] hover:bg-[var(--sand)] disabled:opacity-40">
+                  <Paperclip size={14} strokeWidth={1.75} /> Attach file or image
+                </button>
+                <button type="button" onClick={() => setAddUrlOpen((o) => !o)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-3.5 py-2 text-[12.5px] text-[var(--ink)] hover:bg-[var(--sand)]">
+                  <Link2 size={14} strokeWidth={1.75} /> Add URL
+                </button>
                 <span className="text-[12px] text-[var(--ink-faint)]">Ctrl/⌘ + Enter</span>
+                {addUrlOpen && (
+                  <div className="absolute left-0 top-full z-30 mt-2 w-[min(420px,100%)] rounded-xl border border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[0_22px_50px_-30px_color-mix(in_srgb,var(--ink)_60%,transparent)]">
+                    <AddUrlPopover existingCount={sourceUrls.length} onAdd={addUrls} onClose={() => setAddUrlOpen(false)} />
+                  </div>
+                )}
               </div>
+              {!canSend && uploads.files.some((f) => f.status === 'uploading') && (
+                <p className="text-[12px] text-[var(--ink-faint)]">Waiting for the upload to finish…</p>
+              )}
             </div>
           )}
 
