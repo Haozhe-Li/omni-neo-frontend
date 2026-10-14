@@ -16,6 +16,7 @@ import { ModelPicker } from '@/components/model-picker'
 import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, type ChatModelId } from '@/lib/models'
 
 import { toast } from 'sonner'
+import { v4 as uuidv4 } from 'uuid'
 
 
 type SkillId = 'deep-research' | 'trip-advisor' | 'guided-learning'
@@ -353,40 +354,20 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     setThreadId(id)
   }, [])
 
-  const createLocalFallbackThreadId = useCallback(() => {
-    const fallbackId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    applyThreadId(fallbackId)
-    return fallbackId
+  // The client names its own thread. This used to be a GET /get_thread_id round
+  // trip (auth + CORS preflight + two Postgres writes) sitting between the click
+  // and the chat view — the backend now creates the thread's rows lazily, on the
+  // first /chat (or /sync) that names it, so a thread is still only ever created
+  // by a message actually being sent (no empty "Untitled Chat" ghosts from a
+  // pre-fetch) and the click no longer waits on the network. A file attached
+  // before sending needs an id earlier than that, which is why it is minted on
+  // demand and remembered in the ref rather than only at submit time.
+  const newThreadId = useCallback(() => {
+    const id =
+      process.env.NEXT_PUBLIC_USE_MOCK === 'true' ? `mock-thread-id-${Date.now()}` : uuidv4()
+    applyThreadId(id)
+    return id
   }, [applyThreadId])
-
-  const fetchThreadId = useCallback(async () => {
-    if (process.env.NEXT_PUBLIC_USE_MOCK === 'true') {
-      const mockId = 'mock-thread-id-' + Date.now()
-      applyThreadId(mockId)
-      return mockId
-    }
-
-    const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-    const endpoint = `${backendUrl}/get_thread_id`
-
-    try {
-      const res = await fetchWithAuth(endpoint)
-      if (res.ok) {
-        const data = await res.json()
-        if (data && typeof data === 'string') {
-          applyThreadId(data)
-          return data as string
-        }
-        if (data && data.thread_id) {
-          applyThreadId(data.thread_id)
-          return data.thread_id as string
-        }
-      }
-    } catch (e) {
-      console.error('Failed to fetch thread ID', e)
-    }
-    return null
-  }, [fetchWithAuth, applyThreadId])
 
   // Fire-and-forget backend warm-up ping. Never blocks the UI and we don't
   // care about the result — it just wakes a cold backend a little earlier.
@@ -432,13 +413,13 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       return
     }
 
-    const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+    const activeThreadId = threadIdRef.current || threadId || newThreadId()
     if (!activeThreadId) return
     console.log('[SearchHome] handleFillEnd submit — thread_id:', activeThreadId)
     onSearch(current.text, activeThreadId)
     setQuery('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
-  }, [threadId, fetchThreadId, createLocalFallbackThreadId, onSearch])
+  }, [threadId, newThreadId, onSearch])
 
   const triggerFillAnimation = useCallback((text: string, submit: boolean) => {
     const payload = { text, submit }
@@ -528,7 +509,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
 
     // Read from ref first (always the latest, avoids stale-closure reads from state)
-    const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+    const activeThreadId = threadIdRef.current || threadId || newThreadId()
     if (!activeThreadId) return
 
     console.log('[SearchHome] handleSubmit — thread_id being sent to chat:', activeThreadId)
@@ -873,7 +854,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     }
 
     const processFiles = async () => {
-      const activeThreadId = threadIdRef.current || threadId || await fetchThreadId() || createLocalFallbackThreadId()
+      const activeThreadId = threadIdRef.current || threadId || newThreadId()
       files.forEach(file => {
         if (file.size > 20 * 1024 * 1024) {
           toast.error(`${file.name} is too large. Maximum size is 20MB.`)
@@ -894,7 +875,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       })
     }
     processFiles()
-  }, [isSignedIn, clerk, uploadFile, threadId, fetchThreadId, createLocalFallbackThreadId, attachedFiles.length, acceptsImages])
+  }, [isSignedIn, clerk, uploadFile, threadId, newThreadId, attachedFiles.length, acceptsImages])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files

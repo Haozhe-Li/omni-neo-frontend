@@ -4,11 +4,11 @@ import { useState, useCallback, useEffect } from 'react'
 import { SearchHome } from '@/components/search-home'
 import { ChatView } from '@/components/chat-view'
 import { AppSidebar } from '@/components/app-sidebar'
-import { useApi } from '@/hooks/useApi'
 import { useUsage } from '@/hooks/useUsage'
 import { useAuth } from '@clerk/nextjs'
 import { useAppShell } from '@/hooks/useAppShell'
 import { useRouter } from 'next/navigation'
+import { v4 as uuidv4 } from 'uuid'
 import { DEFAULT_MODEL, isModelLocked, normalizeModelId, type ChatModelId } from '@/lib/models'
 
 // Swap the visible URL to /thread/{id} without triggering a Next.js navigation,
@@ -41,7 +41,6 @@ export default function Home() {
   // box. Used by the benchmark/pages "Ask Omni" links.
   const [deepLinkSourceUrls, setDeepLinkSourceUrls] = useState<string[]>([])
 
-  const { fetchWithAuth } = useApi()
   const { isSignedIn } = useAuth()
   const router = useRouter()
   const { usage, exceeded, refresh: refreshUsage } = useUsage()
@@ -183,27 +182,17 @@ export default function Home() {
       return
     }
 
-    const initFromUrl = async () => {
-      let newThreadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-      try {
-        const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-        const res = await fetchWithAuth(`${backendUrl}/get_thread_id`)
-        if (res.ok) {
-          const data = await res.json()
-          if (typeof data === 'string') newThreadId = data
-          else if (data?.thread_id) newThreadId = data.thread_id
-        }
-      } catch {}
-      setCurrentThreadId(newThreadId)
-      setCurrentQuery(q)
-      setPendingSourceUrls(sourceUrls)
-      setInitialMode(model)
-      setView('chat')
-      setShareableUrl(newThreadId)
-    }
-    initFromUrl()
+    // The thread is named here and created by the backend on its first /chat —
+    // no round trip before the chat view appears (see SearchHome.newThreadId).
+    const newThreadId = uuidv4()
+    setCurrentThreadId(newThreadId)
+    setCurrentQuery(q)
+    setPendingSourceUrls(sourceUrls)
+    setInitialMode(model)
+    setView('chat')
+    setShareableUrl(newThreadId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchWithAuth])
+  }, [])
 
   return (
     <div className="omni-app-shell flex h-[100dvh] w-full overflow-hidden relative">
@@ -227,6 +216,7 @@ export default function Home() {
             onToggleSidebar={toggleSidebar}
             isMobile={isMobile}
             initialMode={initialMode}
+            isNewThread
             initialAttachedFileMeta={pendingAttachmentMeta}
             initialSourceUrls={pendingSourceUrls}
             initialSkill={pendingSkill as any}
