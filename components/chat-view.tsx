@@ -27,7 +27,7 @@ import { ThreadActions } from '@/components/thread-actions'
 import { StreamingText } from '@/components/streaming-text'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { getAiRequestErrorMessage, getLocalISOString, handleUsageLimitResponse, parseThreadLockedResponse } from '@/lib/utils'
-import { getUserLocation } from '@/lib/location'
+import { getUserLocationNow } from '@/lib/location'
 import { isMemoryEnabled } from '@/lib/memories'
 import { shouldSubmitOnEnter } from '@/lib/keyboard'
 import { parseReports, type ParsedReport, type ParsedSegment } from '@/lib/report-parser'
@@ -64,6 +64,11 @@ interface ChatViewProps {
   onToggleSidebar?: () => void
   isMobile?: boolean
   initialMode?: ChatModelId
+  // The thread was minted by the home screen for this very message, so it has no
+  // stored history. Skips the GET /api/threads/{id} that would otherwise be
+  // awaited (preflight + request + three backend reads) ahead of the first
+  // /chat, only to come back empty.
+  isNewThread?: boolean
   initialAttachedFileMeta?: { id: string; name: string; type: string }[]
   initialSourceUrls?: string[]
   initialSkill?: SkillId | null
@@ -749,6 +754,7 @@ export function ChatView({
   onToggleSidebar,
   isMobile = false,
   initialMode = DEFAULT_MODEL,
+  isNewThread = false,
   initialAttachedFileMeta,
   initialSourceUrls,
   initialSkill = null,
@@ -1825,10 +1831,10 @@ export function ChatView({
       if (isMemoryEnabled()) p.memory_enabled = true
     }
     p.user_local_datetime = getLocalISOString()
-    try {
-      const loc = await getUserLocation(false)
-      if (loc?.value) p.user_location = loc.value
-    } catch {}
+    // Never waits on the network: a missing or stale location is refreshed in
+    // the background for the next turn (see getUserLocationNow).
+    const loc = getUserLocationNow()
+    if (loc?.value) p.user_location = loc.value
     return p
   }, [])
 
@@ -2295,7 +2301,7 @@ export function ChatView({
     const init = async () => {
       if (preloadedThread) {
         if (await applyLoadedThread(preloadedThread)) return
-      } else {
+      } else if (!isNewThread) {
         try {
           const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}`)
           if (res.ok) {

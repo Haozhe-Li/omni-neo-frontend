@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@clerk/nextjs'
 import { getOrCreateGuestId, useApi } from './useApi'
 import { getLocalISOString } from '@/lib/utils'
-import { getUserLocation } from '@/lib/location'
+import { getUserLocationNow } from '@/lib/location'
 
 /**
  * Client for the backend's live voice agent (`/ws/voice`, see omni's
@@ -540,11 +540,7 @@ export function useVoiceSession(orbRef: React.RefObject<HTMLDivElement | null>) 
             // format_system_reminder the main agent uses. Best-effort: a
             // location lookup failure shouldn't block starting the call.
             const userLocalDatetime = getLocalISOString()
-            let userLocation: string | null = null
-            try {
-                const loc = await getUserLocation(false)
-                userLocation = loc?.value || null
-            } catch {}
+            const userLocation: string | null = getUserLocationNow()?.value || null
 
             playCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
             const analyser = playCtxRef.current.createAnalyser()
