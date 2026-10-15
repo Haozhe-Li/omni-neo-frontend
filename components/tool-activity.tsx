@@ -86,7 +86,18 @@ function skillOf(step: ToolStep): string | null {
  */
 type StepKind = 'search' | 'page' | 'code' | 'data'
 
-function singleStepInfo(tool: string, args: any): { kind: StepKind; verb: string; arg?: string } {
+function singleStepInfo(
+  tool: string,
+  args: any,
+): { kind: StepKind; verb: string; /** Verb for the collapsed one-line form — "Searching “q”". */ short: string; arg?: string } {
+  const info = stepInfoBase(tool, args)
+  return { ...info, short: info.short ?? info.verb }
+}
+
+function stepInfoBase(
+  tool: string,
+  args: any,
+): { kind: StepKind; verb: string; short?: string; arg?: string } {
   const t = lc(tool)
   const a = args || {}
   const quoted = (v: any) => (v ? `\u201C${v}\u201D` : undefined)
@@ -97,17 +108,19 @@ function singleStepInfo(tool: string, args: any): { kind: StepKind; verb: string
     return {
       kind: 'search',
       verb: t.includes('arxiv') ? 'Searching through arXiv' : 'Searching through the Internet',
+      short: t.includes('arxiv') ? 'Searching arXiv' : 'Searching',
       arg: quoted(a.query || a.q),
     }
   if (['load_web', 'web_page', 'fetch', 'read_web'].some((k) => t.includes(k)))
-    return { kind: 'page', verb: 'Reading web pages', arg: a.url ? domainOf(a.url) : undefined }
+    return { kind: 'page', verb: 'Reading web pages', short: 'Reading', arg: a.url ? domainOf(a.url) : undefined }
   if (t.includes('place')) return { kind: 'data', verb: 'Finding places near', arg: a.query || a.location }
-  if (t.includes('weather')) return { kind: 'data', verb: 'Searching through OpenWeather', arg: a.location }
-  if (t.includes('stock')) return { kind: 'data', verb: 'Searching through Yahoo Finance', arg: a.ticker || a.symbol }
+  if (t.includes('weather')) return { kind: 'data', verb: 'Searching through OpenWeather', short: 'Weather in', arg: a.location }
+  if (t.includes('stock')) return { kind: 'data', verb: 'Searching through Yahoo Finance', short: 'Looking up', arg: a.ticker || a.symbol }
   if (t.includes('currency'))
     return {
       kind: 'data',
       verb: 'Searching through ECB exchange rates',
+      short: 'Converting',
       arg: [a.base_currency || a.base, a.target_currency || a.target].filter(Boolean).join(' \u2192 '),
     }
   if (t.includes('document') || t.includes('read_user')) return { kind: 'page', verb: 'Reading your uploaded file' }
@@ -125,9 +138,9 @@ function singleStepInfo(tool: string, args: any): { kind: StepKind; verb: string
   return { kind: 'data', verb: tool || 'Working' }
 }
 
-/* The four step icons, drawn at 14px inside a 20px cell. Hand-written paths
-   rather than an icon set: they need to sit on one optical weight with the
-   5px reasoning dot beside them, and a mixed set never quite does. */
+/* The step icons, hand-drawn. The trace's markers are plain dots now, so the
+   one place these still appear is inside a chip — the search glyph on a query
+   — where they are drawn small enough to sit with the chip's text. */
 function StepIcon({ kind, size = 14 }: { kind: StepKind; size?: number }) {
   const common = {
     width: size,
@@ -877,22 +890,13 @@ function LiveRow({
   )
 }
 
-/* The 20px icon cell that opens every trace row — a drawn step icon for a
-   tool call, a 5px dot for a thought. Neutral grey for both — a finished step
-   is scaffolding, not news — with teal kept for the one thing that is still
-   moving (the live step's ring). */
-function Bullet({
-  kind,
-  reasoning,
-  live,
-}: {
-  kind?: StepKind
-  reasoning?: boolean
-  /** The step running right now: a spinning ring, the trace's only motion. */
-  live?: boolean
-}) {
+/* The 20px marker cell that opens every trace row: a small dot once a step is
+   behind us, the turning ring for the one still running. No per-tool icons —
+   the sentence beside the marker already says what the step did, and a second
+   symbol for the same fact is what made the thread read as busy. */
+function Bullet({ live }: { live?: boolean }) {
   return (
-    <span className="flex h-5 w-5 items-center justify-center text-[var(--ink-muted)]">
+    <span className="flex h-5 w-5 items-center justify-center">
       {live ? (
         /* A plain arc, deliberately. The mark's own orbit was tried here
            and pulled the eye off the answer: this sits beside text that is
@@ -902,10 +906,8 @@ function Bullet({
           className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--teal)] border-t-transparent"
           style={{ animation: 'omni-spin 900ms linear infinite' }}
         />
-      ) : reasoning ? (
-        <span className="h-[5px] w-[5px] rounded-full bg-[var(--ink-fainter)]" />
       ) : (
-        <StepIcon kind={kind ?? 'data'} />
+        <span className="h-[7px] w-[7px] rounded-full bg-[var(--ink-fainter)]" />
       )}
     </span>
   )
@@ -955,6 +957,53 @@ function TraceRow({
   )
 }
 
+/* A tool step that folds. Open = the full card (what it did, where, and the
+   sources it read); folded = one line, "Searching “langchain valuation”", with
+   a chevron. The default follows the agent: the step running right now is
+   open and every step behind it is folded, so the trace stays a short list of
+   sentences while the live step shows its working. A click is the user's own
+   say and sticks — it is not undone when the step finishes or the next one
+   starts. */
+function CollapsibleStep({ step, live }: { step: ToolStep; live: boolean }) {
+  const [userOpen, setUserOpen] = useState<boolean | null>(null)
+  const open = userOpen ?? live
+  const { short, arg } = singleStepInfo(step.tool, step.args)
+
+  if (open) {
+    return (
+      <div className="relative">
+        <ToolRowContent step={step} live={live} />
+        <button
+          type="button"
+          aria-label="Collapse step"
+          aria-expanded
+          onClick={() => setUserOpen(false)}
+          className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
+        >
+          <ChevronDown size={16} className="rotate-180" />
+        </button>
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={false}
+      onClick={() => setUserOpen(true)}
+      className="group flex w-full items-center gap-3 text-left"
+    >
+      <span className="min-w-0 flex-1 truncate text-[14.5px] leading-[1.45] text-[var(--ink)]">
+        {short}
+        {arg && <span className="text-[var(--ink-soft)]"> {arg}</span>}
+      </span>
+      <ChevronDown
+        size={16}
+        className="shrink-0 text-[var(--ink-muted)] transition-colors group-hover:text-[var(--ink)]"
+      />
+    </button>
+  )
+}
+
 // One row on the shared vertical timeline: a connecting line on the left with
 // this item's icon sitting on top of it (a plain dot for reasoning, the
 // tool's own icon for tool calls, Blocks for skills), and its content to the
@@ -980,21 +1029,23 @@ function TimelineRow({
   let bullet: ReactNode
   let content: ReactNode
   if (item.kind === 'reasoning') {
-    bullet = <Bullet reasoning />
+    bullet = <Bullet />
     content = <ReasoningText content={item.step.content} isActive={isActive} />
   } else if (item.kind === 'skill') {
-    bullet = <Bullet kind="data" live={live} />
+    bullet = <Bullet live={live} />
     content = <SkillRowContent name={item.name} />
   } else {
     const isCode = typeof item.step.args?.code === 'string'
-    bullet = <Bullet kind={isCode ? 'code' : singleStepInfo(item.step.tool, item.step.args).kind} live={live} />
+    bullet = <Bullet live={live} />
     // Must match `scriptReportsFromSteps`' id scheme exactly — both walk the
     // same original `steps` array by position, so `item.stepIndex` (index
     // in that array, not in the filtered `items` list) lines up with the
     // `i` that function uses for the very same step.
     const scriptId = isCode && idPrefix ? `${idPrefix}-script-${item.stepIndex}` : undefined
-    content = (
+    content = isCode ? (
       <ToolRowContent step={item.step} isActive={isActive} live={live} scriptId={scriptId} onOpenScript={onOpenScript} />
+    ) : (
+      <CollapsibleStep step={item.step} live={live} />
     )
   }
 
