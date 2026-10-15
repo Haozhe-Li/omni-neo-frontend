@@ -24,9 +24,10 @@ export interface ChatModelInfo {
   credits: number
   requiresAuth: boolean
   /**
-   * False for `rix`: W&B serves the adapter text-only, so an image turn 400s
-   * server-side. The upload handlers in chat-view/search-home check this and
-   * refuse the file before it is ever sent.
+   * False for a text-only entry: an image turn would 400 server-side, so the
+   * upload handlers in chat-view/search-home check this and refuse the file
+   * before it is ever sent. True for every model listed today — `rix` is
+   * multimodal (Gemma 4, served with vision) and reads images itself.
    */
   acceptsImages: boolean
   /** Renders the teal "New" chip beside the label. */
@@ -50,8 +51,10 @@ export const CHAT_MODELS: ChatModelInfo[] = [
     desc: "Omni's experimental in-house model",
     credits: 1,
     requiresAuth: false,
-    // W&B Inference serves the LoRA without vision.
-    acceptsImages: false,
+    // Gemma 4 is multimodal, W&B serves the adapter with vision, and the
+    // training set includes image turns. Mirrors `accepts_images` in
+    // core/chat_models.py.
+    acceptsImages: true,
     isNew: true,
   },
   {
@@ -117,6 +120,6 @@ export function creditsFor(id: ChatModelId, hasImage = false): number {
   return m.credits
 }
 
-// Reachable again now that `rix` is listed: it is the one text-only entry.
+// Only shown for a model with `acceptsImages: false`; none is listed today.
 export const IMAGE_UNSUPPORTED_MESSAGE =
   "This model can't read images. Switch to Best to send one."
