@@ -2983,7 +2983,7 @@ export function ChatView({
                     // This reply follows a hidden <question>/<scheduled-research>
                     // decision message — no visible query started it, so it reads
                     // as a continuation of the turn above rather than a new one.
-                    // Passed to ToolActivity so it skips the "Thinking" skeleton
+                    // Passed to ToolActivity so it skips its "Thinking" placeholder
                     // (which announces "a new turn is starting") and just lets the
                     // streaming caret carry that feeling instead.
                     const continuesHiddenTurn = messages[i - 1]?.role === 'user' && !!messages[i - 1]?.hidden
@@ -3183,7 +3183,7 @@ export function ChatView({
                             )}
                             {/* Bare blinking caret for the gap between a hidden-turn
                                 continuation starting and its first token landing —
-                                ToolActivity's "Thinking" card is suppressed here (see
+                                ToolActivity's "Thinking" placeholder is suppressed here (see
                                 continuesHiddenTurn above), and with zero segments yet
                                 StreamingText itself isn't mounted, so without this the
                                 turn would show nothing at all for that gap. */}

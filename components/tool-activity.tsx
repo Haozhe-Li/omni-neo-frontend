@@ -1086,6 +1086,23 @@ function TimelineRow({
   )
 }
 
+/* Stands in for the trace until there is one: the turning ring the live step
+   uses, beside a shimmering "Thinking". Inline, on the page ground — no card,
+   no skeleton bars — so that when the agent goes straight to its answer there
+   is no box to have appeared and vanished, and when a first step does land the
+   card rises in where this was. */
+function ThinkingPlaceholder() {
+  return (
+    <div className="mb-6 flex items-center gap-2.5 py-1" style={{ animation: 'omni-rise 240ms ease both' }}>
+      <span
+        className="h-3.5 w-3.5 shrink-0 rounded-full border-[1.5px] border-[var(--teal)] border-t-transparent"
+        style={{ animation: 'omni-spin 900ms linear infinite' }}
+      />
+      <span className="omni-shimmer-text-accent text-[14.5px] font-medium leading-[1.45]">Thinking</span>
+    </div>
+  )
+}
+
 interface ToolActivityProps {
   steps?: TimelineStep[]
   isStreaming?: boolean
@@ -1117,14 +1134,15 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   const thinking = !!isStreaming && !answered
 
   const items = buildItems(steps)
-  // Sticky once true: if this turn was ever observed thinking (even with zero
-  // tool/reasoning steps — a quick chit-chat reply in fast mode, say), keep
-  // rendering through to the "Completed" / Done close-out instead of the whole
-  // component vanishing the instant `answered` flips. Without this, a fast
-  // turn with no visible steps would cut straight from "Thinking" to nothing.
-  const everThinkingRef = useRef(thinking)
-  if (thinking) everThinkingRef.current = true
-  const hasContent = items.length > 0 || !!drafting || everThinkingRef.current
+  // A trace exists only once the agent has DONE something — a tool call or a
+  // skill load. Before that, and for a turn that never does anything (it
+  // thinks and answers), there is nothing to show: the card would open on a
+  // lone reasoning note and then sit above the answer as an empty-handed
+  // "1 step", which is the seam this avoids. The wait before the first action
+  // is a small placeholder instead (`ThinkingPlaceholder`), and a turn that
+  // streams its answer straight away shows no trace at all.
+  const hasAction = items.some((it) => it.kind !== 'reasoning')
+  const hasContent = hasAction || !!drafting
 
   // ── header ─────────────────────────────────────────────────────────────
   // While thinking the header is up to two rows: finished work collapses into
@@ -1142,8 +1160,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // rows are the real, countable actions. `items` has already had the internal
   // `write_todos` bookkeeping filtered out, so this count matches the rows
   // one-for-one when the body is expanded.
-  const actionCount = items.reduce((n, it) => (it.kind === 'reasoning' ? n : n + 1), 0)
-
   // The step the live row is showing. It is excluded from the summary count
   // (it hasn't finished) AND from the body (the live row IS its row, kept
   // outside the collapsing box so it stays visible) — one step, one row,
@@ -1155,30 +1171,11 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
     0
   )
 
-  // A turn that only reasoned has nothing to count, and "Completed · 0 steps"
-  // would be a worse way of saying so. It gets a plain description of what it
-  // actually did instead — which is also the honest answer for a greeting, the
-  // usual case here: the agent thought about it and replied, no tools involved.
-  const hasReasoning = items.some((it) => it.kind === 'reasoning')
-  // A finished trace summarises itself by KIND, not by a total: "3 searches ·
-  // 2 tool calls · 1 note" tells you what sort of work the answer rests on,
-  // where "6 steps" tells you only that there were six of something.
-  const doneLabel: HeaderLabelSpec = (() => {
-    let searches = 0
-    let others = 0
-    let notes = 0
-    for (const it of items) {
-      if (it.kind === 'reasoning') notes++
-      else if (it.kind === 'tool' && isSearch(it.step.tool)) searches++
-      else others++
-    }
-    const bits: string[] = []
-    if (searches) bits.push(`${searches} search${searches === 1 ? '' : 'es'}`)
-    if (others) bits.push(`${others} tool call${others === 1 ? '' : 's'}`)
-    if (notes) bits.push(notes === 1 ? '1 note' : `${notes} notes`)
-    if (bits.length) return { text: bits.join(' · ') }
-    return { text: hasReasoning ? 'Thought about it' : 'Completed' }
-  })()
+  // The finished trace's summary is a plain total — every row in the card, notes
+  // included — so the number on the line is the number of rows it opens onto.
+  const doneLabel: HeaderLabelSpec = {
+    text: `${items.length} step${items.length === 1 ? '' : 's'}`,
+  }
   // Present tense while the turn is still running, and the count demoted to a
   // subordinate clause: this line describes the state of the WHOLE turn, the
   // live row below it being one detail of that state. Leading with "Completed"
@@ -1219,44 +1216,17 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // below), so there is no height to measure, no ref, and no rAF dance — and
   // no stale cached height for streaming content to fight.
 
-  if (!thinking && !hasContent) return null
-
-  // Nothing has streamed in yet: the live row on its own, with nothing to
-  // expand and so no chevron. Rendered through the same `LiveRow` as every
-  // other phase rather than as a bare label, so when the first step arrives
-  // the text doesn't jump sideways into a gutter that suddenly exists.
+  // Nothing to show yet. While the model is working toward its first action
+  // (or its answer), a small inline placeholder holds the place; once an
+  // answer starts streaming with no action behind it, nothing renders at all.
   //
   // Skipped entirely when this turn continues a hidden decision message: no
-  // visible query introduced it, so this card's "something new just started"
-  // framing would contradict that — the answer's own streaming caret is what
-  // carries "still writing" here instead. Once a real step lands, `items`
-  // stops being empty and the normal live card below takes over as usual.
-  if (thinking && items.length === 0 && !drafting) {
-    if (continuesHiddenTurn) return null
-    return (
-      // The same card, gap and row geometry as every later phase, so nothing
-      // shifts when the first step lands. The two bars stand in for the step
-      // text that is about to arrive — a skeleton of the shape, not a spinner
-      // in an empty box.
-      <div className="omni-trace mb-6 flex flex-col">
-        <div className="px-5">
-          <LiveRow label={liveLabel} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
-        </div>
-        <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-3 px-5 pb-4" style={{ animation: 'omni-rise 240ms ease both' }}>
-          <span />
-          <div className="flex flex-col gap-2">
-            <div
-              className="h-[9px] w-[58%] rounded-full bg-[var(--line-strong)]"
-              style={{ animation: 'omni-soft-pulse 1300ms ease-in-out infinite' }}
-            />
-            <div
-              className="h-[9px] w-[34%] rounded-full bg-[var(--line-strong)]"
-              style={{ animation: 'omni-soft-pulse 1300ms ease-in-out 220ms infinite' }}
-            />
-          </div>
-        </div>
-      </div>
-    )
+  // visible query introduced it, so a "something new just started" placeholder
+  // would contradict that — the answer's own streaming caret carries "still
+  // writing" there instead.
+  if (!hasContent) {
+    if (!thinking || continuesHiddenTurn) return null
+    return <ThinkingPlaceholder />
   }
 
   // No closing "Done" row: the collapsed summary line above already says the
@@ -1265,10 +1235,10 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // Every step, in the order it happened — the live one included, drawn in
   // place with a spinner for its icon and its results filling in as they land,
   // so the trace reads as one thread of steps rather than a list with a status
-  // line bolted on. The separate live row survives only for the two moments
-  // there is no step to draw: the agent is reasoning before its first action,
-  // or an artifact is being written.
-  const showTailLive = (thinking && liveIdx < 0) || !!drafting
+  // line bolted on. The separate live row survives only for the one moment
+  // there is no step to draw: an artifact is being written. (The wait before
+  // the first action is `ThinkingPlaceholder`, outside the card.)
+  const showTailLive = !!drafting
   const lastIdx = items.length - 1
 
   return (
