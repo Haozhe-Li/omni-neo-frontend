@@ -1024,6 +1024,34 @@
   animation: omni-shimmer 2.4s linear infinite;
 }
 
+/* The "working" label: grey text with a teal highlight flowing across it from
+   left to right, on a loop. Unlike `.omni-shimmer-text-accent` (a faint
+   brightening of an already-teal label) this one has a real band you can
+   watch pass, which is what says "still going" without anything spinning.
+   Kept restrained: the highlight is a wide, soft band at 60% teal rather than
+   full teal, and a pass takes three seconds. The tile is twice the box and the
+   keyframes travel exactly one tile, so the loop has no seam. */
+@keyframes omni-flow {
+  from { background-position: 100% center; }
+  to { background-position: -100% center; }
+}
+
+.omni-flow-text {
+  background: linear-gradient(
+    90deg,
+    var(--ink-muted) 0%,
+    var(--ink-muted) 30%,
+    color-mix(in srgb, var(--teal) 60%, var(--ink-muted)) 50%,
+    var(--ink-muted) 70%,
+    var(--ink-muted) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: omni-flow 3s linear infinite;
+}
+
 /* Breathing bullet on the live timeline row. Deliberately gentler than
    Tailwind's `animate-pulse` (which bottoms out at opacity .5 and makes a
    14px glyph flicker): this stays legible the whole way through and leans on
@@ -1372,9 +1400,17 @@
   .omni-drift,
   .omni-drift-slow,
   .omni-rise,
+  .omni-flow-text,
+  .omni-live-pulse,
   .omni-caret::after,
   .omni-streaming > *:last-child::after {
     animation: none;
+  }
+
+  /* No travelling highlight: the label just reads as plain muted text. */
+  .omni-flow-text {
+    background: none;
+    color: var(--ink-muted);
   }
 
   /* The rings stop travelling. Where the orbit was decoration that is the

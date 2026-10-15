@@ -187,7 +187,7 @@ function StepIcon({ kind, size = 14 }: { kind: StepKind; size?: number }) {
 function ScriptCard({ filename, isActive, onOpen }: { filename: string; isActive?: boolean; onOpen?: () => void }) {
   return (
     <div className="flex min-w-0 flex-col gap-[5px]">
-      <div className={`text-[14.5px] leading-[1.45] ${isActive ? 'omni-shimmer-text-accent' : 'text-[var(--ink)]'}`}>
+      <div className={`text-[14.5px] leading-[1.45] ${isActive ? 'omni-flow-text' : 'text-[var(--ink)]'}`}>
         Running Python
       </div>
       {/* The script itself takes the trace's code treatment — mono on raised
@@ -275,7 +275,7 @@ function PageChips({ pages }: { pages: ToolResultPage[] }) {
 function StepSection({ label, shimmer, children }: { label: string; shimmer?: boolean; children?: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <div className={`text-[13.5px] leading-[1.45] ${shimmer ? 'omni-shimmer-text-accent' : 'text-[var(--ink-muted)]'}`}>
+      <div className={`text-[13.5px] leading-[1.45] ${shimmer ? 'omni-flow-text' : 'text-[var(--ink-muted)]'}`}>
         {label}
       </div>
       {children}
@@ -669,7 +669,7 @@ function HeaderLabel({ text, shimmer }: { text: string; shimmer: boolean }) {
         // ellipsises instead of being cut mid-glyph. In the steady state the
         // outer box IS the measured text width, so `max-w-full` is a no-op
         // and nothing gets an ellipsis it didn't earn.
-        className={`block w-max max-w-full truncate text-left ${shimmer ? 'omni-shimmer-text-accent font-medium' : ''}`}
+        className={`block w-max max-w-full truncate text-left ${shimmer ? 'omni-flow-text font-medium' : ''}`}
         style={{
           opacity: phase === 'idle' ? 1 : 0,
           transform: phase === 'out' ? 'translateY(-4px)' : phase === 'enter' ? 'translateY(4px)' : 'translateY(0)',
@@ -846,21 +846,17 @@ function LiveRow({
 }
 
 /* The 20px marker cell that opens every trace row: a small dot once a step is
-   behind us, the turning ring for the one still running. No per-tool icons —
+   behind us, a breathing teal dot for the one still running. No per-tool icons —
    the sentence beside the marker already says what the step did, and a second
    symbol for the same fact is what made the thread read as busy. */
 function Bullet({ live }: { live?: boolean }) {
   return (
     <span className="flex h-5 w-5 items-center justify-center">
       {live ? (
-        /* A plain arc, deliberately. The mark's own orbit was tried here
-           and pulled the eye off the answer: this sits beside text that is
-           being read, and a thing with three moving parts asks to be watched
-           where a turning arc just says "still going". */
-        <span
-          className="h-3.5 w-3.5 rounded-full border-[1.5px] border-[var(--teal)] border-t-transparent"
-          style={{ animation: 'omni-spin 900ms linear infinite' }}
-        />
+        /* The same dot, in teal, breathing. Nothing spins: this sits beside
+           text that is being read, and a slow swell says "still going"
+           without asking to be watched. */
+        <span className="omni-live-pulse h-[7px] w-[7px] rounded-full bg-[var(--teal)]" />
       ) : (
         <span className="h-[7px] w-[7px] rounded-full bg-[var(--ink-fainter)]" />
       )}
@@ -937,7 +933,6 @@ function CollapsibleStep({ step, live }: { step: ToolStep; live: boolean }) {
 
   const { kind, verb, short, arg } = singleStepInfo(step.tool, step.args)
   const pages = step.results ?? []
-  const waiting = live && pages.length === 0
   const rawArg = typeof arg === 'string' ? arg.replace(/^\u201C|\u201D$/g, '') : undefined
 
   // The sites a retrieval landed on — what a trace can say that a bare "Searching"
@@ -962,11 +957,12 @@ function CollapsibleStep({ step, live }: { step: ToolStep; live: boolean }) {
           className={`min-w-0 flex-1 text-[14.5px] leading-[1.45] ${hover} ${
             armed ? 'animate-in fade-in duration-200 motion-reduce:animate-none' : ''
           } ${
-            open
-              ? waiting
-                ? 'omni-shimmer-text-accent'
-                : 'text-[var(--ink-soft)]'
-              : 'truncate text-[var(--ink)]'
+            // The running step's sentence flows; every finished one is plain.
+            live
+              ? `omni-flow-text ${open ? '' : 'truncate'}`
+              : open
+                ? 'text-[var(--ink-soft)]'
+                : 'truncate text-[var(--ink)]'
           }`}
         >
           {open ? (
@@ -974,7 +970,7 @@ function CollapsibleStep({ step, live }: { step: ToolStep; live: boolean }) {
           ) : (
             <>
               {short}
-              {arg && <span className={`${hover} text-[var(--ink-soft)]`}> {arg}</span>}
+              {arg && <span className={live ? '' : `${hover} text-[var(--ink-soft)]`}> {arg}</span>}
             </>
           )}
         </span>
@@ -1086,19 +1082,15 @@ function TimelineRow({
   )
 }
 
-/* Stands in for the trace until there is one: the turning ring the live step
-   uses, beside a shimmering "Thinking". Inline, on the page ground — no card,
-   no skeleton bars — so that when the agent goes straight to its answer there
-   is no box to have appeared and vanished, and when a first step does land the
+/* Stands in for the trace until there is one: "Researching", with a highlight
+   flowing across it. Inline, on the page ground — no card, no spinner, no
+   skeleton bars — so that when the agent goes straight to its answer there is
+   no box to have appeared and vanished, and when a first step does land the
    card rises in where this was. */
 function ThinkingPlaceholder() {
   return (
-    <div className="mb-6 flex items-center gap-2.5 py-1" style={{ animation: 'omni-rise 240ms ease both' }}>
-      <span
-        className="h-3.5 w-3.5 shrink-0 rounded-full border-[1.5px] border-[var(--teal)] border-t-transparent"
-        style={{ animation: 'omni-spin 900ms linear infinite' }}
-      />
-      <span className="omni-shimmer-text-accent text-[14.5px] font-medium leading-[1.45]">Thinking</span>
+    <div className="mb-6 py-1" style={{ animation: 'omni-rise 240ms ease both' }}>
+      <span className="omni-flow-text text-[14.5px] font-medium leading-[1.45]">Researching</span>
     </div>
   )
 }
