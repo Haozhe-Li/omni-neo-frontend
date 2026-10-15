@@ -1157,12 +1157,15 @@
   border-radius: 20px;
 }
 
-/* The agent's working surface — steps, tool calls, reasoning. Sand rather
-   than raised paper, so a trace reads as scaffolding beside the answer
-   instead of competing with it for the same "this is the content" weight. */
+/* The agent's working surface — steps, tool calls, reasoning. A flat card:
+   raised paper, one hairline outline, no fill tint and no shadow, so it reads
+   as a neutral container for the steps rather than as a second surface
+   competing with the answer. Rows are divided inside it, not boxed. */
 .omni-trace {
-  background: var(--trace);
-  border-radius: 18px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 /* ── Controls ─────────────────────────────────────────────────────────── */
