@@ -2720,9 +2720,10 @@ export function ChatView({
         toast.error(`${file.name} is not a supported file type.`)
         continue
       }
-      // Documents are fine on every model — only images are refused, and only
-      // by Omni SFT. Blocked before upload so the user finds out immediately;
-      // the backend rejects it again for clients that skip this.
+      // Documents are fine on every model; images are refused only by a
+      // text-only model (none listed today). Blocked before upload so the user
+      // finds out immediately; the backend rejects it again for clients that
+      // skip this.
       if (!getModel(mode).acceptsImages && file.type.startsWith('image/')) {
         toast.error(IMAGE_UNSUPPORTED_MESSAGE)
         continue

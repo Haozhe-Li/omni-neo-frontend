@@ -563,9 +563,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     void handleSubmit(e as unknown as React.FormEvent)
   }
 
-  // Image attachments are refused by Omni SFT (served text-only). Blocked at
-  // the picker below rather than at send time, so the user finds out before
-  // they have uploaded anything — the backend rejects it again regardless.
+  // Image attachments are refused by a text-only model (none listed today).
+  // Blocked at the picker below rather than at send time, so the user finds
+  // out before they have uploaded anything — the backend rejects it again
+  // regardless.
   const acceptsImages = getModel(model).acceptsImages
 
   const VAD_RMS_THRESHOLD = 0.02
@@ -864,9 +865,9 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
           toast.error(`${file.name} is not a supported file type.`)
           return
         }
-        // Documents are fine on every model — only images are refused, and only
-        // by Omni SFT. Checked here rather than at send time so nothing is
-        // uploaded that the chosen model could never read.
+        // Documents are fine on every model; images are refused only by a
+        // text-only model (none listed today). Checked here rather than at send
+        // time so nothing is uploaded that the chosen model could never read.
         if (!acceptsImages && file.type.startsWith('image/')) {
           toast.error(IMAGE_UNSUPPORTED_MESSAGE)
           return
