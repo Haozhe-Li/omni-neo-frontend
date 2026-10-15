@@ -7,7 +7,6 @@ import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from 're
 import { ChevronDown, ChevronRight, Blocks, Code2 } from 'lucide-react'
 import { isReasoningStep, type TimelineStep, type ToolStep, type ToolResultPage, type ReasoningStep, type ReportArtifact } from '@/lib/types'
 import { SafeLink } from '@/components/safe-link'
-import { OmniMark } from '@/components/omni-mark'
 import { MarkdownMessage } from '@/components/markdown-message'
 
 // One `python_exec` call's filename, defaulted the same way everywhere it's
@@ -1056,20 +1055,16 @@ function TimelineRow({
   )
 }
 
-/* The card's title bar: the product's mark and a name, over a full-width rule —
-   the one place the card's divider runs edge to edge (row dividers below it
-   start at the text). While the turn is live the rule is the indeterminate
-   sweep, so the "still working" signal sits on the card's own edge rather than
-   as a separate bar inside it. Indeterminate on purpose: the agent cannot
-   report a percentage, so the bar must not imply one. */
-function TraceHeader({ live }: { live: boolean }) {
+/* The live indicator: the indeterminate sweep, pinned to the card's top edge
+   (the card clips it to its rounded corners) so "still working" sits on the
+   card itself rather than as a bar inside it. Indeterminate on purpose: the
+   agent cannot report a percentage, so the bar must not imply one. The
+   wrapper does the positioning because `.omni-sweep-rail` sets its own
+   `position`, which an absolute utility on the rail itself would not beat. */
+function SweepRail() {
   return (
-    <div className="relative flex items-center gap-2.5 border-b border-[var(--line)] px-5 py-3.5">
-      <span className="flex h-5 w-5 items-center justify-center text-[var(--ink)]">
-        <OmniMark size={16} tone="current" />
-      </span>
-      <span className="text-[14.5px] font-medium leading-none text-[var(--ink)]">Omni Search</span>
-      {live && <div className="omni-sweep-rail absolute inset-x-0 -bottom-px" />}
+    <div className="pointer-events-none absolute inset-x-0 top-0">
+      <div className="omni-sweep-rail" />
     </div>
   )
 }
@@ -1227,7 +1222,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
       // text that is about to arrive — a skeleton of the shape, not a spinner
       // in an empty box.
       <div className="omni-trace mb-6 flex flex-col">
-        <TraceHeader live />
+        <SweepRail />
         <div className="px-5">
           <LiveRow label={liveLabel} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
         </div>
@@ -1299,7 +1294,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
             : ''
         }
       >
-        {bodyOpen && <TraceHeader live={thinking} />}
+        {thinking && <SweepRail />}
 
         {/* The collapsing body. `grid-template-rows: 0fr → 1fr` rather than a
             measured max-height: it animates to the row's real height with no
