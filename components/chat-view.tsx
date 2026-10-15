@@ -49,7 +49,8 @@ import {
 import { ModelPicker } from '@/components/model-picker'
 import { DEFAULT_MODEL, IMAGE_UNSUPPORTED_MESSAGE, getModel, normalizeModelId, type ChatModelId } from '@/lib/models'
 import { extractCitedNumbers } from '@/lib/markdown'
-import type { ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, VerifiedClaim, WidgetData } from '@/lib/types'
+import type { ChatMessage, CheckSourceMatch, CheckSourceState, ChartArtifact, MessageBlock, ReasoningStep, ReportArtifact, Source, TimelineStep, ToolStep, VerifiedClaim, WidgetData } from '@/lib/types'
+import { isReasoningStep } from '@/lib/types'
 import { extractClaimCandidates } from '@/lib/verify-claims'
 import { canHighlightExcerpt } from '@/lib/highlight'
 
@@ -1947,10 +1948,25 @@ export function ChatView({
               break
             case 'tool_call': {
               openReasoning = null
-              const step = { tool: ev.tool, args: ev.args, timestamp: Date.now() }
+              const step: ToolStep = { tool: ev.tool, args: ev.args, timestamp: Date.now(), id: ev.id ?? undefined }
               steps.push(step)
               appendToolStep(step)
               patchAssistant()
+              break
+            }
+            case 'tool_result': {
+              // The call's own step object is shared with `blocks`, so setting
+              // it here updates the interleaved view too. Matched by id; the
+              // oldest still-pending call of the same tool is the fallback for
+              // a stream that sent no ids (results land in call order).
+              const pending = (s: TimelineStep): s is ToolStep => !isReasoningStep(s) && !s.results
+              const target =
+                (ev.id && steps.find((s): s is ToolStep => !isReasoningStep(s) && s.id === ev.id)) ||
+                steps.find((s): s is ToolStep => pending(s) && s.tool === ev.tool)
+              if (target && Array.isArray(ev.results)) {
+                target.results = ev.results
+                patchAssistant()
+              }
               break
             }
             case 'drafting':

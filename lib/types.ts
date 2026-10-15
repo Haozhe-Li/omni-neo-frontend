@@ -123,10 +123,26 @@ export interface CheckSourceState {
   matches: CheckSourceMatch[]
 }
 
+/** One page a retrieval tool came back with — what a "Reading …" chip shows. */
+export interface ToolResultPage {
+  title: string
+  url: string
+}
+
 export interface ToolStep {
   tool: string
   args: any
   timestamp: number
+  /** The call's id on the wire, so its `tool_result` can find it even when
+   * several calls run in parallel. Absent on turns saved before it existed. */
+  id?: string
+  /**
+   * The pages this call retrieved (search hits, the fetched page, a quote's
+   * source), in the order the agent was handed them. Filled in by the
+   * `tool_result` event; undefined while the call is running and for tools
+   * that retrieve nothing.
+   */
+  results?: ToolResultPage[]
   /**
    * Human-readable outcome of the call, rendered under it on the trace — a
    * search's `"12 results · a.gov, b.org"` becomes host chips, anything else
