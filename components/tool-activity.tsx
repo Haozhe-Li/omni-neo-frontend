@@ -5,7 +5,8 @@ import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from 're
 // one optical weight against the reasoning dot beside them; these are the few
 // places that still want a set icon.
 import { ChevronDown, ChevronRight, Blocks, Code2 } from 'lucide-react'
-import { isReasoningStep, type TimelineStep, type ToolStep, type ReasoningStep, type ReportArtifact } from '@/lib/types'
+import { isReasoningStep, type TimelineStep, type ToolStep, type ToolResultPage, type ReasoningStep, type ReportArtifact } from '@/lib/types'
+import { SafeLink } from '@/components/safe-link'
 import { MarkdownMessage } from '@/components/markdown-message'
 
 // One `python_exec` call's filename, defaulted the same way everywhere it's
@@ -118,10 +119,10 @@ function singleStepInfo(tool: string, args: any): { kind: StepKind; verb: string
 /* The four step icons, drawn at 14px inside a 20px cell. Hand-written paths
    rather than an icon set: they need to sit on one optical weight with the
    5px reasoning dot beside them, and a mixed set never quite does. */
-function StepIcon({ kind }: { kind: StepKind }) {
+function StepIcon({ kind, size = 14 }: { kind: StepKind; size?: number }) {
   const common = {
-    width: 14,
-    height: 14,
+    width: size,
+    height: size,
     viewBox: '0 0 16 16',
     fill: 'none',
     stroke: 'currentColor',
@@ -158,18 +159,6 @@ function StepIcon({ kind }: { kind: StepKind }) {
   )
 }
 
-/* A search that reports "12 results · a.gov, b.org" becomes a row of host
-   chips. The backend does not send tool results into the timeline yet, so
-   this stays dark until it does — `result` is optional on ToolStep for
-   exactly that reason. */
-function parseHosts(result?: string): { hosts: string[]; more: number } | null {
-  if (!result) return null
-  const m = /^(\d+) results · (.+)$/.exec(result)
-  if (!m) return null
-  const hosts = m[2].split(', ').map((h) => h.trim()).filter(Boolean)
-  return { hosts, more: Math.max(0, Number(m[1]) - hosts.length) }
-}
-
 // python_exec's code, shown Perplexity-style: a fixed "Running Python Code"
 // label plus a single clickable file chip (no inline expansion) — clicking
 // opens the code in the artifact side-panel instead, where it renders
@@ -196,14 +185,94 @@ function ScriptCard({ filename, isActive, onOpen }: { filename: string; isActive
   )
 }
 
+/* Pills on the trace — the thing a step did something *to*: a query, a page, a
+   ticker. One shape for all of them, so a step reads as "label, then chips"
+   whatever the tool was. */
+const CHIP_CLASS =
+  'inline-flex max-w-full items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-2.5 py-[3px] text-[12.5px] leading-[1.5] text-[var(--ink-soft)]'
+
+function Chip({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
+  return (
+    <span className={CHIP_CLASS}>
+      {icon}
+      <span className="min-w-0 truncate">{children}</span>
+    </span>
+  )
+}
+
+// A page the step read: its site's favicon and bare domain, linking out (through
+// the same Safe Link gate as every other outbound link) to the page itself.
+function PageChip({ page }: { page: ToolResultPage }) {
+  const host = domainOf(page.url)
+  return (
+    <SafeLink
+      href={page.url}
+      title={page.title || page.url}
+      className={`${CHIP_CLASS} transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`https://www.google.com/s2/favicons?domain=${host}&sz=32`}
+        alt=""
+        className="h-3.5 w-3.5 shrink-0 rounded-[3px]"
+        loading="lazy"
+      />
+      <span className="min-w-0 truncate">{host}</span>
+    </SafeLink>
+  )
+}
+
+// Pages shown before the rest fold behind a "+N more" chip. Five is what fits
+// on a row or two without the step outweighing the answer it led to.
+const PAGE_CHIPS_COLLAPSED = 5
+
+function PageChips({ pages }: { pages: ToolResultPage[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const overflow = pages.length - PAGE_CHIPS_COLLAPSED
+  const shown = expanded || overflow <= 0 ? pages : pages.slice(0, PAGE_CHIPS_COLLAPSED)
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {shown.map((p) => (
+        <PageChip key={p.url} page={p} />
+      ))}
+      {overflow > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[12.5px] leading-[1.5] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)]"
+        >
+          {expanded ? 'Show less' : `+${overflow} more`}
+          <ChevronDown size={12} className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      )}
+    </div>
+  )
+}
+
+// A muted label over its chips — "Searching" / "Reading" in the reference
+// design. `shimmer` marks the one the agent is still doing.
+function StepSection({ label, shimmer, children }: { label: string; shimmer?: boolean; children?: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className={`text-[13.5px] leading-[1.45] ${shimmer ? 'omni-shimmer-text-accent' : 'text-[var(--ink-muted)]'}`}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function ToolRowContent({
   step,
   isActive,
+  live,
   scriptId,
   onOpenScript,
 }: {
   step: ToolStep
   isActive?: boolean
+  /** The step the agent is on right now: its label shimmers until results land. */
+  live?: boolean
   scriptId?: string
   onOpenScript?: (id: string) => void
 }) {
@@ -217,37 +286,44 @@ function ToolRowContent({
       />
     )
   }
-  const { verb, arg } = singleStepInfo(step.tool, step.args)
-  const parsed = parseHosts(step.result)
+
+  const { kind, verb, arg } = singleStepInfo(step.tool, step.args)
+  const pages = step.results ?? []
+  const waiting = !!live && pages.length === 0
+  const rawArg = typeof arg === 'string' ? arg.replace(/^“|”$/g, '') : undefined
+
+  // The sites a retrieval landed on — what a trace can say that a bare "Searching"
+  // cannot. A page load shows the page it was asked for until the result names it.
+  const isPageLoad = kind === 'page' && typeof step.args?.url === 'string'
+  const reading: ToolResultPage[] =
+    pages.length > 0 ? pages : isPageLoad ? [{ title: '', url: step.args.url }] : []
+
   return (
-    <div className="flex min-w-0 flex-col gap-[5px]">
-      <div className="text-[14.5px] leading-[1.45] text-[var(--ink)]">
-        {verb}
-        {arg && <span className="text-[var(--ink-soft)]"> {arg}</span>}
-      </div>
-
-      {/* Which sites a search actually landed on — the single most useful
-          thing a trace can say, so it gets chips rather than a sentence. */}
-      {parsed && parsed.hosts.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {parsed.hosts.map((h) => (
-            <span
-              key={h}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line-strong)] bg-[var(--paper-raised)] px-2.5 py-[3px] text-[12.5px] text-[var(--ink-soft)]"
-            >
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--rust)]" />
-              {h}
-            </span>
-          ))}
-          {parsed.more > 0 && (
-            <span className="self-center text-[12.5px] text-[var(--ink-muted)]">+{parsed.more} more</span>
+    <div className="flex min-w-0 flex-col gap-3">
+      {isPageLoad ? (
+        <StepSection label="Reading" shimmer={waiting}>
+          <PageChips pages={reading} />
+        </StepSection>
+      ) : (
+        <>
+          <StepSection label={verb} shimmer={waiting}>
+            {rawArg && (
+              <div className="flex flex-wrap gap-1.5">
+                <Chip icon={kind === 'search' ? <span className="shrink-0 text-[var(--ink-muted)]"><StepIcon kind="search" size={12} /></span> : undefined}>
+                  {rawArg}
+                </Chip>
+              </div>
+            )}
+          </StepSection>
+          {pages.length > 0 && (
+            <StepSection label="Reading">
+              <PageChips pages={pages} />
+            </StepSection>
           )}
-        </div>
+        </>
       )}
 
-      {!parsed && step.result && (
-        <div className="text-[13.5px] leading-[1.5] text-[var(--ink-soft)]">{step.result}</div>
-      )}
+      {step.result && <div className="text-[13.5px] leading-[1.5] text-[var(--ink-soft)]">{step.result}</div>}
     </div>
   )
 }
@@ -764,11 +840,14 @@ function LiveRow({
   chevron,
   open,
   onToggle,
+  connectTop = false,
 }: {
   label: string
   chevron: boolean
   open: boolean
   onToggle: () => void
+  /** A step sits above this row on the thread. */
+  connectTop?: boolean
 }) {
   const body = (
     <span className="flex min-w-0 max-w-full items-center gap-2.5 text-[14.5px] leading-[1.45] text-[var(--teal)]">
@@ -777,7 +856,7 @@ function LiveRow({
     </span>
   )
   return (
-    <TraceRow center animate={false} bullet={<Bullet live />}>
+    <TraceRow animate={false} bullet={<Bullet live />} connectTop={connectTop}>
       {chevron ? (
         <button onClick={onToggle} className="flex max-w-full transition-colors">
           {body}
@@ -830,28 +909,46 @@ function Bullet({
   )
 }
 
-/* One trace row: fixed icon column, everything else in the second track.
-   A real grid rather than absolute positioning, so a reasoning block that
-   wraps to six lines keeps its icon on the first line and its text on a
-   single left edge. */
+/* One trace row: an icon column that carries the thread, and the content.
+
+   The icon column runs the full height of the row, with a hairline above and
+   below the icon, so consecutive rows' icons are joined into one thread (the
+   gap beside the icon keeps the line from touching it). Rows are divided by a
+   rule on the CONTENT side only — it starts where the text starts and leaves
+   the thread unbroken, which is what makes the rows read as steps on a path
+   rather than as separate boxes. A real grid rather than absolute
+   positioning, so a reasoning block that wraps to six lines keeps its icon on
+   the first line and its text on a single left edge. */
 function TraceRow({
   children,
-  center = false,
   animate = true,
   bullet,
+  connectTop = false,
+  connectBottom = false,
 }: {
   children: React.ReactNode
-  center?: boolean
   animate?: boolean
   bullet: React.ReactNode
+  /** A row sits above this one: thread line in, divider rule above the content. */
+  connectTop?: boolean
+  /** A row sits below this one: thread line out. */
+  connectBottom?: boolean
 }) {
   return (
     <div
-      className={`grid grid-cols-[20px_minmax(0,1fr)] gap-3 ${center ? 'items-center' : 'items-start'}`}
+      className="grid grid-cols-[20px_minmax(0,1fr)] gap-3"
       style={animate ? { animation: 'omni-rise 260ms ease both' } : undefined}
     >
-      {bullet}
-      <div className="min-w-0">{children}</div>
+      <div className="flex flex-col items-center">
+        {connectTop ? (
+          <span className="mb-[3px] h-[11px] w-px shrink-0 bg-[var(--ink-fainter)] opacity-60" />
+        ) : (
+          <span className="h-3.5 shrink-0" />
+        )}
+        {bullet}
+        {connectBottom && <span className="mt-[3px] w-px flex-1 bg-[var(--ink-fainter)] opacity-60" />}
+      </div>
+      <div className={`min-w-0 py-3.5 ${connectTop ? 'border-t border-[var(--line-strong)]' : ''}`}>{children}</div>
     </div>
   )
 }
@@ -863,44 +960,54 @@ function TraceRow({
 function TimelineRow({
   item,
   isActive,
-  isLast,
+  live,
+  connectTop,
+  connectBottom,
   idPrefix,
   onOpenScript,
 }: {
   item: Item
   isActive: boolean
-  isLast: boolean
+  /** The step the agent is on right now — spinner for its icon. */
+  live: boolean
+  connectTop: boolean
+  connectBottom: boolean
   idPrefix?: string
   onOpenScript?: (id: string) => void
 }) {
-  void isLast
   let bullet: ReactNode
   let content: ReactNode
   if (item.kind === 'reasoning') {
     bullet = <Bullet reasoning />
     content = <ReasoningText content={item.step.content} isActive={isActive} />
   } else if (item.kind === 'skill') {
-    bullet = <Bullet kind="data" />
+    bullet = <Bullet kind="data" live={live} />
     content = <SkillRowContent name={item.name} />
   } else {
     const isCode = typeof item.step.args?.code === 'string'
-    bullet = <Bullet kind={isCode ? 'code' : singleStepInfo(item.step.tool, item.step.args).kind} />
+    bullet = <Bullet kind={isCode ? 'code' : singleStepInfo(item.step.tool, item.step.args).kind} live={live} />
     // Must match `scriptReportsFromSteps`' id scheme exactly — both walk the
     // same original `steps` array by position, so `item.stepIndex` (index
     // in that array, not in the filtered `items` list) lines up with the
     // `i` that function uses for the very same step.
     const scriptId = isCode && idPrefix ? `${idPrefix}-script-${item.stepIndex}` : undefined
-    content = <ToolRowContent step={item.step} isActive={isActive} scriptId={scriptId} onOpenScript={onOpenScript} />
+    content = (
+      <ToolRowContent step={item.step} isActive={isActive} live={live} scriptId={scriptId} onOpenScript={onOpenScript} />
+    )
   }
 
-  return <TraceRow bullet={bullet}>{content}</TraceRow>
+  return (
+    <TraceRow bullet={bullet} connectTop={connectTop} connectBottom={connectBottom}>
+      {content}
+    </TraceRow>
+  )
 }
 
 // Capstone row at the end of a finished timeline — the quiet "done" beat that
 // takes the live row's place in the gutter once there is nothing left running.
-function DoneTailRow() {
+function DoneTailRow({ connectTop }: { connectTop: boolean }) {
   return (
-    <TraceRow center bullet={<Bullet done />}>
+    <TraceRow bullet={<Bullet done />} connectTop={connectTop}>
       <span className="text-[13.5px] text-[var(--ink-muted)]">Done</span>
     </TraceRow>
   )
@@ -1058,10 +1165,10 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
       // shifts when the first step lands. The two bars stand in for the step
       // text that is about to arrive — a skeleton of the shape, not a spinner
       // in an empty box.
-      <div className="omni-trace mb-6 flex flex-col gap-4 px-5 py-[18px]">
-        <div className="omni-sweep-rail" />
+      <div className="omni-trace mb-6 flex flex-col px-5 py-1">
+        <div className="omni-sweep-rail mt-3" />
         <LiveRow label={liveLabel} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
-        <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-3" style={{ animation: 'omni-rise 240ms ease both' }}>
+        <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-3 pb-4" style={{ animation: 'omni-rise 240ms ease both' }}>
           <span />
           <div className="flex flex-col gap-2">
             <div
@@ -1086,11 +1193,14 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // the bottom of the body, and the live row now says that in the same place,
   // permanently visible and with the actual step name on it.
   const showDoneTail = !thinking && !drafting && hasContent
-  // The body is the timeline minus the live step, in order. Original indices
-  // are carried through because "is this the item currently streaming" is a
-  // question about position in `items` (it drives the reasoning typewriter),
-  // not about position in this filtered list.
-  const bodyItems = items.map((item, i) => ({ item, i })).filter(({ i }) => i !== liveIdx)
+  // Every step, in the order it happened — the live one included, drawn in
+  // place with a spinner for its icon and its results filling in as they land,
+  // so the trace reads as one thread of steps rather than a list with a status
+  // line bolted on. The separate live row survives only for the two moments
+  // there is no step to draw: the agent is reasoning before its first action,
+  // or an artifact is being written.
+  const showTailLive = (thinking && liveIdx < 0) || !!drafting
+  const lastIdx = items.length - 1
 
   return (
     // Three stacked pieces, in this order and for this reason: the summary
@@ -1127,13 +1237,13 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
       <div
         className={
           bodyOpen
-            ? `omni-trace flex flex-col gap-4 px-5 py-[18px] ${showCompletedRow ? 'mt-2' : ''}`
+            ? `omni-trace flex flex-col px-5 py-1 ${showCompletedRow ? 'mt-2' : ''}`
             : ''
         }
       >
         {/* Indeterminate on purpose: the agent cannot report a percentage, so
             the bar must not imply one. */}
-        {thinking && <div className="omni-sweep-rail" />}
+        {thinking && <div className="omni-sweep-rail mt-3" />}
 
         {/* The collapsing body. `grid-template-rows: 0fr → 1fr` rather than a
             measured max-height: it animates to the row's real height with no
@@ -1146,27 +1256,27 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
           style={{ gridTemplateRows: bodyOpen ? '1fr' : '0fr', opacity: bodyOpen ? 1 : 0 }}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="flex flex-col gap-4">
-              {bodyItems.map(({ item, i }) => (
+            <div className="flex flex-col">
+              {items.map((item, i) => (
                 <TimelineRow
                   key={i}
-                  // "Is this the item currently streaming" is a question about
-                  // position in `items` — it drives the reasoning typewriter —
-                  // never about position in this filtered list.
                   item={item}
-                  isActive={thinking && i === items.length - 1}
-                  isLast={false}
+                  isActive={thinking && i === lastIdx}
+                  live={i === liveIdx}
+                  connectTop={i > 0}
+                  connectBottom={i < lastIdx || showDoneTail || showTailLive}
                   idPrefix={idPrefix}
                   onOpenScript={onOpenScript}
                 />
               ))}
-              {showDoneTail && <DoneTailRow />}
+              {showDoneTail && <DoneTailRow connectTop={items.length > 0} />}
             </div>
           </div>
         </div>
 
-        {showLiveRow && (
+        {showTailLive && (
           <LiveRow
+            connectTop={items.length > 0}
             label={liveLabel}
             // The chevron always rides the topmost row, so the live row only
             // owns it before the first step has finished — the phase where it
