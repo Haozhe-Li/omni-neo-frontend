@@ -283,69 +283,25 @@ function StepSection({ label, shimmer, children }: { label: string; shimmer?: bo
   )
 }
 
+// A `python_exec` step (any tool whose sole arg is `code`): the clickable script
+// card. Every other tool step is a `CollapsibleStep`.
 function ToolRowContent({
   step,
   isActive,
-  live,
   scriptId,
   onOpenScript,
 }: {
   step: ToolStep
   isActive?: boolean
-  /** The step the agent is on right now: its label shimmers until results land. */
-  live?: boolean
   scriptId?: string
   onOpenScript?: (id: string) => void
 }) {
-  // python_exec (and any tool whose sole arg is `code`) → clickable script card.
-  if (typeof step.args?.code === 'string') {
-    return (
-      <ScriptCard
-        filename={scriptFilename(step.args)}
-        isActive={isActive}
-        onOpen={scriptId && onOpenScript ? () => onOpenScript(scriptId) : undefined}
-      />
-    )
-  }
-
-  const { kind, verb, arg } = singleStepInfo(step.tool, step.args)
-  const pages = step.results ?? []
-  const waiting = !!live && pages.length === 0
-  const rawArg = typeof arg === 'string' ? arg.replace(/^“|”$/g, '') : undefined
-
-  // The sites a retrieval landed on — what a trace can say that a bare "Searching"
-  // cannot. A page load shows the page it was asked for until the result names it.
-  const isPageLoad = kind === 'page' && typeof step.args?.url === 'string'
-  const reading: ToolResultPage[] =
-    pages.length > 0 ? pages : isPageLoad ? [{ title: '', url: step.args.url }] : []
-
   return (
-    <div className="flex min-w-0 flex-col gap-3">
-      {isPageLoad ? (
-        <StepSection label={verb} shimmer={waiting}>
-          <PageChips pages={reading} />
-        </StepSection>
-      ) : (
-        <>
-          <StepSection label={verb} shimmer={waiting}>
-            {rawArg && (
-              <div className="flex flex-wrap gap-1.5">
-                <Chip icon={kind === 'search' ? <span className="shrink-0 text-[var(--ink-muted)]"><StepIcon kind="search" size={12} /></span> : undefined}>
-                  {rawArg}
-                </Chip>
-              </div>
-            )}
-          </StepSection>
-          {pages.length > 0 && (
-            <StepSection label="Reading sources">
-              <PageChips pages={pages} />
-            </StepSection>
-          )}
-        </>
-      )}
-
-      {step.result && <div className="text-[13.5px] leading-[1.5] text-[var(--ink-soft)]">{step.result}</div>}
-    </div>
+    <ScriptCard
+      filename={scriptFilename(step.args)}
+      isActive={isActive}
+      onOpen={scriptId && onOpenScript ? () => onOpenScript(scriptId) : undefined}
+    />
   )
 }
 
@@ -956,50 +912,125 @@ function TraceRow({
   )
 }
 
-/* A tool step that folds. Open = the full card (what it did, where, and the
-   sources it read); folded = one line, "Searching “langchain valuation”", with
-   a chevron. The default follows the agent: the step running right now is
-   open and every step behind it is folded, so the trace stays a short list of
-   sentences while the live step shows its working. A click is the user's own
-   say and sticks — it is not undone when the step finishes or the next one
-   starts. */
+/* A tool step that folds. The whole title line is the control — the sentence,
+   not just the chevron — and it answers a hover or press by turning teal, the
+   same as the "View steps" line above the card.
+
+   Folded, the title is the one-line summary ("Searching “langchain valuation”");
+   open, it becomes the longer label ("Searching through the Internet") over the
+   step's chips and the sources it read. The swap is a short fade and the body
+   opens on `grid-template-rows` (the same trick as the card's own collapse), so
+   it grows to its real height with no measuring.
+
+   The default follows the agent: the step running right now is open and every
+   step behind it is folded, so the trace stays a short list of sentences while
+   the live step shows its working. A click is the user's own say and sticks —
+   it is not undone when the step finishes or the next one starts. */
 function CollapsibleStep({ step, live }: { step: ToolStep; live: boolean }) {
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const open = userOpen ?? live
-  const { short, arg } = singleStepInfo(step.tool, step.args)
 
-  if (open) {
-    return (
-      <div className="relative">
-        <ToolRowContent step={step} live={live} />
-        <button
-          type="button"
-          aria-label="Collapse step"
-          aria-expanded
-          onClick={() => setUserOpen(false)}
-          className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
-        >
-          <ChevronDown size={16} className="rotate-180" />
-        </button>
-      </div>
-    )
-  }
+  // Swap animation is armed only after mount, so rows that are simply drawn
+  // (a history reload, a step landing) do not fade in a second time.
+  const [armed, setArmed] = useState(false)
+  useEffect(() => setArmed(true), [])
+
+  const { kind, verb, short, arg } = singleStepInfo(step.tool, step.args)
+  const pages = step.results ?? []
+  const waiting = live && pages.length === 0
+  const rawArg = typeof arg === 'string' ? arg.replace(/^\u201C|\u201D$/g, '') : undefined
+
+  // The sites a retrieval landed on — what a trace can say that a bare "Searching"
+  // cannot. A page load shows the page it was asked for until the result names it.
+  const isPageLoad = kind === 'page' && typeof step.args?.url === 'string'
+  const reading: ToolResultPage[] =
+    pages.length > 0 ? pages : isPageLoad ? [{ title: '', url: step.args.url }] : []
+
+  const hover =
+    'transition-colors duration-150 group-hover:text-[var(--teal)] group-active:text-[var(--teal-hover)] group-focus-visible:text-[var(--teal)]'
+
   return (
-    <button
-      type="button"
-      aria-expanded={false}
-      onClick={() => setUserOpen(true)}
-      className="group flex w-full items-center gap-3 text-left"
-    >
-      <span className="min-w-0 flex-1 truncate text-[14.5px] leading-[1.45] text-[var(--ink)]">
-        {short}
-        {arg && <span className="text-[var(--ink-soft)]"> {arg}</span>}
-      </span>
-      <ChevronDown
-        size={16}
-        className="shrink-0 text-[var(--ink-muted)] transition-colors group-hover:text-[var(--ink)]"
-      />
-    </button>
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setUserOpen(!open)}
+        className="group flex w-full cursor-pointer items-start justify-between gap-3 text-left outline-none"
+      >
+        <span
+          key={open ? 'label' : 'summary'}
+          className={`min-w-0 flex-1 text-[14.5px] leading-[1.45] ${hover} ${
+            armed ? 'animate-in fade-in duration-200 motion-reduce:animate-none' : ''
+          } ${
+            open
+              ? waiting
+                ? 'omni-shimmer-text-accent'
+                : 'text-[var(--ink-soft)]'
+              : 'truncate text-[var(--ink)]'
+          }`}
+        >
+          {open ? (
+            verb
+          ) : (
+            <>
+              {short}
+              {arg && <span className={`${hover} text-[var(--ink-soft)]`}> {arg}</span>}
+            </>
+          )}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`mt-[2.5px] shrink-0 text-[var(--ink-muted)] transition-[transform,color] duration-200 group-hover:text-[var(--teal)] group-active:text-[var(--teal-hover)] ${
+            open ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      <div
+        className="grid"
+        style={{
+          gridTemplateRows: open ? '1fr' : '0fr',
+          opacity: open ? 1 : 0,
+          // The height moves slowly and softly; the opacity is quicker, so a
+          // closing body is already gone before the box finishes shrinking.
+          transition: 'grid-template-rows 280ms cubic-bezier(0.4,0,0.2,1), opacity 200ms ease',
+        }}
+        aria-hidden={!open}
+        inert={!open}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="flex min-w-0 flex-col gap-3 pt-2">
+            {isPageLoad ? (
+              <PageChips pages={reading} />
+            ) : (
+              <>
+                {rawArg && (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip
+                      icon={
+                        kind === 'search' ? (
+                          <span className="shrink-0 text-[var(--ink-muted)]">
+                            <StepIcon kind="search" size={12} />
+                          </span>
+                        ) : undefined
+                      }
+                    >
+                      {rawArg}
+                    </Chip>
+                  </div>
+                )}
+                {pages.length > 0 && (
+                  <StepSection label="Reading sources">
+                    <PageChips pages={pages} />
+                  </StepSection>
+                )}
+              </>
+            )}
+            {step.result && <div className="text-[13.5px] leading-[1.5] text-[var(--ink-soft)]">{step.result}</div>}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1042,7 +1073,7 @@ function TimelineRow({
     // `i` that function uses for the very same step.
     const scriptId = isCode && idPrefix ? `${idPrefix}-script-${item.stepIndex}` : undefined
     content = isCode ? (
-      <ToolRowContent step={item.step} isActive={isActive} live={live} scriptId={scriptId} onOpenScript={onOpenScript} />
+      <ToolRowContent step={item.step} isActive={isActive} scriptId={scriptId} onOpenScript={onOpenScript} />
     ) : (
       <CollapsibleStep step={item.step} live={live} />
     )
@@ -1052,20 +1083,6 @@ function TimelineRow({
     <TraceRow bullet={bullet} connectTop={connectTop} connectBottom={connectBottom}>
       {content}
     </TraceRow>
-  )
-}
-
-/* The live indicator: the indeterminate sweep, pinned to the card's top edge
-   (the card clips it to its rounded corners) so "still working" sits on the
-   card itself rather than as a bar inside it. Indeterminate on purpose: the
-   agent cannot report a percentage, so the bar must not imply one. The
-   wrapper does the positioning because `.omni-sweep-rail` sets its own
-   `position`, which an absolute utility on the rail itself would not beat. */
-function SweepRail() {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-0">
-      <div className="omni-sweep-rail" />
-    </div>
   )
 }
 
@@ -1222,7 +1239,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
       // text that is about to arrive — a skeleton of the shape, not a spinner
       // in an empty box.
       <div className="omni-trace mb-6 flex flex-col">
-        <SweepRail />
         <div className="px-5">
           <LiveRow label={liveLabel} chevron={false} open={open} onToggle={() => setOpen((v) => !v)} />
         </div>
@@ -1294,7 +1310,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
             : ''
         }
       >
-        {thinking && <SweepRail />}
 
         {/* The collapsing body. `grid-template-rows: 0fr → 1fr` rather than a
             measured max-height: it animates to the row's real height with no

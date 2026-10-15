@@ -1166,7 +1166,6 @@
   border: 1px solid var(--line);
   border-radius: 16px;
   overflow: hidden;
-  position: relative;
 }
 
 /* ── Controls ─────────────────────────────────────────────────────────── */
@@ -1331,11 +1330,6 @@
 /* The indeterminate progress sweep on a live trace card. A short bright
    segment crossing a dim rail — it says "working" without implying a
    percentage the agent cannot actually report. */
-@keyframes omni-sweep {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(360%); }
-}
-
 @keyframes omni-soft-pulse {
   0%, 100% { opacity: 0.45; }
   50% { opacity: 0.9; }
@@ -1358,24 +1352,6 @@
 .omni-drift { animation: omni-drift 22s ease-in-out infinite; }
 .omni-drift-slow { animation: omni-drift 28s ease-in-out infinite reverse; }
 
-.omni-sweep-rail {
-  position: relative;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--line);
-  overflow: hidden;
-}
-
-.omni-sweep-rail::after {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 28%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent, var(--teal), transparent);
-  animation: omni-sweep 1500ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
-}
-
 /* Streaming caret, parked at the end of the answer's last block. `.omni-caret`
    puts it on the element you name; `.omni-streaming` puts it on whichever
    child happens to be last right now, which is what a live answer needs —
@@ -1396,7 +1372,6 @@
   .omni-drift,
   .omni-drift-slow,
   .omni-rise,
-  .omni-sweep-rail::after,
   .omni-caret::after,
   .omni-streaming > *:last-child::after {
     animation: none;
