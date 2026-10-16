@@ -1028,8 +1028,9 @@
    left to right, on a loop. Unlike `.omni-shimmer-text-accent` (a faint
    brightening of an already-teal label) this one has a real band you can
    watch pass, which is what says "still going" without anything spinning.
-   Kept restrained: the highlight is a wide, soft band at 60% teal rather than
-   full teal, and a pass takes three seconds. The tile is twice the box and the
+   Kept restrained: a pass takes three seconds and the band is wide with soft
+   edges, but it is full teal over a lighter grey so it reads in the light
+   theme. The tile is twice the box and the
    keyframes travel exactly one tile, so the loop has no seam. */
 @keyframes omni-flow {
   from { background-position: 100% center; }
@@ -1037,13 +1038,17 @@
 }
 
 .omni-flow-text {
+  /* A lighter grey than body-muted text, so the teal band has something to
+     stand out against in the light theme (muted-on-muted was too faint to see).
+     Still above 3:1 on the page ground. */
+  --flow-base: color-mix(in srgb, var(--ink-muted) 40%, var(--ink-faint));
   background: linear-gradient(
     90deg,
-    var(--ink-muted) 0%,
-    var(--ink-muted) 30%,
-    color-mix(in srgb, var(--teal) 60%, var(--ink-muted)) 50%,
-    var(--ink-muted) 70%,
-    var(--ink-muted) 100%
+    var(--flow-base) 0%,
+    var(--flow-base) 28%,
+    var(--teal) 50%,
+    var(--flow-base) 72%,
+    var(--flow-base) 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
@@ -1215,6 +1220,27 @@
 .omni-pill:hover {
   border-color: var(--teal);
   color: var(--teal);
+}
+
+/* An icon-only pill: a fixed 30px circle. Its own class rather than `px-0
+   py-0 w-[30px]` on `.omni-pill`, because `.omni-pill` is unlayered CSS and
+   beats Tailwind's (layered) utilities — the utilities lost, the 13px side
+   padding stayed, and a 30px button was left with a 4px-wide content box that
+   squashed its icon to a dot. */
+.omni-pill-icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* A pill that floats over scrolling content (the thread's Share / options
+   buttons on mobile): a near-opaque page-coloured fill with a light blur, so
+   the text moving under it is covered rather than showing through. */
+.omni-pill-float {
+  background: color-mix(in srgb, var(--background) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .omni-pill-solid {

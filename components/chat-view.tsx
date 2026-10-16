@@ -2795,18 +2795,36 @@ export function ChatView({
             new-thread button already holds the top-right corner, so these sit
             just inside it. Not shown on a shared page someone else is reading,
             or before the thread has anything in it. */}
-        {!readOnly && messages.length > 0 && (
-          <ThreadActions
-            threadId={threadId}
-            title={title}
-            canShare={!isLocked && !isVoiceThread}
-            generating={isLoading}
-            onShare={() => setShareOpen(true)}
-            onRenamed={setTitle}
-            onDeleted={onNewSearch}
-            className={isMobile ? 'fixed right-14 top-3 z-40' : 'absolute right-4 top-3 z-30'}
-          />
-        )}
+        {!readOnly && messages.length > 0 && (() => {
+          const actions = (
+            <ThreadActions
+              threadId={threadId}
+              title={title}
+              canShare={!isLocked && !isVoiceThread}
+              generating={isLoading}
+              onShare={() => setShareOpen(true)}
+              onRenamed={setTitle}
+              onDeleted={onNewSearch}
+              className={isMobile ? 'fixed right-14 top-3 z-40' : undefined}
+            />
+          )
+          // Mobile floats the buttons over the thread (the corner is shared with
+          // the new-thread button). Desktop gives them a bar of their own above
+          // the scroll area instead: absolutely positioned over it, they sat on
+          // top of whatever text scrolled up beneath them, and with the report
+          // panel open — the column squeezed to 38% — that was most of the line.
+          // The scroll area ends at the bar's lower edge, softened by a short
+          // fade so text is not sliced off.
+          return isMobile ? actions : (
+            <div className="relative z-30 flex h-12 shrink-0 items-center justify-end px-4">
+              {actions}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-full h-5 bg-gradient-to-b from-[var(--background)] to-transparent"
+              />
+            </div>
+          )
+        })()}
         <PublishDialog
           isOpen={!!publishReport}
           onClose={() => setPublishReport(null)}
@@ -2836,7 +2854,11 @@ export function ChatView({
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-20 sm:px-10 sm:pt-16">
+        <div ref={scrollRef} className={`omni-thread-scroll custom-scrollbar flex-1 overflow-y-auto px-4 sm:px-10 ${
+            // The overlay clearance below is only needed when the buttons float
+            // over the thread; on desktop they have a bar of their own (above).
+            !readOnly && !isMobile && messages.length > 0 ? 'pt-4' : 'pt-20 sm:pt-16'
+          }`}>
           {/* ── Reading column + sources rail ─────────────────────────────
               One column, wider than a chat's: the answer body is set at 17px
               and wants ~68 characters a line, and the question headings above

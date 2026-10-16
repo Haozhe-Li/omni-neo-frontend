@@ -119,7 +119,7 @@ export function ThreadActions({ threadId, title, onShare, canShare, generating =
         {canShare && (
           <button
             onClick={startShare}
-            className="omni-pill gap-1.5 px-3.5 py-1.5 text-[12.5px]"
+            className="omni-pill omni-pill-float gap-1.5 px-3.5 py-1.5 text-[12.5px]"
             title="Share conversation"
           >
             <Share size={13} strokeWidth={2} />
@@ -129,7 +129,7 @@ export function ThreadActions({ threadId, title, onShare, canShare, generating =
         <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
-              className="omni-pill h-[30px] w-[30px] justify-center px-0 py-0 data-[state=open]:border-[var(--teal)]"
+              className="omni-pill omni-pill-icon omni-pill-float data-[state=open]:border-[var(--teal)]"
               title="Conversation options"
               aria-label="Conversation options"
             >
