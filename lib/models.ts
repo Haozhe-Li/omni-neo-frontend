@@ -18,8 +18,9 @@ export interface ChatModelInfo {
   /**
    * Credits per turn. Not shown in the picker — kept because it mirrors
    * `MODE_CREDIT_COST` on the backend, which is what actually bills, and
-   * `creditsFor` reads it. `best` is billed at 3 when the turn carries an
-   * image, because the backend reroutes those to Luna.
+   * `creditsFor` reads it. `best` is a router and is billed as the model it
+   * routes to (see `serving_model` in core/chat_models.py): Luna today, so 3.
+   * It goes back to 1 when the fine-tune takes its text path again.
    */
   credits: number
   requiresAuth: boolean
@@ -41,7 +42,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
     id: 'best',
     label: 'Best',
     desc: 'Automatically routes to the best model for your prompt',
-    credits: 1,
+    credits: 3,
     requiresAuth: false,
     acceptsImages: true,
   },
@@ -111,13 +112,10 @@ export function isModelLocked(id: ChatModelId, isSignedIn: boolean): boolean {
   return getModel(id).requiresAuth && !isSignedIn
 }
 
-/** What one turn costs, given whether the user is sending an image. */
-export function creditsFor(id: ChatModelId, hasImage = false): number {
-  const m = getModel(id)
-  // `best` routes image turns to Luna, and the user pays for the model that
-  // actually ran. Mirrors `_charge_key` in core/routers/chat.py.
-  if (hasImage && m.id === 'best') return 3
-  return m.credits
+/** What one turn costs. Image turns cost the same today: `best` routes both
+ *  its text and image paths to Luna. */
+export function creditsFor(id: ChatModelId): number {
+  return getModel(id).credits
 }
 
 // Only shown for a model with `acceptsImages: false`; none is listed today.
