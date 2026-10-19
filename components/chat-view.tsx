@@ -16,7 +16,6 @@ import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel, activePanelItem } from '@/components/artifact-panel'
 import { SourcesRail } from '@/components/source-rail'
-import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
@@ -1386,10 +1385,6 @@ export function ChatView({
   const [followUpsPending, setFollowUpsPending] = useState(false)
 
   const [activeTurn, setActiveTurn] = useState<number | null>(null)
-
-  // The rail caps its height and hides its scrollbar, so without this a long
-  // source list ends in a hard cut through whichever card the cap lands on.
-  const railFade = useEdgeFade<HTMLElement>()
 
   useEffect(() => {
     const el = scrollRef.current
@@ -3454,17 +3449,7 @@ export function ChatView({
               had: host, credibility, and the passage the answer drew on.
               Stands down while an open report is showing its own. */}
           {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
-            <aside
-              ref={railFade.ref}
-              style={railFade.style}
-              // The framed list scrolls inside its own frame, so the rail only
-              // scrolls as a whole while a claim check has taken it over.
-              className={`omni-thread-rail sticky top-6 flex-col gap-2.5 ${
-                checkSourceState
-                  ? 'omni-hide-scrollbar omni-edge-fade max-h-[calc(100dvh-170px)] overflow-y-auto pb-6'
-                  : 'pb-6'
-              }`}
-            >
+            <aside className="omni-thread-rail sticky top-6 flex-col pb-6">
               <SourcesRail
                 cited={turnSources.cited}
                 unused={turnSources.unused}
@@ -3472,7 +3457,8 @@ export function ChatView({
                 checkSource={checkSourceState}
                 onDismissCheck={() => setCheckSourceState(null)}
                 compact
-                framed
+                // The frame scrolls its own list under a fixed title bar.
+                maxHeight="calc(100dvh - 170px)"
               />
             </aside>
           )}

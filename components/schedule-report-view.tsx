@@ -18,7 +18,6 @@ import { MarkdownBlogView } from '@/components/markdown-blog-view'
 import { SourcesRail } from '@/components/source-rail'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { PublishDialog } from '@/components/publish-dialog'
-import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
 
@@ -53,7 +52,6 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
   // container is wide enough for the rail (see `.omni-report-*` in globals.css).
   const [tab, setTab] = useState<'report' | 'sources'>('report')
   const containerRef = useRef<HTMLDivElement>(null)
-  const railFade = useEdgeFade<HTMLElement>()
 
   const validSources = useMemo(() => (sources || []).filter((s) => s?.url), [sources])
   const citedNumbers = useMemo(() => extractCitedNumbers(markdown), [markdown])
@@ -284,12 +282,8 @@ export function ScheduleReportView({ runId, taskName, title, markdown, sources, 
                 </div>
 
                 {hasSources && (
-                  <aside
-                    ref={railFade.ref}
-                    style={railFade.style}
-                    className="omni-report-rail omni-hide-scrollbar omni-edge-fade sticky top-6 max-h-[calc(100dvh-140px)] flex-col gap-2.5 overflow-y-auto pb-6"
-                  >
-                    <SourcesRail cited={cited} unused={unused} compact />
+                  <aside className="omni-report-rail sticky top-6 flex-col pb-6">
+                    <SourcesRail cited={cited} unused={unused} compact maxHeight="calc(100dvh - 140px)" />
                   </aside>
                 )}
               </div>

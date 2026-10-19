@@ -10,7 +10,6 @@ import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { PublishDialog } from '@/components/publish-dialog'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
 import { SourcesRail } from '@/components/source-rail'
-import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { ChartArtifact, ReportArtifact, CheckSourceState, Source } from '@/lib/types'
 
@@ -131,7 +130,6 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
   // once the container is wide enough for the rail (see `.omni-report-col-hidden`).
   const [tab, setTab] = useState<'report' | 'sources'>('report')
   const containerRef = useRef<HTMLElement>(null)
-  const railFade = useEdgeFade<HTMLElement>()
 
   const activeReportId = active?.report?.id
   // Prefer the caller's split; fall back to this report's own citations so the
@@ -812,11 +810,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
               {/* The reader's sources, in the thread's rail — same width, same
                   cards, same check-a-claim takeover. */}
               {viewMode === 'view' && canShowSources && (
-                <aside
-                  ref={railFade.ref}
-                  style={railFade.style}
-                  className="omni-report-rail omni-hide-scrollbar omni-edge-fade sticky top-0 max-h-[calc(100dvh-140px)] flex-col gap-2.5 overflow-y-auto pb-6"
-                >
+                <aside className="omni-report-rail sticky top-0 flex-col pb-6">
                   <SourcesRail
                     cited={rail.cited}
                     unused={rail.unused}
@@ -824,6 +818,7 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                     checkSource={checkSourceState}
                     onDismissCheck={onDismissCheckSource}
                     compact
+                    maxHeight="calc(100dvh - 140px)"
                   />
                 </aside>
               )}

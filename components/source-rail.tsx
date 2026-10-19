@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import { BookOpen, FileText, X } from 'lucide-react'
 import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { toast } from 'sonner'
@@ -143,6 +144,10 @@ function CardHead({ url }: { url: string }) {
   )
 }
 
+/** A row's box: flat, padded to the rail's or the inline list's scale. */
+const rowClass = (compact: boolean) =>
+  `flex flex-col text-left transition-colors hover:bg-[var(--sand)] ${compact ? 'px-4 py-3.5' : 'px-5 py-4'}`
+
 /**
  * One source beside an answer.
  *
@@ -151,7 +156,7 @@ function CardHead({ url }: { url: string }) {
  * in, when it is really the reading list the answer was built from. The host
  * and title are what a reader recognizes.
  */
-export function SourceCard({ source, compact = false, row = false }: { source: Source; compact?: boolean; row?: boolean }) {
+export function SourceCard({ source, compact = false }: { source: Source; compact?: boolean }) {
   const isDocument = !source.url
   const snippet = source.content ? cleanSnippet(source.content) : ''
 
@@ -181,14 +186,10 @@ export function SourceCard({ source, compact = false, row = false }: { source: S
     </>
   )
 
-  // A `row` is one entry inside a framed list (see `SourcesRail`'s `framed`):
-  // no card of its own — the frame carries the outline and the dividers carry
-  // the separation — so it is flat, full-bleed, and only tints on hover.
-  const className = row
-    ? `flex flex-col text-left transition-colors hover:bg-[var(--sand)] ${compact ? 'px-4 py-3.5' : 'px-5 py-4'}`
-    : `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)] ${
-        compact ? 'px-3.5 py-3' : 'px-5 py-4'
-      }`
+  // One entry inside a framed list (see `SourcesFrame`): no card of its own —
+  // the frame carries the outline and the dividers carry the separation — so it
+  // is flat, full-bleed, and only tints on hover.
+  const className = rowClass(compact)
 
   if (isDocument) {
     return (
@@ -257,9 +258,7 @@ function CheckMatchCard({ match, compact }: { match: CheckSourceMatch; compact: 
     </>
   )
 
-  const className = `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)] ${
-    compact ? 'px-3.5 py-3' : 'px-5 py-4'
-  }`
+  const className = rowClass(compact)
 
   if (isDocument) {
     return (
@@ -284,7 +283,7 @@ function CheckSkeleton({ delay }: { delay: number }) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards duration-300" style={{ animationDelay: `${delay}ms` }}>
       <div
-        className="flex flex-col gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] px-3.5 py-3"
+        className="flex flex-col gap-2 px-4 py-3.5"
         style={{ animation: `omni-soft-pulse 1300ms ease-in-out ${delay}ms infinite` }}
       >
         <div className="h-2 w-1/2 rounded-full bg-[var(--line-strong)]" />
@@ -294,6 +293,65 @@ function CheckSkeleton({ delay }: { delay: number }) {
     </div>
   )
 }
+
+/**
+ * The panel every source list sits in: a title bar over a divided list, the
+ * whole thing outlined and a shade lighter than the page so it stands off the
+ * ground. The list is the full set — with a `maxHeight` it scrolls inside the
+ * frame under a fixed title bar (the side rails), without one it simply
+ * grows (the full-width lists under an answer, where an inner scroll box in
+ * the page's own scroll would be a trap).
+ */
+function SourcesFrame({
+  title,
+  tone = 'plain',
+  action,
+  maxHeight,
+  lead,
+  children,
+}: {
+  title: ReactNode
+  /** `teal` for the claim-check view, so it reads as a different mode. */
+  tone?: 'plain' | 'teal'
+  /** Right end of the title bar: the count, or the check view's close button. */
+  action: ReactNode
+  maxHeight?: string
+  /** Sits above the list inside the scroll area (the claim being checked). */
+  lead?: ReactNode
+  children: ReactNode
+}) {
+  // Unconditional, so a short list (nothing to scroll) never gets a fade.
+  const fade = useEdgeFade<HTMLDivElement>()
+  return (
+    <section
+      className="flex min-h-0 flex-col overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[0_1px_2px_color-mix(in_srgb,var(--ink)_6%,transparent)]"
+      style={maxHeight ? { maxHeight } : undefined}
+    >
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-3">
+        <span
+          className={`omni-mono text-[11.5px] font-medium uppercase leading-[1.4] tracking-[0.12em] ${
+            tone === 'teal' ? 'text-[var(--teal)]' : 'text-[var(--ink-soft)]'
+          }`}
+        >
+          {title}
+        </span>
+        {action}
+      </header>
+      <div
+        ref={fade.ref}
+        style={fade.style}
+        className={`min-h-0 flex-1 ${maxHeight ? 'omni-hide-scrollbar omni-edge-fade overflow-y-auto overscroll-contain' : ''}`}
+      >
+        {lead}
+        <div className="divide-y divide-[var(--line)]">{children}</div>
+      </div>
+    </section>
+  )
+}
+
+const Count = ({ n }: { n: number }) => (
+  <span className="omni-mono text-[12px] font-medium tabular-nums text-[var(--ink-muted)]">{n}</span>
+)
 
 export interface SourcesRailProps {
   /** Sources this turn's answer cites. While `researching`, all of them. */
@@ -308,13 +366,11 @@ export interface SourcesRailProps {
   /** The rail is 248px wide; the inline fallback under an answer is not. */
   compact?: boolean
   /**
-   * One framed panel instead of a stack of separate cards: a title bar with
-   * the count over a divided list, the whole thing outlined and a shade lighter
-   * than the page so it stands off the ground. The list is the full set — it
-   * scrolls inside the frame (under a fixed title bar) rather than being cut to
-   * the first few.
+   * Cap the panel's height (any CSS length) and scroll the list inside it, under
+   * a fixed title bar. The side rails set this; the full-width lists under an
+   * answer leave it off and show everything.
    */
-  framed?: boolean
+  maxHeight?: string
 }
 
 /**
@@ -331,77 +387,75 @@ export function SourcesRail({
   checkSource,
   onDismissCheck,
   compact = false,
-  framed = false,
+  maxHeight,
 }: SourcesRailProps) {
-  // Unconditional, ahead of the early return below: hooks cannot follow it.
-  const listFade = useEdgeFade<HTMLDivElement>()
-
   if (checkSource) {
     const done = checkSource.status === 'done'
     const shown = done ? rankedMatches(checkSource.matches) : []
     return (
-      // `display: contents` keyed on the claim: header, quote and cards stay
-      // direct flex children of the rail (so the parent's `gap` still spaces
-      // them) while sharing one identity that changes with the claim —
-      // checking a second claim without dismissing the first unmounts and
-      // remounts this whole group, which is what replays the fade-in below
-      // instead of silently updating text in place.
-      <div key={checkSource.claim} className="contents">
+      // Keyed on the claim: checking a second claim without dismissing the
+      // first unmounts and remounts the whole frame, which is what replays the
+      // fade-in below instead of silently updating text in place.
+      <div key={checkSource.claim} className="animate-in fade-in duration-200">
         {/* ── Checking a claim ──────────────────────────────────────────────
-            The rail becomes a single-question view: here is the sentence, and
-            here is what says it. The header says which of the two states it
-            is in, and the X is the only way out — this is a mode, not a
-            filter on the list underneath. */}
-        <div className="flex items-center justify-between gap-2 animate-in fade-in duration-200">
-          <span className="omni-eyebrow text-[var(--teal)]">
-            {done ? (shown.length > 0 ? `Backed by ${shown.length}` : 'No direct match') : 'Checking sources'}
-          </span>
-          <button
-            onClick={onDismissCheck}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
-            title="Back to sources"
-          >
-            <X size={11} />
-          </button>
-        </div>
-
-        {/* The claim, quoted back — without it the passages below answer a
-            question the reader has to hold in their head. Set in the UI face
-            at body size, not the display serif: it sits directly above a
-            column of source cards, and a large italic serif line there read
-            as a pull-quote demanding to be read rather than as the reference
-            point for what follows. Clamped, because a long selection is
-            recognisable from its opening. */}
-        <div className="rounded-[16px] border border-[var(--teal-line)] bg-[var(--teal-tint)] px-3.5 py-3 animate-in fade-in duration-200">
-          <p
-            className={`line-clamp-3 text-[var(--ink-body)] ${
-              compact ? 'text-[12.5px] leading-[1.55]' : 'text-[14px] leading-[1.6]'
-            }`}
-          >
-            {checkSource.claim}
-          </p>
-        </div>
-
-        {checkSource.status === 'loading' ? (
-          [0, 1, 2].map((i) => <CheckSkeleton key={i} delay={i * 160} />)
-        ) : shown.length > 0 ? (
-          shown.map((m, i) => (
-            <div
-              key={`${m.url}-${i}`}
-              className="animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards duration-300"
-              style={{ animationDelay: `${i * 70}ms` }}
+            The same frame as the sources list, in a teal mode: the rail
+            becomes a single-question view — here is the sentence, here is what
+            says it. The title bar says which of the states it is in, and the X
+            is the only way out — this is a mode, not a filter on the list. */}
+        <SourcesFrame
+          tone="teal"
+          maxHeight={maxHeight}
+          title={done ? (shown.length > 0 ? `Backed by ${shown.length}` : 'No direct match') : 'Checking sources'}
+          action={
+            <button
+              onClick={onDismissCheck}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--line-strong)] text-[var(--ink-muted)] transition-colors hover:border-[var(--teal)] hover:text-[var(--teal)]"
+              title="Back to sources"
+              aria-label="Back to sources"
             >
-              <CheckMatchCard match={m} compact={compact} />
+              <X size={11} />
+            </button>
+          }
+          /* The claim, quoted back — without it the passages below answer a
+             question the reader has to hold in their head. Set in the UI face
+             at body size, not the display serif: it sits directly above a
+             column of source rows, and a large italic serif line there read as
+             a pull-quote demanding to be read rather than as the reference
+             point for what follows. Clamped, because a long selection is
+             recognisable from its opening. */
+          lead={
+            <div className="border-b border-[var(--teal-line)] bg-[var(--teal-tint)] px-4 py-3">
+              <p
+                className={`line-clamp-3 text-[var(--ink-body)] ${
+                  compact ? 'text-[12.5px] leading-[1.55]' : 'text-[14px] leading-[1.6]'
+                }`}
+              >
+                {checkSource.claim}
+              </p>
             </div>
-          ))
-        ) : (
-          <div className="flex flex-col items-center gap-3 rounded-[16px] border border-dashed border-[var(--line-strong)] px-4 py-7 text-center animate-in fade-in duration-300">
-            <BookOpen size={20} strokeWidth={1.25} className="text-[var(--ink-fainter)]" />
-            <p className="text-[12.5px] leading-[1.55] text-[var(--ink-muted)]">
-              Nothing here says this outright. It may combine several sources, or rest on general knowledge.
-            </p>
-          </div>
-        )}
+          }
+        >
+          {checkSource.status === 'loading' ? (
+            [0, 1, 2].map((i) => <CheckSkeleton key={i} delay={i * 160} />)
+          ) : shown.length > 0 ? (
+            shown.map((m, i) => (
+              <div
+                key={`${m.url}-${i}`}
+                className="animate-in fade-in slide-in-from-bottom-1 fill-mode-backwards duration-300"
+                style={{ animationDelay: `${i * 70}ms` }}
+              >
+                <CheckMatchCard match={m} compact={compact} />
+              </div>
+            ))
+          ) : (
+            <div className="flex flex-col items-center gap-3 px-4 py-7 text-center animate-in fade-in duration-300">
+              <BookOpen size={20} strokeWidth={1.25} className="text-[var(--ink-fainter)]" />
+              <p className="text-[12.5px] leading-[1.55] text-[var(--ink-muted)]">
+                Nothing here says this outright. It may combine several sources, or rest on general knowledge.
+              </p>
+            </div>
+          )}
+        </SourcesFrame>
       </div>
     )
   }
@@ -416,49 +470,17 @@ export function SourcesRail({
   // something to show as long as the turn fetched anything.
   const ranked = [...sortByTrust(cited), ...sortByTrust(unused)]
 
-  if (framed) {
-    return (
-      <section className="flex max-h-[calc(100dvh-170px)] min-h-0 flex-col overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[0_1px_2px_color-mix(in_srgb,var(--ink)_6%,transparent)]">
-        <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
-          <span className="omni-mono text-[11.5px] font-medium uppercase leading-[1.4] tracking-[0.12em] text-[var(--ink-soft)]">
-            {researching ? 'Reading' : 'Sources'}
-          </span>
-          <span className="omni-mono text-[12px] font-medium tabular-nums text-[var(--ink-muted)]">
-            {researching ? cited.length : ranked.length}
-          </span>
-        </header>
-        <div
-          ref={listFade.ref}
-          style={listFade.style}
-          className="omni-hide-scrollbar omni-edge-fade min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        >
-          <ul className="divide-y divide-[var(--line)]">
-            {ranked.map((s, i) => (
-              <li key={`${s.url || 'doc'}-${i}`}>
-                <SourceCard source={s} compact={compact} row />
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-    )
-  }
-
   return (
-    <>
-      {/* Not `.omni-eyebrow`: that class sets `color` in unlayered CSS, which a
-          text-colour utility cannot override, and its ink-faint (about 2.5:1 on
-          the page) is too pale for the one line that says how many sources
-          stand behind the answer. */}
-      <div className="omni-mono text-[11.5px] font-medium uppercase leading-[1.4] tracking-[0.12em] text-[var(--ink-soft)]">
-        {/* Mid-run the count is still climbing, so it reads as an activity
-            rather than a total. */}
-        {researching ? `Reading · ${cited.length}` : `Sources · ${ranked.length}`}
-      </div>
-
+    <SourcesFrame
+      maxHeight={maxHeight}
+      // Mid-run the count is still climbing, so it reads as an activity rather
+      // than a total.
+      title={researching ? 'Reading' : 'Sources'}
+      action={<Count n={researching ? cited.length : ranked.length} />}
+    >
       {ranked.map((s, i) => (
         <SourceCard key={`${s.url || 'doc'}-${i}`} source={s} compact={compact} />
       ))}
-    </>
+    </SourcesFrame>
   )
 }

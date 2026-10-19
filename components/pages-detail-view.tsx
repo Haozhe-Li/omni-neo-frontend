@@ -18,7 +18,6 @@ import { toast } from 'sonner'
 import { MarkdownBlogView } from '@/components/markdown-blog-view'
 import { SourcesRail } from '@/components/source-rail'
 import { usePagesShellControls } from '@/components/pages-shell'
-import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
 import { OmniMark } from '@/components/omni-mark'
@@ -58,7 +57,6 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
   // container is wide enough for the rail (see `.omni-report-*` in globals.css).
   const [tab, setTab] = useState<'article' | 'sources'>('article')
   const containerRef = useRef<HTMLDivElement>(null)
-  const railFade = useEdgeFade<HTMLElement>()
 
   // A stranger can't open a document someone uploaded into their own thread,
   // so a published page lists only the web sources.
@@ -584,12 +582,8 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
               </div>
 
               {hasSources && (
-                <aside
-                  ref={railFade.ref}
-                  style={railFade.style}
-                  className="omni-report-rail omni-hide-scrollbar omni-edge-fade sticky top-6 max-h-[calc(100dvh-140px)] flex-col gap-2.5 overflow-y-auto pb-6"
-                >
-                  <SourcesRail cited={cited} unused={unused} compact />
+                <aside className="omni-report-rail sticky top-6 flex-col pb-6">
+                  <SourcesRail cited={cited} unused={unused} compact maxHeight="calc(100dvh - 140px)" />
                 </aside>
               )}
             </div>
