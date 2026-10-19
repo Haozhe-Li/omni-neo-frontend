@@ -15,7 +15,7 @@ import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party-title'
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel, activePanelItem } from '@/components/artifact-panel'
-import { SourcesRail } from '@/components/source-rail'
+import { FixedRail, SourcesRail } from '@/components/source-rail'
 import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
@@ -2854,6 +2854,31 @@ export function ChatView({
             // over the thread; on desktop they have a bar of their own (above).
             !readOnly && !isMobile && messages.length > 0 ? 'pt-4' : 'pt-20 sm:pt-16'
           }`}>
+          {/* ── Sources rail ─────────────────────────────────────────────
+              The thread's one and only sources surface at this width, scoped
+              to the turn on screen and carrying the detail the old drawer had:
+              host, credibility, and the passage the answer drew on. Stands
+              down while an open report is showing its own. Held completely
+              still while the thread scrolls (see `FixedRail`); the grid below
+              still reserves the 248px column it hangs in. */}
+          {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
+            <FixedRail
+              railClass="omni-thread-rail"
+              maxWidth="max-w-[1120px]"
+            >
+              <SourcesRail
+                cited={turnSources.cited}
+                unused={turnSources.unused}
+                researching={turnSources.researching}
+                checkSource={checkSourceState}
+                onDismissCheck={() => setCheckSourceState(null)}
+                compact
+                // The frame scrolls its own list under a fixed title bar.
+                maxHeight="calc(100dvh - 170px)"
+              />
+            </FixedRail>
+          )}
+
           {/* ── Reading column + sources rail ─────────────────────────────
               One column, wider than a chat's: the answer body is set at 17px
               and wants ~68 characters a line, and the question headings above
@@ -3470,43 +3495,6 @@ export function ChatView({
               the last thing in the column. */}
           <div className="h-40 shrink-0" aria-hidden />
         </div>
-
-        {/* ── Sources rail ─────────────────────────────────────────────
-            The thread's one and only sources surface at this width, scoped to
-            the turn on screen and carrying the detail the old drawer had: host,
-            credibility, and the passage the answer drew on. Stands down while
-            an open report is showing its own.
-
-            Fixed, not sticky. It sits OUTSIDE the scroll area, over it, in the
-            same 1120px container the thread and the composer use, so it takes
-            no part in scrolling at all: a sticky rail still starts out of
-            place, then catches up as you scroll, and gets pushed up again as
-            the end of the thread passes. The grid inside the scroll area still
-            reserves the 248px column it hangs in (see `.omni-thread-grid`); this
-            only draws into it. The overlay lets clicks through everywhere but
-            the panel itself. */}
-        {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
-          <div
-            className={`omni-thread-fixed pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-10 ${
-              !readOnly && !isMobile && messages.length > 0 ? 'top-12' : 'top-0'
-            }`}
-          >
-            <div className="omni-thread-fixed-inner mx-auto h-full w-full max-w-[1120px] justify-end pt-6">
-              <aside className="pointer-events-auto w-[248px] shrink-0 self-start">
-                <SourcesRail
-                  cited={turnSources.cited}
-                  unused={turnSources.unused}
-                  researching={turnSources.researching}
-                  checkSource={checkSourceState}
-                  onDismissCheck={() => setCheckSourceState(null)}
-                  compact
-                  // The frame scrolls its own list under a fixed title bar.
-                  maxHeight="calc(100dvh - 170px)"
-                />
-              </aside>
-            </div>
-          </div>
-        )}
 
         {/* ── Follow-up composer ───────────────────────────────────────────
             Floating over a scrim rather than sitting behind a hard rule: the

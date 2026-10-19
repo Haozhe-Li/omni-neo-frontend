@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { MarkdownBlogView } from '@/components/markdown-blog-view'
-import { SourcesRail } from '@/components/source-rail'
+import { FixedRail, SourcesRail } from '@/components/source-rail'
 import { usePagesShellControls } from '@/components/pages-shell'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { Source } from '@/lib/types'
@@ -541,6 +541,17 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
       <div className="omni-report-scroll flex-1 overflow-y-auto custom-scrollbar">
         {viewMode === 'view' ? (
           <div className="px-4 py-8 sm:px-6 sm:py-10">
+            {/* Held completely still while the page scrolls (see `FixedRail`). */}
+            {hasSources && (
+              <FixedRail
+                railClass="omni-report-rail"
+                pullUp="-mt-8 mb-8 sm:-mt-10 sm:mb-10"
+                maxWidth="max-w-[1180px]"
+                top="pt-8 sm:pt-10"
+              >
+                <SourcesRail cited={cited} unused={unused} compact maxHeight="calc(100dvh - 140px)" />
+              </FixedRail>
+            )}
             {hasSources && (
               <div className="omni-report-tabs mx-auto mb-7 w-full max-w-[880px] items-center gap-5 border-b border-[var(--line)]">
                 <button
@@ -581,11 +592,6 @@ export function PagesDetailView({ id, title, markdown, author, publishedAt, tags
                 />
               </div>
 
-              {hasSources && (
-                <aside className="omni-report-rail sticky top-6 flex-col pb-6">
-                  <SourcesRail cited={cited} unused={unused} compact maxHeight="calc(100dvh - 140px)" />
-                </aside>
-              )}
             </div>
 
             {hasSources && tab === 'sources' && (

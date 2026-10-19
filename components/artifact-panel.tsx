@@ -9,7 +9,7 @@ import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
 import { PublishDialog } from '@/components/publish-dialog'
 import { TextSelectionMenu } from '@/components/text-selection-menu'
-import { SourcesRail } from '@/components/source-rail'
+import { FixedRail, SourcesRail } from '@/components/source-rail'
 import { extractCitedNumbers } from '@/lib/markdown'
 import type { ChartArtifact, ReportArtifact, CheckSourceState, Source } from '@/lib/types'
 
@@ -745,6 +745,23 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
           </div>
         ) : active.report ? (
           <>
+            {/* The reader's sources, in the thread's rail — same width, same
+                cards, same check-a-claim takeover, and held completely still
+                while the report scrolls (see `FixedRail`). */}
+            {viewMode === 'view' && canShowSources && (
+              <FixedRail railClass="omni-report-rail" maxWidth="max-w-[1180px]">
+                <SourcesRail
+                  cited={rail.cited}
+                  unused={rail.unused}
+                  researching={rail.researching}
+                  checkSource={checkSourceState}
+                  onDismissCheck={onDismissCheckSource}
+                  compact
+                  maxHeight="calc(100dvh - 140px)"
+                />
+              </FixedRail>
+            )}
+
             {/* Report / Sources tabs — only while the rail doesn't fit (the
                 class owns its own display; see globals.css). Same underline
                 tabs the thread uses per turn on a phone. */}
@@ -807,21 +824,6 @@ export function ArtifactPanel({ artifacts, reports, activeId, onSelect, onClose,
                 )}
               </article>
 
-              {/* The reader's sources, in the thread's rail — same width, same
-                  cards, same check-a-claim takeover. */}
-              {viewMode === 'view' && canShowSources && (
-                <aside className="omni-report-rail sticky top-0 flex-col pb-6">
-                  <SourcesRail
-                    cited={rail.cited}
-                    unused={rail.unused}
-                    researching={rail.researching}
-                    checkSource={checkSourceState}
-                    onDismissCheck={onDismissCheckSource}
-                    compact
-                    maxHeight="calc(100dvh - 140px)"
-                  />
-                </aside>
-              )}
             </div>
 
             {/* The same list, full width, when the tabs are what's showing. */}

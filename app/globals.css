@@ -1489,12 +1489,7 @@
   gap: 44px;
 }
 
-.omni-thread-fixed {
-  container-type: inline-size;
-  container-name: omni-thread-fixed;
-}
-
-.omni-thread-fixed-inner {
+.omni-thread-rail {
   display: none;
 }
 
@@ -1507,15 +1502,8 @@
     margin-left: 0;
     margin-right: 0;
   }
-}
 
-/* The same breakpoint for the fixed rail, which cannot ask the scroll area
-   (it lives outside it) and so measures its own overlay: a hair wider than the
-   grid's 1050px, because the overlay's width includes the scroll area's 10px
-   scrollbar. Never the reverse — the rail only appears where the grid has
-   reserved its column. */
-@container omni-thread-fixed (min-width: 1062px) {
-  .omni-thread-fixed-inner {
+  .omni-thread-rail {
     display: flex;
   }
 }

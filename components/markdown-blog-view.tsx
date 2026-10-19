@@ -8,13 +8,13 @@ import remarkMath from 'remark-math'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import rehypeRaw from 'rehype-raw'
-import { Copy, Check, ChevronDown, Download } from 'lucide-react'
+import { Copy, Check, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Components } from 'react-markdown'
 import { Mermaid } from '@/components/mermaid'
 import { InlineEcharts, InlineMap, CitationBadge, citationUrlTransform, resolveCitationSources } from '@/components/markdown-message'
 import type { Source } from '@/lib/types'
-import { SourceItem } from '@/components/source-item'
+import { SourcesRail } from '@/components/source-rail'
 import { extractCitedNumbers, partitionSources, preprocessMarkdown } from '@/lib/markdown'
 import { OmniMark } from '@/components/omni-mark'
 
@@ -232,7 +232,6 @@ export function MarkdownBlogView({
     () => partitionSources(sources, citedNumbers),
     [sources, citedNumbers]
   )
-  const [showUnused, setShowUnused] = useState(false)
 
   return (
     <div className={embedded ? 'bg-transparent' : 'blog-shell min-h-screen bg-background'}>
@@ -292,47 +291,11 @@ export function MarkdownBlogView({
               <div className="mt-12 border-t border-border/70 pt-8">
                 <h3 className="mb-6 text-xl font-semibold tracking-tight text-foreground">References</h3>
 
-                {sourcesSplit ? (
-                  <>
-                    <div className="flex flex-col gap-3">
-                      {usedSources.map(({ source, label }) => (
-                        <SourceItem key={label} source={source} index={label - 1} label={label} showNumber={false} />
-                      ))}
-                    </div>
-
-                    {unusedSources.length > 0 && (
-                      <div className="mt-5">
-                        <button
-                          type="button"
-                          onClick={() => setShowUnused((v) => !v)}
-                          className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showUnused ? 'rotate-180' : ''}`} />
-                          {unusedSources.length} more source{unusedSources.length === 1 ? '' : 's'} read but not cited
-                        </button>
-                        <div
-                          className={`grid transition-all duration-300 ease-in-out ${
-                            showUnused ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0'
-                          }`}
-                        >
-                          <div className="overflow-hidden">
-                            <div className="flex flex-col gap-3">
-                              {unusedSources.map(({ source, label }) => (
-                                <SourceItem key={label} source={source} index={label - 1} label={label} showNumber={false} />
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {sources.map((source, idx) => (
-                      <SourceItem key={idx} source={source} index={idx} showNumber={false} />
-                    ))}
-                  </div>
-                )}
+                {/* The same framed list as every other sources surface. */}
+                <SourcesRail
+                  cited={sourcesSplit ? usedSources.map((u) => u.source) : sources}
+                  unused={sourcesSplit ? unusedSources.map((u) => u.source) : []}
+                />
               </div>
             )}
           </section>

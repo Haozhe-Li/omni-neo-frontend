@@ -353,6 +353,54 @@ const Count = ({ n }: { n: number }) => (
   <span className="omni-mono text-[12px] font-medium tabular-nums text-[var(--ink-muted)]">{n}</span>
 )
 
+/**
+ * Holds a side rail perfectly still while its scroll area scrolls.
+ *
+ * A zero-height sticky strip, pinned to the top of the scroller, with the rail
+ * hanging off it. `position: sticky` on the rail itself is not enough — it
+ * starts at the grid's own offset, catches up to its `top` as you begin to
+ * scroll, and is pushed up again when the grid ends. The strip has none of
+ * those: `pullUp` cancels the scroller's top padding (or the padded wrapper it
+ * sits in), so the strip's natural position IS the top of the scrollport, and
+ * since it is a child of the scroller it shares the scroller's width, padding
+ * and container-query breakpoint, so the rail lines up with the 248px column
+ * the grid reserves for it with no measuring.
+ *
+ * Put it as the FIRST child of the element that carries the grid's padding.
+ */
+export function FixedRail({
+  railClass,
+  pullUp = '',
+  maxWidth,
+  top = '',
+  children,
+}: {
+  /** `omni-thread-rail` / `omni-report-rail`: shown only once the container is wide enough. */
+  railClass: string
+  /**
+   * Only when the strip sits inside a padded WRAPPER rather than directly in the
+   * scroller (Pages, scheduled reports): cancels that wrapper's top padding so
+   * the strip starts at the scroller's own top edge, and gives the space back
+   * below it so the content after it does not ride up — e.g. `-mt-8 mb-8`.
+   * When the padding is the scroller's own, leave it off: a sticky strip comes
+   * to rest at the scroller's content edge, which is already where the grid starts.
+   */
+  pullUp?: string
+  /** Width cap matching the grid's, e.g. `max-w-[1120px]`. */
+  maxWidth: string
+  /** Space above the panel, below the strip, e.g. `pt-8` — to line it up with the article's top. */
+  top?: string
+  children: ReactNode
+}) {
+  return (
+    <div className={`pointer-events-none sticky top-0 z-10 h-0 ${pullUp}`}>
+      <div className={`${railClass} mx-auto w-full ${maxWidth} justify-end ${top}`}>
+        <aside className="pointer-events-auto w-[248px] shrink-0 self-start">{children}</aside>
+      </div>
+    </div>
+  )
+}
+
 export interface SourcesRailProps {
   /** Sources this turn's answer cites. While `researching`, all of them. */
   cited: Source[]
