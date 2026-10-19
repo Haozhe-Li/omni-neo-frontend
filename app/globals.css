@@ -1489,7 +1489,12 @@
   gap: 44px;
 }
 
-.omni-thread-rail {
+.omni-thread-fixed {
+  container-type: inline-size;
+  container-name: omni-thread-fixed;
+}
+
+.omni-thread-fixed-inner {
   display: none;
 }
 
@@ -1502,13 +1507,20 @@
     margin-left: 0;
     margin-right: 0;
   }
+}
 
-  .omni-thread-rail {
+/* The same breakpoint for the fixed rail, which cannot ask the scroll area
+   (it lives outside it) and so measures its own overlay: a hair wider than the
+   grid's 1050px, because the overlay's width includes the scroll area's 10px
+   scrollbar. Never the reverse — the rail only appears where the grid has
+   reserved its column. */
+@container omni-thread-fixed (min-width: 1062px) {
+  .omni-thread-fixed-inner {
     display: flex;
   }
 }
 
-/* The narrow-width counterpart to `.omni-thread-rail`: the same source list,
+/* The narrow-width counterpart to the thread's side rail: the same source list,
    stacked under the answer once the rail's column no longer fits. Below 640px
    this steps aside too, for the phone sheet in chat-view.tsx (a fixed overlay,
    not a Tailwind display class, so it isn't toggled here) — a phone has no

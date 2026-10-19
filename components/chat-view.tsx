@@ -3443,25 +3443,6 @@ export function ChatView({
             {spacerH > 0 && <div ref={spacerRef} style={{ height: spacerH }} aria-hidden className="shrink-0" />}
           </div>
 
-          {/* ── Sources rail ─────────────────────────────────────────────
-              The thread's one and only sources surface at this width, scoped
-              to the turn on screen and carrying the detail the old drawer
-              had: host, credibility, and the passage the answer drew on.
-              Stands down while an open report is showing its own. */}
-          {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
-            <aside className="omni-thread-rail sticky top-6 flex-col pb-6">
-              <SourcesRail
-                cited={turnSources.cited}
-                unused={turnSources.unused}
-                researching={turnSources.researching}
-                checkSource={checkSourceState}
-                onDismissCheck={() => setCheckSourceState(null)}
-                compact
-                // The frame scrolls its own list under a fixed title bar.
-                maxHeight="calc(100dvh - 170px)"
-              />
-            </aside>
-          )}
           </div>
 
           {/* Between the rail's breakpoint and the phone-sheet one below (see
@@ -3489,6 +3470,43 @@ export function ChatView({
               the last thing in the column. */}
           <div className="h-40 shrink-0" aria-hidden />
         </div>
+
+        {/* ── Sources rail ─────────────────────────────────────────────
+            The thread's one and only sources surface at this width, scoped to
+            the turn on screen and carrying the detail the old drawer had: host,
+            credibility, and the passage the answer drew on. Stands down while
+            an open report is showing its own.
+
+            Fixed, not sticky. It sits OUTSIDE the scroll area, over it, in the
+            same 1120px container the thread and the composer use, so it takes
+            no part in scrolling at all: a sticky rail still starts out of
+            place, then catches up as you scroll, and gets pushed up again as
+            the end of the thread passes. The grid inside the scroll area still
+            reserves the 248px column it hangs in (see `.omni-thread-grid`); this
+            only draws into it. The overlay lets clicks through everywhere but
+            the panel itself. */}
+        {(hasTurnSources || checkSourceState) && !readerOwnsSources && (
+          <div
+            className={`omni-thread-fixed pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 sm:px-10 ${
+              !readOnly && !isMobile && messages.length > 0 ? 'top-12' : 'top-0'
+            }`}
+          >
+            <div className="omni-thread-fixed-inner mx-auto h-full w-full max-w-[1120px] justify-end pt-6">
+              <aside className="pointer-events-auto w-[248px] shrink-0 self-start">
+                <SourcesRail
+                  cited={turnSources.cited}
+                  unused={turnSources.unused}
+                  researching={turnSources.researching}
+                  checkSource={checkSourceState}
+                  onDismissCheck={() => setCheckSourceState(null)}
+                  compact
+                  // The frame scrolls its own list under a fixed title bar.
+                  maxHeight="calc(100dvh - 170px)"
+                />
+              </aside>
+            </div>
+          </div>
+        )}
 
         {/* ── Follow-up composer ───────────────────────────────────────────
             Floating over a scrim rather than sitting behind a hard rule: the
