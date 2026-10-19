@@ -400,7 +400,11 @@ export function SourcesRail({
 
   return (
     <>
-      <div className="omni-eyebrow">
+      {/* Not `.omni-eyebrow`: that class sets `color` in unlayered CSS, which a
+          text-colour utility cannot override, and its ink-faint (about 2.5:1 on
+          the page) is too pale for the one line that says how many sources
+          stand behind the answer. */}
+      <div className="omni-mono text-[11.5px] font-medium uppercase leading-[1.4] tracking-[0.12em] text-[var(--ink-soft)]">
         {/* Mid-run the count is still climbing, so it reads as an activity
             rather than a total. */}
         {researching ? `Reading · ${cited.length}` : `Sources · ${ranked.length}`}
