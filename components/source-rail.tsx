@@ -420,8 +420,10 @@ export function SourcesRail({
     return (
       <section className="flex max-h-[calc(100dvh-170px)] min-h-0 flex-col overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[0_1px_2px_color-mix(in_srgb,var(--ink)_6%,transparent)]">
         <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
-          <span className="omni-eyebrow">{researching ? 'Reading' : 'Sources'}</span>
-          <span className="omni-mono text-[11px] tabular-nums text-[var(--ink-faint)]">
+          <span className="omni-mono text-[11.5px] font-medium uppercase leading-[1.4] tracking-[0.12em] text-[var(--ink-soft)]">
+            {researching ? 'Reading' : 'Sources'}
+          </span>
+          <span className="omni-mono text-[12px] font-medium tabular-nums text-[var(--ink-muted)]">
             {researching ? cited.length : ranked.length}
           </span>
         </header>
