@@ -1,6 +1,7 @@
 'use client'
 
 import { BookOpen, FileText, X } from 'lucide-react'
+import { useEdgeFade } from '@/hooks/useEdgeFade'
 import { toast } from 'sonner'
 import type { CheckSourceMatch, CheckSourceState, Source } from '@/lib/types'
 import { canHighlightExcerpt, highlightExcerpt, type HighlightSegment } from '@/lib/highlight'
@@ -150,7 +151,7 @@ function CardHead({ url }: { url: string }) {
  * in, when it is really the reading list the answer was built from. The host
  * and title are what a reader recognizes.
  */
-export function SourceCard({ source, compact = false }: { source: Source; compact?: boolean }) {
+export function SourceCard({ source, compact = false, row = false }: { source: Source; compact?: boolean; row?: boolean }) {
   const isDocument = !source.url
   const snippet = source.content ? cleanSnippet(source.content) : ''
 
@@ -180,9 +181,14 @@ export function SourceCard({ source, compact = false }: { source: Source; compac
     </>
   )
 
-  const className = `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)] ${
-    compact ? 'px-3.5 py-3' : 'px-5 py-4'
-  }`
+  // A `row` is one entry inside a framed list (see `SourcesRail`'s `framed`):
+  // no card of its own — the frame carries the outline and the dividers carry
+  // the separation — so it is flat, full-bleed, and only tints on hover.
+  const className = row
+    ? `flex flex-col text-left transition-colors hover:bg-[var(--sand)] ${compact ? 'px-4 py-3.5' : 'px-5 py-4'}`
+    : `flex flex-col rounded-[16px] border border-[var(--line)] bg-[var(--paper-raised)] text-left transition-colors hover:border-[var(--teal)] hover:bg-[var(--teal-tint)] ${
+        compact ? 'px-3.5 py-3' : 'px-5 py-4'
+      }`
 
   if (isDocument) {
     return (
@@ -301,6 +307,14 @@ export interface SourcesRailProps {
   onDismissCheck?: () => void
   /** The rail is 248px wide; the inline fallback under an answer is not. */
   compact?: boolean
+  /**
+   * One framed panel instead of a stack of separate cards: a title bar with
+   * the count over a divided list, the whole thing outlined and a shade lighter
+   * than the page so it stands off the ground. The list is the full set — it
+   * scrolls inside the frame (under a fixed title bar) rather than being cut to
+   * the first few.
+   */
+  framed?: boolean
 }
 
 /**
@@ -317,7 +331,11 @@ export function SourcesRail({
   checkSource,
   onDismissCheck,
   compact = false,
+  framed = false,
 }: SourcesRailProps) {
+  // Unconditional, ahead of the early return below: hooks cannot follow it.
+  const listFade = useEdgeFade<HTMLDivElement>()
+
   if (checkSource) {
     const done = checkSource.status === 'done'
     const shown = done ? rankedMatches(checkSource.matches) : []
@@ -397,6 +415,32 @@ export function SourcesRail({
   // read a pile of sources. Ranking instead of hiding means there's always
   // something to show as long as the turn fetched anything.
   const ranked = [...sortByTrust(cited), ...sortByTrust(unused)]
+
+  if (framed) {
+    return (
+      <section className="flex max-h-[calc(100dvh-170px)] min-h-0 flex-col overflow-hidden rounded-[18px] border border-[var(--line-strong)] bg-[var(--paper-raised)] shadow-[0_1px_2px_color-mix(in_srgb,var(--ink)_6%,transparent)]">
+        <header className="flex shrink-0 items-center justify-between border-b border-[var(--line)] px-4 py-3">
+          <span className="omni-eyebrow">{researching ? 'Reading' : 'Sources'}</span>
+          <span className="omni-mono text-[11px] tabular-nums text-[var(--ink-faint)]">
+            {researching ? cited.length : ranked.length}
+          </span>
+        </header>
+        <div
+          ref={listFade.ref}
+          style={listFade.style}
+          className="omni-hide-scrollbar omni-edge-fade min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <ul className="divide-y divide-[var(--line)]">
+            {ranked.map((s, i) => (
+              <li key={`${s.url || 'doc'}-${i}`}>
+                <SourceCard source={s} compact={compact} row />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <>

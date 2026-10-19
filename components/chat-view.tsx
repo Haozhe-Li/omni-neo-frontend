@@ -3457,7 +3457,13 @@ export function ChatView({
             <aside
               ref={railFade.ref}
               style={railFade.style}
-              className="omni-thread-rail omni-hide-scrollbar omni-edge-fade sticky top-6 max-h-[calc(100dvh-170px)] flex-col gap-2.5 overflow-y-auto pb-6"
+              // The framed list scrolls inside its own frame, so the rail only
+              // scrolls as a whole while a claim check has taken it over.
+              className={`omni-thread-rail sticky top-6 flex-col gap-2.5 ${
+                checkSourceState
+                  ? 'omni-hide-scrollbar omni-edge-fade max-h-[calc(100dvh-170px)] overflow-y-auto pb-6'
+                  : 'pb-6'
+              }`}
             >
               <SourcesRail
                 cited={turnSources.cited}
@@ -3466,6 +3472,7 @@ export function ChatView({
                 checkSource={checkSourceState}
                 onDismissCheck={() => setCheckSourceState(null)}
                 compact
+                framed
               />
             </aside>
           )}
