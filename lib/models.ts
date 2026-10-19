@@ -17,12 +17,12 @@ export interface ChatModelInfo {
   desc: string
   /**
    * Credits per turn. Not shown in the picker — kept because it mirrors
-   * `MODE_CREDIT_COST` on the backend, which is what actually bills, and
-   * `creditsFor` reads it. `best` is a router and is billed as the model it
-   * routes to (see `serving_model` in core/chat_models.py): Luna today, so 3.
-   * It goes back to 1 when the fine-tune takes its text path again.
+   * `MODE_CREDIT_COST` on the backend, which is what actually bills. `null`
+   * for `best`: it is a router (core/routing.py) with no price of its own —
+   * each turn is billed as the model it lands on, Rix (free) for a thread's
+   * first five exchanges and Luna (3) after that or when a skill is requested.
    */
-  credits: number
+  credits: number | null
   requiresAuth: boolean
   /**
    * False for a text-only entry: an image turn would 400 server-side, so the
@@ -42,7 +42,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
     id: 'best',
     label: 'Best',
     desc: 'Automatically routes to the best model for your prompt',
-    credits: 3,
+    credits: null,
     requiresAuth: false,
     acceptsImages: true,
   },
@@ -50,7 +50,7 @@ export const CHAT_MODELS: ChatModelInfo[] = [
     id: 'rix',
     label: 'Rix',
     desc: "Omni's experimental in-house model",
-    credits: 1,
+    credits: 0,
     requiresAuth: false,
     // Gemma 4 is multimodal, W&B serves the adapter with vision, and the
     // training set includes image turns. Mirrors `accepts_images` in
@@ -112,9 +112,8 @@ export function isModelLocked(id: ChatModelId, isSignedIn: boolean): boolean {
   return getModel(id).requiresAuth && !isSignedIn
 }
 
-/** What one turn costs. Image turns cost the same today: `best` routes both
- *  its text and image paths to Luna. */
-export function creditsFor(id: ChatModelId): number {
+/** What one turn costs on a concrete model; null for `best`, which routes. */
+export function creditsFor(id: ChatModelId): number | null {
   return getModel(id).credits
 }
 
