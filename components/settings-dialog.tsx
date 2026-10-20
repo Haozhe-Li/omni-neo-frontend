@@ -1445,9 +1445,10 @@ function UsageSection() {
                 limit={usage.month_limit}
                 resetLabel={`Renews on ${resetMonthLabel}`}
             />
-            {/* Hidden entirely for the ~everyone who has never redeemed a code:
-                an empty third bar would just raise a question it can't answer. */}
-            {usage.extra_granted > 0 && (
+            {/* Hidden for anyone who has never redeemed a code (an empty third
+                bar would just raise a question it can't answer) and once the
+                balance is fully spent (a 100% bar has nothing left to show). */}
+            {usage.extra_granted > 0 && usage.extra_remaining > 0 && (
                 <UsageMeter
                     label="Extra credits"
                     used={usage.extra_used}
