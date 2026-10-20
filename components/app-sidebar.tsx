@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, LogOut, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, AudioLines, type LucideIcon } from 'lucide-react'
+import { MessageSquare, Plus, Settings, Trash2, PanelLeftClose, PanelLeftOpen, Newspaper, History, Telescope, X, Loader2, User, CalendarClock, Lock, BarChart3, ArrowUpRight, AudioLines, type LucideIcon } from 'lucide-react'
 import { OmniMark, useMarkBurst } from '@/components/omni-mark'
-import { SignUpButton, useAuth, useUser, useClerk } from '@clerk/nextjs'
+import { SignUpButton, useAuth, useUser } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useApi } from '@/hooks/useApi'
 import type { TodoItem } from '@/lib/types'
@@ -112,7 +112,6 @@ export function AppSidebar({
     const pathname = usePathname()
     const { isSignedIn } = useAuth()
     const { user } = useUser()
-    const clerk = useClerk()
     const { fetchWithAuth } = useApi()
     const [mounted, setMounted] = useState(false)
     // Same hidden scrollbar as the sources rail, so the same soft edge — a
@@ -784,16 +783,6 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                         </span>
                     )}
                 </a>
-                <NavRow
-                    icon={Settings}
-                    label="Settings"
-                    active={isSettingsOpen}
-                    expanded={isExpanded}
-                    onClick={() => {
-                        openSettings('general')
-                        if (isMobile && onToggle) onToggle()
-                    }}
-                />
             </nav>
 
             {/* ── Recent ─────────────────────────────────────────────────────
@@ -881,51 +870,79 @@ const isSearchPending = !!trimmedSearchQuery && (debouncedSearchQuery !== trimme
                 Just the account now — the collapse toggle moved up to the
                 mark, where it is one control instead of a second row. */}
             <div className="mt-auto flex flex-col gap-1 px-3.5 pb-5 pt-3">
-                {/* Auth row — only after mount, to avoid an SSR/client mismatch */}
+                {/* Account row — only after mount, to avoid an SSR/client mismatch.
+                    The avatar (and name) open Settings; expanded, a gear sits at
+                    the right edge as the explicit affordance. Collapsed, the
+                    avatar alone is the entry point. Sign-out lives in Settings. */}
                 {mounted && (
                     isSignedIn ? (
-                        <div className={`group flex items-center gap-2.5 px-2 pt-1.5 ${isExpanded ? '' : 'justify-center'}`}>
-                            {user?.imageUrl ? (
-                                <img
-                                    src={user.imageUrl}
-                                    alt=""
-                                    className="h-[26px] w-[26px] shrink-0 rounded-full ring-1 ring-[var(--line-strong)]"
-                                />
-                            ) : (
-                                <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--clay)] text-[12px] text-[var(--clay-ink)]">
-                                    {(user?.firstName?.[0] ?? 'A').toUpperCase()}
-                                </div>
-                            )}
-                            {isExpanded && (
-                                <>
-                                    <span className="flex-1 truncate text-[14px] text-[var(--ink-muted)]">
+                        <div className={`flex items-center gap-1 ${isExpanded ? '' : 'justify-center'}`}>
+                            <button
+                                onClick={() => {
+                                    openSettings('general')
+                                    if (isMobile && onToggle) onToggle()
+                                }}
+                                title="Settings"
+                                className={`group flex min-w-0 items-center gap-2.5 rounded-full px-2 py-1.5 text-left transition-colors hover:bg-[var(--sand-deep)] ${isExpanded ? 'flex-1' : ''}`}
+                            >
+                                {user?.imageUrl ? (
+                                    <img
+                                        src={user.imageUrl}
+                                        alt=""
+                                        className="h-[26px] w-[26px] shrink-0 rounded-full ring-1 ring-[var(--line-strong)]"
+                                    />
+                                ) : (
+                                    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--clay)] text-[12px] text-[var(--clay-ink)]">
+                                        {(user?.firstName?.[0] ?? 'A').toUpperCase()}
+                                    </div>
+                                )}
+                                {isExpanded && (
+                                    <span className="flex-1 truncate text-[14px] text-[var(--ink-muted)] group-hover:text-[var(--ink)]">
                                         {user?.firstName || 'Account'}
                                     </span>
-                                    <button
-                                        onClick={async () => {
-                                            await clerk.signOut()
-                                            if (typeof window !== 'undefined') window.location.reload()
-                                        }}
-                                        className="shrink-0 rounded-full p-1 text-[var(--ink-fainter)] opacity-0 transition-all hover:text-[var(--destructive)] group-hover:opacity-100"
-                                        title="Sign out"
-                                    >
-                                        <LogOut size={13} />
-                                    </button>
-                                </>
+                                )}
+                            </button>
+                            {isExpanded && (
+                                <button
+                                    onClick={() => {
+                                        openSettings('general')
+                                        if (isMobile && onToggle) onToggle()
+                                    }}
+                                    aria-label="Settings"
+                                    title="Settings"
+                                    className={`flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[var(--sand-deep)] hover:text-[var(--ink)] ${isSettingsOpen ? 'text-[var(--teal)]' : 'text-[var(--ink-muted)]'}`}
+                                >
+                                    <Settings size={16} strokeWidth={1.5} />
+                                </button>
                             )}
                         </div>
                     ) : (
-                        <SignUpButton mode="modal">
-                            <button
-                                className={`flex items-center gap-2.5 px-2 pt-1.5 text-[14px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)] ${isExpanded ? '' : 'justify-center'}`}
-                                title="Get started to sync your history and settings"
-                            >
-                                <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--clay)] text-[var(--clay-ink)]">
-                                    <User size={12} />
-                                </span>
-                                {isExpanded && <span>Sign in</span>}
-                            </button>
-                        </SignUpButton>
+                        <div className={`flex items-center gap-1 ${isExpanded ? '' : 'justify-center'}`}>
+                            <SignUpButton mode="modal">
+                                <button
+                                    className={`flex items-center gap-2.5 rounded-full px-2 py-1.5 text-[14px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)] ${isExpanded ? 'flex-1' : ''}`}
+                                    title="Get started to sync your history and settings"
+                                >
+                                    <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--clay)] text-[var(--clay-ink)]">
+                                        <User size={12} />
+                                    </span>
+                                    {isExpanded && <span>Sign in</span>}
+                                </button>
+                            </SignUpButton>
+                            {isExpanded && (
+                                <button
+                                    onClick={() => {
+                                        openSettings('general')
+                                        if (isMobile && onToggle) onToggle()
+                                    }}
+                                    aria-label="Settings"
+                                    title="Settings"
+                                    className={`flex size-8 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-[var(--sand-deep)] hover:text-[var(--ink)] ${isSettingsOpen ? 'text-[var(--teal)]' : 'text-[var(--ink-muted)]'}`}
+                                >
+                                    <Settings size={16} strokeWidth={1.5} />
+                                </button>
+                            )}
+                        </div>
                     )
                 )}
             </div>
