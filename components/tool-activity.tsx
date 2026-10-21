@@ -829,17 +829,21 @@ function HeaderRow({
   open,
   onToggle,
   shimmer = false,
+  labelOnly = false,
 }: {
   label: HeaderLabelSpec
   open: boolean
   onToggle: () => void
   /** The label flows with the teal sweep — the turn is still running. */
   shimmer?: boolean
+  /** Just the label: no "View steps" affordance, and nothing to click. */
+  labelOnly?: boolean
 }) {
   return (
     <button
       onClick={onToggle}
-      className="group flex max-w-full items-baseline gap-2 pl-0.5 text-[13.5px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)]"
+      disabled={labelOnly}
+      className={`group flex max-w-full items-baseline gap-2 pl-0.5 text-[13.5px] text-[var(--ink-muted)] transition-colors ${labelOnly ? 'cursor-default' : 'hover:text-[var(--teal)]'}`}
     >
       <span className="mb-px h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ink-fainter)]" />
       {'text' in label ? (
@@ -847,15 +851,19 @@ function HeaderRow({
       ) : (
         <CountHeaderLabel prefix={label.prefix} count={label.count} suffix={label.suffix} />
       )}
-      <span className="shrink-0 text-[var(--ink-fainter)]">·</span>
-      <span className="shrink-0">{open ? 'Hide steps' : 'View steps'}</span>
-      {/* A 6px corner rather than a chevron glyph: at this size an icon-set
-          chevron is mostly antialiasing, and this rotates cleanly. */}
-      <span
-        aria-hidden
-        className="mt-0.5 h-1.5 w-1.5 shrink-0 border-l-[1.5px] border-t-[1.5px] border-[var(--ink-fainter)] transition-transform"
-        style={{ transform: `rotate(${open ? 45 : 135}deg)` }}
-      />
+      {!labelOnly && (
+        <>
+          <span className="shrink-0 text-[var(--ink-fainter)]">·</span>
+          <span className="shrink-0">{open ? 'Hide steps' : 'View steps'}</span>
+          {/* A 6px corner rather than a chevron glyph: at this size an icon-set
+              chevron is mostly antialiasing, and this rotates cleanly. */}
+          <span
+            aria-hidden
+            className="mt-0.5 h-1.5 w-1.5 shrink-0 border-l-[1.5px] border-t-[1.5px] border-[var(--ink-fainter)] transition-transform"
+            style={{ transform: `rotate(${open ? 45 : 135}deg)` }}
+          />
+        </>
+      )}
     </button>
   )
 }
@@ -1273,7 +1281,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   const [open, setOpen] = useState(false)
   // Live turns are always expanded and have nothing to toggle; `open` only
   // governs a finished trace.
-  const bodyOpen = isLive || open
+  const bodyOpen = research && researchRunning ? false : isLive || open
 
   // The collapse is pure CSS now (`grid-template-rows: 0fr → 1fr` on the body
   // below), so there is no height to measure, no ref, and no rAF dance — and
@@ -1330,6 +1338,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
           <HeaderRow
             label={researchRunning ? researchLabel : showLiveRow && !research ? workingLabel : doneLabel}
             shimmer={researchRunning}
+            labelOnly={researchRunning}
             open={open}
             onToggle={() => setOpen((v) => !v)}
           />
