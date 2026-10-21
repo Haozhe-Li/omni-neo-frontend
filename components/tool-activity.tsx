@@ -5,8 +5,7 @@ import { useState, useEffect, useLayoutEffect, useRef, type ReactNode } from 're
 // one optical weight against the reasoning dot beside them; these are the few
 // places that still want a set icon.
 import { ChevronDown, ChevronRight, Blocks, Code2 } from 'lucide-react'
-import { isReasoningStep, type TimelineStep, type ToolStep, type ToolResultPage, type ReasoningStep, type ReportArtifact, type TodoItem } from '@/lib/types'
-import { ResearchProgress } from '@/components/research-progress'
+import { isReasoningStep, type TimelineStep, type ToolStep, type ToolResultPage, type ReasoningStep, type ReportArtifact } from '@/lib/types'
 import { SafeLink } from '@/components/safe-link'
 import { MarkdownMessage } from '@/components/markdown-message'
 
@@ -71,52 +70,6 @@ function skillOf(step: ToolStep): string | null {
   if (typeof fp !== 'string' || !fp.includes('/skills/')) return null
   const m = fp.match(/\/skills\/([^/]+)\//)
   return m ? m[1] : null
-}
-
-// ── deep research mode ──────────────────────────────────────────────────────
-// Skills that run a plan → gather → synthesize workflow. When one of these is
-// loaded the step trace folds into a single "Researching" line and the agent's
-// `write_todos` plan is shown as a checklist under it instead (see
-// `ResearchProgress`) — the plan is the story of a long run, the individual
-// searches are reference.
-const RESEARCH_SKILLS = new Set(['web-research'])
-
-/** What chat-view hands `ToolActivity` for a turn that loaded a research skill. */
-export interface ResearchView {
-  todos: TodoItem[]
-  /** The answer has started — every todo is drawn completed. */
-  done: boolean
-  /**
-   * Draw the checklist in THIS card. A turn's steps can be split across several
-   * `ToolActivity` cards when text interleaves with tool calls; only one of
-   * them owns the checklist so it never appears twice.
-   */
-  showList: boolean
-}
-
-/**
- * Whether a turn's steps loaded a research skill, and its latest plan.
- * `write_todos` replaces the whole list on every call, so the newest call wins.
- */
-export function researchStateFromSteps(
-  steps: TimelineStep[] | undefined,
-): { active: boolean; todos: TodoItem[] } {
-  let active = false
-  let todos: TodoItem[] = []
-  for (const s of steps ?? []) {
-    if (isReasoningStep(s)) continue
-    const sk = skillOf(s)
-    if (sk && RESEARCH_SKILLS.has(sk)) active = true
-    if (isTodo(s.tool) && Array.isArray(s.args?.todos)) {
-      todos = s.args.todos
-        .filter((t: any) => t && typeof t.content === 'string')
-        .map((t: any) => ({
-          content: t.content,
-          status: t.status === 'completed' || t.status === 'in_progress' ? t.status : 'pending',
-        }))
-    }
-  }
-  return { active, todos }
 }
 
 // ── presentation ────────────────────────────────────────────────────────────
@@ -824,18 +777,7 @@ type HeaderLabelSpec = { text: string } | { prefix: string; count: number; suffi
 // The summary line: everything that has already finished, collapsed to a
 // count. It owns the chevron whenever it is present, because the chevron
 // always rides the topmost row.
-function HeaderRow({
-  label,
-  open,
-  onToggle,
-  shimmer = false,
-}: {
-  label: HeaderLabelSpec
-  open: boolean
-  onToggle: () => void
-  /** The label flows with the teal sweep — the turn is still running. */
-  shimmer?: boolean
-}) {
+function HeaderRow({ label, open, onToggle }: { label: HeaderLabelSpec; open: boolean; onToggle: () => void }) {
   return (
     <button
       onClick={onToggle}
@@ -843,7 +785,7 @@ function HeaderRow({
     >
       <span className="mb-px h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ink-fainter)]" />
       {'text' in label ? (
-        <HeaderLabel text={label.text} shimmer={shimmer} />
+        <HeaderLabel text={label.text} shimmer={false} />
       ) : (
         <CountHeaderLabel prefix={label.prefix} count={label.count} suffix={label.suffix} />
       )}
@@ -1175,15 +1117,9 @@ interface ToolActivityProps {
    * instead.
    */
   continuesHiddenTurn?: boolean
-  /**
-   * Set when this turn loaded a research skill. The trace folds into one
-   * "Researching" line (collapsed even while live) and the plan's checklist is
-   * drawn underneath — see `ResearchView`.
-   */
-  research?: ResearchView
 }
 
-export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPrefix, onOpenScript, continuesHiddenTurn, research }: ToolActivityProps) {
+export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPrefix, onOpenScript, continuesHiddenTurn }: ToolActivityProps) {
   // Thinking phase = streaming with no answer yet. The header shimmers and
   // previews live activity for exactly this phase, then settles once an
   // answer starts.
@@ -1230,12 +1166,8 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // The finished trace's summary is a plain total — every row in the card, notes
   // included — so the number on the line is the number of rows it opens onto.
   const doneLabel: HeaderLabelSpec = {
-    text: research ? `Researched · ${items.length} step${items.length === 1 ? '' : 's'}` : `${items.length} step${items.length === 1 ? '' : 's'}`,
+    text: `${items.length} step${items.length === 1 ? '' : 's'}`,
   }
-  // Until the answer starts the line just says "Researching", shimmering; the
-  // step count only matters once the work is reference material.
-  const researchRunning = !!research && thinking
-  const researchLabel: HeaderLabelSpec = { text: 'Researching' }
   // Present tense while the turn is still running, and the count demoted to a
   // subordinate clause: this line describes the state of the WHOLE turn, the
   // live row below it being one detail of that state. Leading with "Completed"
@@ -1258,10 +1190,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   // turn into a closed box. The summary line and the collapse are what a
   // FINISHED trace gets, when the steps have become reference rather than
   // news.
-  //
-  // A research turn is the exception: its checklist carries the live story, so
-  // the trace stays folded into the one summary line the whole way through.
-  const isLive = showLiveRow && !research
+  const isLive = showLiveRow
   const showCompletedRow = !isLive
 
   // ── expand/collapse ────────────────────────────────────────────────────
@@ -1327,12 +1256,7 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
           {/* Present tense for exactly as long as a live row sits below it —
               including while an artifact is still being drafted, where the
               turn's steps are done but the turn plainly isn't. */}
-          <HeaderRow
-            label={researchRunning ? researchLabel : showLiveRow && !research ? workingLabel : doneLabel}
-            shimmer={researchRunning}
-            open={open}
-            onToggle={() => setOpen((v) => !v)}
-          />
+          <HeaderRow label={showLiveRow ? workingLabel : doneLabel} open={open} onToggle={() => setOpen((v) => !v)} />
         </div>
       )}
 
@@ -1394,8 +1318,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
           </div>
         )}
       </div>
-
-      {research?.showList && <ResearchProgress todos={research.todos} done={research.done} />}
     </div>
   )
 }
