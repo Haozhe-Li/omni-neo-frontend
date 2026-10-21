@@ -1,77 +1,102 @@
 'use client'
 
-import { Check, MoreHorizontal, Circle, ClipboardList, Sparkles } from 'lucide-react'
+import { Check } from 'lucide-react'
 import type { TodoItem } from '@/lib/types'
 
 interface ResearchProgressProps {
+  /** The agent's latest `write_todos` plan, as streamed. */
   todos: TodoItem[]
-  isComplete?: boolean
+  /**
+   * The answer has landed. Every item is drawn as completed from here on,
+   * whatever the last `write_todos` call said: the agent rarely sends a final
+   * "all done" update before it starts writing, so the plan would otherwise
+   * freeze half-ticked under a finished answer.
+   */
+  done: boolean
 }
 
-export function ResearchProgress({ todos, isComplete }: ResearchProgressProps) {
-  // Empty state
-  if (todos.length === 0) {
-    if (isComplete) {
-      return (
-        <div className="animate-fade-up text-center py-8">
-          <p className="text-sm text-[var(--muted-foreground)]">No research tasks recorded.</p>
-        </div>
-      )
-    }
-    // Still streaming — show minimal skeleton
-    return (
-      <div className="animate-fade-up py-2 space-y-3">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="flex items-center gap-3">
-            <div className="h-2 w-2 rounded-full bg-[var(--line-strong)] animate-pulse" />
-            <div className="h-2 rounded-full bg-[var(--line)] animate-pulse" style={{ width: `${60 - i * 15}%` }} />
-          </div>
-        ))}
-      </div>
-    )
-  }
+// How long one item's tick lags the one above it when `done` flips, so the
+// list checks itself off top to bottom instead of snapping all at once.
+const TICK_STAGGER_MS = 70
+
+export function ResearchProgress({ todos, done }: ResearchProgressProps) {
+  const items: TodoItem[] = done ? todos.map((t) => ({ ...t, status: 'completed' })) : todos
 
   return (
-    <div className="animate-fade-up">
-      <div className="flex flex-col gap-2">
-        {todos.map((todo, idx) => (
-          <TodoItemRow key={idx} todo={todo} />
-        ))}
-      </div>
+    <div className="omni-trace mt-3 px-5 py-4" style={{ animation: 'omni-rise 240ms ease both' }}>
+      {items.length === 0 ? (
+        // The skill has loaded but the plan hasn't arrived yet.
+        <div className="space-y-3" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="h-4 w-4 shrink-0 rounded-full bg-[var(--line)]" style={{ animation: 'omni-soft-pulse 1.4s ease-in-out infinite' }} />
+              <div
+                className="h-2.5 rounded-full bg-[var(--line)]"
+                style={{ width: `${68 - i * 16}%`, animation: 'omni-soft-pulse 1.4s ease-in-out infinite' }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {items.map((todo, i) => (
+            <TodoRow key={i} todo={todo} delayMs={done ? i * TICK_STAGGER_MS : 0} />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
-function TodoItemRow({ todo }: { todo: TodoItem }) {
-  const isCompleted = todo.status === 'completed'
-  const isInProgress = todo.status === 'in_progress'
-
+function TodoRow({ todo, delayMs }: { todo: TodoItem; delayMs: number }) {
+  const status = todo.status
   return (
-    <div className={`
-            group flex items-start gap-3 rounded-[14px] p-2 transition-all duration-200
-            ${isInProgress ? 'bg-[var(--trace)]' : 'hover:bg-[var(--sand)]'}
-        `}>
-      <div className={`mt-0.5 flex-shrink-0 transition-colors duration-300 ${isInProgress ? 'text-[var(--accent)]' : (isCompleted ? 'text-[var(--muted-foreground)]' : 'text-[var(--border)]')}`}>
-        <StatusIcon status={todo.status} />
-      </div>
-      <span className={`text-sm leading-relaxed transition-colors duration-300 ${isCompleted ? 'text-[var(--muted-foreground)] line-through opacity-80' : 'text-[var(--foreground)]'}`}>
+    <li className="flex items-start gap-3">
+      <span className="mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center">
+        <StatusIcon status={status} delayMs={delayMs} />
+      </span>
+      <span
+        className={`text-[14px] leading-[1.5] transition-colors duration-300 ${
+          status === 'in_progress'
+            ? 'font-medium text-[var(--ink)]'
+            : status === 'completed'
+              ? 'text-[var(--ink-muted)]'
+              : 'text-[var(--ink-faint)]'
+        }`}
+        style={{ transitionDelay: `${delayMs}ms` }}
+      >
         {todo.content}
       </span>
-    </div>
+    </li>
   )
 }
 
-function StatusIcon({ status }: { status: TodoItem['status'] }) {
-  switch (status) {
-    case 'completed':
-      return <Check className="h-4 w-4" />
-    case 'in_progress':
-      return <MoreHorizontal className="h-4 w-4 animate-pulse" />
-    case 'pending':
-      return <Circle className="h-4 w-4" />
-    default:
-      return <Circle className="h-4 w-4" />
+// Three states, three shapes — a filled tick, a ring with a travelling arc,
+// and an empty ring — so the state reads without relying on colour alone.
+function StatusIcon({ status, delayMs }: { status: TodoItem['status']; delayMs: number }) {
+  if (status === 'completed') {
+    return (
+      <span
+        className="flex h-4 w-4 items-center justify-center rounded-full bg-[var(--teal)] text-[var(--paper)] transition-colors duration-300"
+        style={{ transitionDelay: `${delayMs}ms` }}
+      >
+        <Check size={10} strokeWidth={3} />
+      </span>
+    )
   }
+  if (status === 'in_progress') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-[var(--teal)]" aria-label="In progress">
+        <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1.5" />
+        <path
+          d="M8 1.75a6.25 6.25 0 0 1 6.25 6.25"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          style={{ transformOrigin: '8px 8px', animation: 'omni-spin 0.9s linear infinite' }}
+        />
+      </svg>
+    )
+  }
+  return <span className="h-4 w-4 rounded-full border-[1.5px] border-[var(--ink-fainter)]" aria-label="Pending" />
 }
-
-

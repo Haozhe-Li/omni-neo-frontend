@@ -16,7 +16,7 @@ import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party
 import { WidgetCards } from '@/components/widget-cards'
 import { ArtifactPanel, activePanelItem } from '@/components/artifact-panel'
 import { FixedRail, SourcesRail } from '@/components/source-rail'
-import { ToolActivity, scriptReportsFromSteps } from '@/components/tool-activity'
+import { ToolActivity, scriptReportsFromSteps, researchStateFromSteps, type ResearchView } from '@/components/tool-activity'
 import { AnswerFooter } from '@/components/answer-footer'
 import { MarkdownMessage } from '@/components/markdown-message'
 import { ShareToPagesMenu } from '@/components/share-to-pages-menu'
@@ -3029,6 +3029,17 @@ export function ChatView({
                     // (which announces "a new turn is starting") and just lets the
                     // streaming caret carry that feeling instead.
                     const continuesHiddenTurn = messages[i - 1]?.role === 'user' && !!messages[i - 1]?.hidden
+                    // A turn that loaded a research skill folds its trace into one
+                    // "Researching" line and shows the agent's todo plan as a
+                    // checklist instead. The checklist is drawn by exactly one
+                    // ToolActivity card (`showList`) — the first tool block, since
+                    // text can split a turn's steps across several — and ticks
+                    // itself fully off once any answer text exists.
+                    const researchState = researchStateFromSteps(msg.steps)
+                    const researchDone = !!(msg.content || '').trim()
+                    const firstToolsIdx = msg.blocks?.findIndex((b) => b.type === 'tools') ?? -1
+                    const researchFor = (showList: boolean): ResearchView | undefined =>
+                      researchState.active ? { todos: researchState.todos, done: researchDone, showList } : undefined
                     const tSources = sourcesByTurn.get(i)
                     const tSourceCount = (tSources?.cited.length ?? 0) + (tSources?.unused.length ?? 0)
                     const turnTab = mobileTab[i] ?? 'answer'
@@ -3061,6 +3072,7 @@ export function ChatView({
                                     idPrefix={`m${i}-b0`}
                                     onOpenScript={openPanel}
                                     continuesHiddenTurn={continuesHiddenTurn}
+                                    research={researchFor(firstToolsIdx === 0)}
                                   />
                                 )
                               })()
@@ -3074,6 +3086,7 @@ export function ChatView({
                                   idPrefix={`m${i}`}
                                   onOpenScript={openPanel}
                                   continuesHiddenTurn={continuesHiddenTurn}
+                                  research={researchFor(true)}
                                 />
                               )
                             )}
@@ -3135,6 +3148,7 @@ export function ChatView({
                                     idPrefix={`m${i}-b${bi}`}
                                     onOpenScript={openPanel}
                                     continuesHiddenTurn={continuesHiddenTurn}
+                                    research={researchFor(bi === firstToolsIdx)}
                                   />
                                 </div>
                               )
@@ -3200,6 +3214,7 @@ export function ChatView({
                                 idPrefix={`m${i}`}
                                 onOpenScript={openPanel}
                                 continuesHiddenTurn={continuesHiddenTurn}
+                                research={researchFor(true)}
                               />
                             </div>
                             {/* answer text and inline report/textblock cards, in source order */}
