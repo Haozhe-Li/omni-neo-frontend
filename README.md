@@ -1,4 +1,4 @@
-# Omni Knows Neo
+# Omni Knows Neo Frontend
 
 Advanced AI-powered research agent with a beautiful, Perplexity-inspired interface.
 
