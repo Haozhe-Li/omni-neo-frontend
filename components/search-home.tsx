@@ -10,6 +10,8 @@ import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
 import { useSourceUrls, MAX_SOURCE_URLS, extractUrls, lastCompletedUrlToken } from '@/hooks/useSourceUrls'
 import { SourceUrlArea } from '@/components/source-url-area'
+import { usePastedContent } from '@/hooks/usePastedContent'
+import { PastedContentArea } from '@/components/pasted-content-area'
 import { AddUrlPopover } from '@/components/add-url-popover'
 import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 import { ModelPicker } from '@/components/model-picker'
@@ -92,7 +94,7 @@ const SUGGESTED_QUERIES = [
 ]
 
 interface SearchHomeProps {
-  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[], skill?: SkillId | null, sourceUrls?: string[]) => void
+  onSearch: (query: string, threadId: string, attachedFileIds?: string[], attachedFileMeta?: { id: string; name: string; type: string }[], skill?: SkillId | null, sourceUrls?: string[], pastedContents?: string[]) => void
   isAutoDetecting?: boolean
   onToggleSidebar?: () => void
   /** Mobile-only header button. Resets the composer's own staged state
@@ -196,6 +198,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
 
   const { attachedFiles, uploadFile, removeFile, clearFiles } = useFileUpload()
   const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
+  const { pastedItems, removePasted, clearPasted, interceptPaste } = usePastedContent()
   const sourceUrlsCountRef = useRef(0)
   sourceUrlsCountRef.current = sourceUrls.length
 
@@ -503,7 +506,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
     const showingSuggestion = !query && !isRecording && !sstPrompt
 
     // Trigger fill animation for suggestion submit; handleFillEnd will do the actual search
-    if (showingSuggestion && attachedFiles.length === 0 && sourceUrls.length === 0) {
+    if (showingSuggestion && attachedFiles.length === 0 && sourceUrls.length === 0 && pastedItems.length === 0) {
       triggerFillAnimation(getActiveSuggestion(), true)
       return
     }
@@ -522,17 +525,21 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       : readyFileMeta.length === 1 ? 'Please read this file'
       : sourceUrls.length > 1 ? 'Please read these sources'
       : sourceUrls.length === 1 ? 'Please read this source'
+      : pastedItems.length > 1 ? 'Please read these pasted texts'
+      : pastedItems.length === 1 ? 'Please read this pasted text'
       : ''
     )
 
-    if (effectiveQuery || attachedFiles.length > 0 || sourceUrls.length > 0) {
+    if (effectiveQuery || attachedFiles.length > 0 || sourceUrls.length > 0 || pastedItems.length > 0) {
       if (readyFileIds.length > 0) {
         console.log('[SearchHome] handleSubmit — attached_file_ids:', readyFileIds)
       }
       const submittedSourceUrls = sourceUrls.map((e) => e.url)
-      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined, activeSkill || undefined, submittedSourceUrls.length > 0 ? submittedSourceUrls : undefined)
+      const submittedPasted = pastedItems.map((p) => p.text)
+      onSearch(effectiveQuery, activeThreadId, readyFileIds.length > 0 ? readyFileIds : undefined, readyFileMeta.length > 0 ? readyFileMeta : undefined, activeSkill || undefined, submittedSourceUrls.length > 0 ? submittedSourceUrls : undefined, submittedPasted.length > 0 ? submittedPasted : undefined)
       clearFiles()
       clearUrls()
+      clearPasted()
       setActiveSkill(null)
       setQuery('')
       if (inputRef.current) {
@@ -918,9 +925,11 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
       uploadFilesFromList(files)
       return
     }
+    // A long or code-like paste becomes a chip and is never scanned for links.
+    if (interceptPaste(e)) return
     const text = e.clipboardData?.getData('text')
     if (text) autoDetectUrls(extractUrls(text))
-  }, [uploadFilesFromList, autoDetectUrls])
+  }, [uploadFilesFromList, autoDetectUrls, interceptPaste])
 
   return (
     <main className="relative h-full flex flex-col items-center justify-between px-4 overflow-y-auto overflow-x-hidden pt-14 md:pt-0">
@@ -1084,9 +1093,10 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                 }
               `}
             >
-              {(attachedFiles.length > 0 || sourceUrls.length > 0) && (
+              {(attachedFiles.length > 0 || sourceUrls.length > 0 || pastedItems.length > 0) && (
                 <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200 space-y-2">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
+                  <PastedContentArea items={pastedItems} onRemove={removePasted} />
                   <SourceUrlArea urls={sourceUrls} onRemove={removeUrl} />
                 </div>
               )}
@@ -1148,7 +1158,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       {fillAnim.text}
                     </div>
                   </div>
-                ) : !query && !isRecording && !sstPrompt && (attachedFiles.length > 0 || sourceUrls.length > 0) ? (
+                ) : !query && !isRecording && !sstPrompt && (attachedFiles.length > 0 || sourceUrls.length > 0 || pastedItems.length > 0) ? (
                   <div
                     className="absolute inset-0 pointer-events-none px-6 pt-3 pb-2 text-[19px] leading-[1.5] overflow-hidden"
                     aria-hidden="true"
@@ -1157,7 +1167,9 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                       {attachedFiles.length > 1 ? 'Please read these files'
                         : attachedFiles.length === 1 ? 'Please read this file'
                         : sourceUrls.length > 1 ? 'Please read these sources'
-                        : 'Please read this source'}
+                        : sourceUrls.length === 1 ? 'Please read this source'
+                        : pastedItems.length > 1 ? 'Please read these pasted texts'
+                        : 'Please read this pasted text'}
                     </span>
                   </div>
                 ) : !query && !isRecording && !sstPrompt ? (() => {
@@ -1361,7 +1373,7 @@ export function SearchHome({ onSearch, isAutoDetecting = false, onToggleSidebar,
                     {isSstPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className={`h-4 w-4 ${isRecording ? 'animate-pulse' : ''}`} />}
                   </button>
 
-                  {!query && !isRecording && !sstPrompt && attachedFiles.length === 0 && sourceUrls.length === 0 ? (
+                  {!query && !isRecording && !sstPrompt && attachedFiles.length === 0 && sourceUrls.length === 0 && pastedItems.length === 0 ? (
                     // Nothing to submit yet — offer voice mode instead of a
                     // send arrow that would just trigger the suggestion-fill
                     // fallback (see handleSubmit's showingSuggestion branch).
