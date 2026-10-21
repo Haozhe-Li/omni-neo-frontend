@@ -1,12 +1,6 @@
-// Long text pasted into a composer is lifted out of the query box into an
-// attachment chip and sent as `pasted_content` (core/utils/data_model.py), not
-// uploaded as a file: it has to work signed-out, and it must never show up in
-// the Sources rail.
-
-/** Mirrors QueryRequest.pasted_content's cap (max 5 items). */
-export const MAX_PASTED_ITEMS = 5
-/** Mirrors MAX_PASTED_CONTENT_CHARS in core/utils/data_model.py. */
-export const MAX_PASTED_CHARS = 100_000
+// Long or code-like text pasted into a composer is lifted out of the query box
+// and uploaded as `pasted_content.txt` through the normal file-upload flow, so
+// it rides along as an attachment chip. Signed-out users can do this too.
 
 // "Long": either many characters (CJK counts per character, so 1000 is still a
 // lot of text) or many lines (a pasted list, a log excerpt).
@@ -72,9 +66,22 @@ export function shouldAttachPaste(text: string): boolean {
     return isLongText(text) || looksLikeCode(text)
 }
 
-export function describePaste(text: string): { label: string; detail: string } {
-    const chars = text.length
-    const lines = text.split(/\r?\n/).length
-    const detail = lines > 1 ? `${lines.toLocaleString()} lines · ${chars.toLocaleString()} chars` : `${chars.toLocaleString()} chars`
-    return { label: looksLikeCode(text) ? 'Pasted code' : 'Pasted text', detail }
+/**
+ * A lifted paste is uploaded as an ordinary text file with this name. The
+ * backend recognises it (core/stream.py `is_pasted_content_name`) so it is
+ * mounted for the agent like any upload but never cited or listed as a source.
+ */
+export const PASTED_FILE_NAME = 'pasted_content.txt'
+
+export function pastedTextToFile(text: string): File {
+    return new File([text], PASTED_FILE_NAME, { type: 'text/plain' })
+}
+
+export function isPastedFileName(name: string): boolean {
+    return /^pasted_content(?:\(\d+\))?\.txt$/i.test(name)
+}
+
+/** What a chip calls an attachment: pasted text reads as such, files keep their name. */
+export function attachmentLabel(name: string): string {
+    return isPastedFileName(name) ? 'Pasted text' : name
 }

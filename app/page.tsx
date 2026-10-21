@@ -30,7 +30,6 @@ export default function Home() {
   const [pendingAttachmentMeta, setPendingAttachmentMeta] = useState<{ id: string; name: string; type: string }[]>([])
   const [pendingSkill, setPendingSkill] = useState<string | null>(null)
   const [pendingSourceUrls, setPendingSourceUrls] = useState<string[]>([])
-  const [pendingPasted, setPendingPasted] = useState<string[]>([])
   // Seeded from `?fill=` — typed into the home screen's input box for the
   // visitor to review or edit, never auto-submitted. Distinct from `?q=`
   // below, which skips the input box entirely and starts the chat outright;
@@ -108,8 +107,7 @@ export default function Home() {
       _attachedFileIds?: string[],
       attachedFileMeta?: { id: string; name: string; type: string }[],
       skill?: string | null,
-      sourceUrls?: string[],
-      pastedContents?: string[]
+      sourceUrls?: string[]
     ) => {
       if (blockIfOverLimit()) return
       setCurrentQuery(query)
@@ -117,7 +115,6 @@ export default function Home() {
       setPendingAttachmentMeta(attachedFileMeta && attachedFileMeta.length > 0 ? attachedFileMeta : [])
       setPendingSkill(skill || null)
       setPendingSourceUrls(sourceUrls && sourceUrls.length > 0 ? sourceUrls : [])
-      setPendingPasted(pastedContents && pastedContents.length > 0 ? pastedContents : [])
       setInitialMode(model)
       setView('chat')
       setShareableUrl(threadId)
@@ -141,7 +138,6 @@ export default function Home() {
     setPendingAttachmentMeta([])
     setPendingSkill(null)
     setPendingSourceUrls([])
-    setPendingPasted([])
     setDeepLinkFill('')
     setDeepLinkSourceUrls([])
     // Undo `setShareableUrl`'s replaceState: the address bar can be showing
@@ -223,7 +219,6 @@ export default function Home() {
             isNewThread
             initialAttachedFileMeta={pendingAttachmentMeta}
             initialSourceUrls={pendingSourceUrls}
-            initialPastedContents={pendingPasted}
             initialSkill={pendingSkill as any}
             sidebarOpen={sidebarOpen}
             setSidebarOpen={setSidebarOpen}

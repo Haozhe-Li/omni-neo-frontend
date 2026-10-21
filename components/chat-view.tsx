@@ -2,7 +2,7 @@
 
 import React, { Fragment, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Menu, ArrowUp, ArrowRight, AudioLines, Mic, Square, Paperclip, Link2, Plus, SquarePen, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch, ClipboardPaste } from 'lucide-react'
+import { Menu, ArrowUp, ArrowRight, AudioLines, Mic, Square, Paperclip, Link2, Plus, SquarePen, BarChart3, FileText, Copy, Maximize2, ChevronDown, Check, Lock, X, Pencil, Download, Code2, Loader2, Telescope, Plane, GraduationCap, MessageSquarePlus, ShieldAlert, AlertTriangle, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth, useClerk, useUser } from '@clerk/nextjs'
 import { useApi } from '@/hooks/useApi'
@@ -10,9 +10,7 @@ import { useFileUpload } from '@/hooks/useFileUpload'
 import { FileUploadArea } from '@/components/file-upload-area'
 import { useSourceUrls, isFirstPartyUrl, MAX_SOURCE_URLS, extractUrls, lastCompletedUrlToken } from '@/hooks/useSourceUrls'
 import { SourceUrlArea, hostAndPath } from '@/components/source-url-area'
-import { usePastedContent } from '@/hooks/usePastedContent'
-import { PastedContentArea } from '@/components/pasted-content-area'
-import { describePaste, looksLikeCode } from '@/lib/pasted-content'
+import { shouldAttachPaste, pastedTextToFile, attachmentLabel } from '@/lib/pasted-content'
 import { AddUrlPopover } from '@/components/add-url-popover'
 import { isAllowedUploadFile, UPLOAD_ACCEPT_ATTR } from '@/lib/upload-types'
 import { resolveFirstPartyTitle, cachedFirstPartyTitle } from '@/lib/first-party-title'
@@ -74,7 +72,6 @@ interface ChatViewProps {
   isNewThread?: boolean
   initialAttachedFileMeta?: { id: string; name: string; type: string }[]
   initialSourceUrls?: string[]
-  initialPastedContents?: string[]
   initialSkill?: SkillId | null
   sidebarOpen?: boolean
   setSidebarOpen?: (v: boolean) => void
@@ -508,7 +505,7 @@ function MessageChipGroup({
 }
 
 function MessageAttachments({ files }: { files: { id: string; name: string; type: string }[] }) {
-  return <MessageChipGroup icon={Paperclip} items={files.map((f) => ({ id: f.id, label: f.name }))} noun="attachments" />
+  return <MessageChipGroup icon={Paperclip} items={files.map((f) => ({ id: f.id, label: attachmentLabel(f.name) }))} noun="attachments" />
 }
 
 // External source URLs align with attached-file chips (same MessageChipGroup
@@ -525,45 +522,6 @@ function MessageSourceUrls({ urls }: { urls: string[] }) {
       items={external.map((u) => ({ id: u, label: hostAndPath(u).host }))}
       noun="sources"
     />
-  )
-}
-
-// Long text the user pasted into the composer. Same chip look as the
-// attachment/source chips above, but a click opens the text in place — unlike a
-// file or a link there is nothing else to open, and the message bubble no
-// longer shows it.
-function MessagePastedContents({ texts }: { texts: string[] }) {
-  const [openIdx, setOpenIdx] = useState<number | null>(null)
-  return (
-    <div className="mt-1.5 flex flex-col items-start gap-1.5">
-      <div className="flex flex-wrap gap-1.5">
-        {texts.map((text, idx) => {
-          const { label, detail } = describePaste(text)
-          return (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => setOpenIdx((cur) => (cur === idx ? null : idx))}
-              aria-expanded={openIdx === idx}
-              className={`inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors ${openIdx === idx
-                ? 'border-[var(--border)] bg-[var(--secondary)]/70 text-[var(--foreground)]'
-                : 'border-[var(--border-subtle)] bg-[var(--secondary)]/40 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/60'
-                }`}
-            >
-              <ClipboardPaste className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate min-w-0">{label} · {detail}</span>
-            </button>
-          )
-        })}
-      </div>
-      {openIdx !== null && texts[openIdx] !== undefined && (
-        <pre
-          className={`w-full max-h-64 overflow-auto custom-scrollbar rounded-lg border border-[var(--border-subtle)] bg-[var(--secondary)]/40 px-3 py-2 text-[12px] leading-relaxed text-[var(--foreground)] whitespace-pre-wrap break-words ${looksLikeCode(texts[openIdx]) ? 'font-mono' : 'font-sans'}`}
-        >
-          {texts[openIdx]}
-        </pre>
-      )}
-    </div>
   )
 }
 
@@ -800,7 +758,6 @@ export function ChatView({
   isNewThread = false,
   initialAttachedFileMeta,
   initialSourceUrls,
-  initialPastedContents,
   initialSkill = null,
   sidebarOpen,
   setSidebarOpen,
@@ -817,7 +774,6 @@ export function ChatView({
   const userEmail = user?.primaryEmailAddress?.emailAddress || ''
   const { attachedFiles, setAttachedFiles, removeFile, uploadFile } = useFileUpload()
   const { sourceUrls, addUrls, removeUrl, clearUrls } = useSourceUrls()
-  const { pastedItems, removePasted, clearPasted, interceptPaste } = usePastedContent()
   const sourceUrlsCountRef = useRef(0)
   sourceUrlsCountRef.current = sourceUrls.length
 
@@ -845,7 +801,6 @@ export function ChatView({
             content: query,
             ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}),
             ...(initialSourceUrls?.length ? { sourceUrls: initialSourceUrls } : {}),
-            ...(initialPastedContents?.length ? { pastedContents: initialPastedContents } : {}),
           },
           { role: 'assistant', content: '' },
         ]
@@ -2165,7 +2120,7 @@ export function ChatView({
 
   // ── send a turn ────────────────────────────────────────────────────────
   const runQuery = useCallback(
-    async (queryText: string, baseHistory: ChatMessage[], fileIds?: Record<string, string>[], followUpContent?: string, sourceUrls?: string[], pastedContents?: string[]) => {
+    async (queryText: string, baseHistory: ChatMessage[], fileIds?: Record<string, string>[], followUpContent?: string, sourceUrls?: string[]) => {
       setIsLoading(true)
       // The assistant reply will be appended right after baseHistory.
       setStreamingIndex(baseHistory.length)
@@ -2194,7 +2149,6 @@ export function ChatView({
         if (activeSkill) payload.skill = activeSkill
         if (followUpContent) payload.follow_up_content = followUpContent
         if (sourceUrls && sourceUrls.length) payload.source_url = sourceUrls
-        if (pastedContents && pastedContents.length) payload.pasted_content = pastedContents
 
         const res = await fetchWithAuth(`${BACKEND_URL}/chat`, {
           method: 'POST',
@@ -2381,11 +2335,10 @@ export function ChatView({
         content: query,
         ...(initialAttachedFileMeta?.length ? { attachedFiles: initialAttachedFileMeta } : {}),
         ...(initialSourceUrls?.length ? { sourceUrls: initialSourceUrls } : {}),
-        ...(initialPastedContents?.length ? { pastedContents: initialPastedContents } : {}),
       }
       setAttachedFiles([])
       requestPin() // pin the first query to the top
-      await runQuery(query, [userMsg], fileIds, undefined, initialSourceUrls?.length ? initialSourceUrls : undefined, initialPastedContents?.length ? initialPastedContents : undefined)
+      await runQuery(query, [userMsg], fileIds, undefined, initialSourceUrls?.length ? initialSourceUrls : undefined)
     }
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2569,11 +2522,8 @@ export function ChatView({
       // For regenerate: drop the target assistant message onward.
       // For edit: drop the target user message onward, then add the edited one.
       let baseHistory: ChatMessage[] = messages.slice(0, targetIndex)
-      // The edit box only holds the typed text, so a paste that rode along with
-      // the original message has to be carried over by hand.
-      const keptPasted = newQuery !== undefined ? messages[targetIndex]?.pastedContents : undefined
       if (newQuery !== undefined) {
-        baseHistory = [...baseHistory, { role: 'user', content: newQuery, ...(keptPasted?.length ? { pastedContents: keptPasted } : {}) }]
+        baseHistory = [...baseHistory, { role: 'user', content: newQuery }]
       }
 
       // Tag the incoming assistant message as regenerated so we can show the label
@@ -2593,7 +2543,6 @@ export function ChatView({
         // the most recent one.
         const payload: any = { model: effectiveMode, turn: baseHistory.length }
         if (newQuery !== undefined) payload.new_query = newQuery
-        if (keptPasted?.length) payload.pasted_content = keptPasted
         if (Object.keys(personalization).length) payload.personalization = personalization
 
         const res = await fetchWithAuth(`${BACKEND_URL}/api/threads/${threadId}/rewind`, {
@@ -2665,26 +2614,21 @@ export function ChatView({
       return
     }
     const readyFiles = attachedFiles.filter((f) => f.status === 'ready')
-    if (!input.trim() && readyFiles.length === 0 && pastedItems.length === 0) return
+    if (!input.trim() && readyFiles.length === 0) return
     const activeFiles = readyFiles.map((f) => ({ id: f.id!, name: f.name, type: f.type }))
     const followUpAtSend = followUpText.trim()
     const sourceUrlsAtSend = sourceUrls.map((e) => e.url)
-    const pastedAtSend = pastedItems.map((p) => p.text)
-    // Paste-only send: same stand-in the home composer uses for an empty box.
-    const sendText = input.trim() ? input : pastedAtSend.length > 1 ? 'Please read these pasted texts' : 'Please read this pasted text'
     const userMsg: ChatMessage = {
       role: 'user',
-      content: sendText,
+      content: input,
       ...(activeFiles.length ? { attachedFiles: activeFiles } : {}),
       ...(followUpAtSend ? { follow_up_content: followUpAtSend } : {}),
       ...(sourceUrlsAtSend.length ? { sourceUrls: sourceUrlsAtSend } : {}),
-      ...(pastedAtSend.length ? { pastedContents: pastedAtSend } : {}),
     }
     const baseHistory = [...messages, userMsg]
-    const queryText = sendText
+    const queryText = input
     setInput('')
     setAttachedFiles([])
-    clearPasted()
     setFollowUpText('')
     clearUrls()
     if (inputRef.current) {
@@ -2696,7 +2640,7 @@ export function ChatView({
     setStreamingIndex(baseHistory.length)
     requestPin() // pin this new query to the top
     const fileIds = activeFiles.map((f) => ({ [f.id]: f.name }))
-    await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined, followUpAtSend || undefined, sourceUrlsAtSend.length ? sourceUrlsAtSend : undefined, pastedAtSend.length ? pastedAtSend : undefined)
+    await runQuery(queryText, baseHistory, fileIds.length ? fileIds : undefined, followUpAtSend || undefined, sourceUrlsAtSend.length ? sourceUrlsAtSend : undefined)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -2772,7 +2716,7 @@ export function ChatView({
   // Shared validation before handing files to uploadFile — mirrors
   // search-home.tsx's uploadFilesFromList so a file rejected on the home
   // screen isn't silently accepted here only to 400 from the backend.
-  const uploadFilesFromList = useCallback((fileList: FileList | File[]) => {
+  const uploadFilesFromList = useCallback((fileList: FileList | File[], opts?: { allowGuest?: boolean }) => {
     const files = Array.from(fileList)
     if (files.length === 0) return
     if (attachedFiles.length + files.length > 5) {
@@ -2796,7 +2740,7 @@ export function ChatView({
         toast.error(IMAGE_UNSUPPORTED_MESSAGE)
         continue
       }
-      uploadFile(file, threadId).catch((err) => console.error('Failed to upload file in UI', err))
+      uploadFile(file, threadId, opts).catch((err) => console.error('Failed to upload file in UI', err))
     }
   }, [attachedFiles.length, uploadFile, threadId, mode])
 
@@ -2813,9 +2757,14 @@ export function ChatView({
       uploadFilesFromList(files)
       return
     }
-    // A long or code-like paste becomes a chip and is never scanned for links.
-    if (interceptPaste(e)) return
     const text = e.clipboardData?.getData('text')
+    // A long or code-like paste becomes an uploaded pasted_content.txt and is
+    // never scanned for links, signed in or not.
+    if (text && shouldAttachPaste(text)) {
+      e.preventDefault()
+      uploadFilesFromList([pastedTextToFile(text)], { allowGuest: true })
+      return
+    }
     if (text) autoDetectUrls(extractUrls(text))
   }
 
@@ -3074,9 +3023,6 @@ export function ChatView({
                   )}
                   {editingIndex !== i && !!msg.sourceUrls?.length && (
                     <MessageSourceUrls urls={msg.sourceUrls} />
-                  )}
-                  {editingIndex !== i && !!msg.pastedContents?.length && (
-                    <MessagePastedContents texts={msg.pastedContents} />
                   )}
                   </>
                 ) : (
@@ -3627,10 +3573,9 @@ export function ChatView({
                 }
               `}
             >
-              {(attachedFiles.length > 0 || sourceUrls.length > 0 || pastedItems.length > 0) && (
+              {(attachedFiles.length > 0 || sourceUrls.length > 0) && (
                 <div className="px-5 pt-4 pb-0 animate-in fade-in slide-in-from-top-1 duration-200 space-y-2">
                   <FileUploadArea files={attachedFiles} onRemove={removeFile} />
-                  <PastedContentArea items={pastedItems} onRemove={removePasted} />
                   <SourceUrlArea urls={sourceUrls} onRemove={removeUrl} />
                 </div>
               )}
@@ -3910,7 +3855,7 @@ export function ChatView({
                     <button
                       type="button"
                       onClick={handleSend}
-                      disabled={isLocked || (!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0 && pastedItems.length === 0) || attachedFiles.some((f) => f.status === 'uploading')}
+                      disabled={isLocked || (!input.trim() && attachedFiles.filter((f) => f.status === 'ready').length === 0) || attachedFiles.some((f) => f.status === 'uploading')}
                       className="omni-send h-9 w-9"
                       aria-label="Submit message"
                     >
