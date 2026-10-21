@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, File as FileIcon, Loader2, AlertCircle } from 'lucide-react'
 import { AttachedFile } from '@/hooks/useFileUpload'
+import { attachmentLabel } from '@/lib/pasted-content'
 
 export interface FileUploadAreaProps {
     files: AttachedFile[]
@@ -82,7 +83,7 @@ export function FileUploadArea({ files, onRemove, className = '' }: FileUploadAr
                         <AttachmentThumbnail file={file} />
 
                         <div className="flex flex-col min-w-0 max-w-[150px] sm:max-w-[200px]">
-                            <span className="truncate font-medium text-[13px]">{file.name}</span>
+                            <span className="truncate font-medium text-[13px]">{attachmentLabel(file.name)}</span>
                             {(file.status === 'uploading' || file.status === 'error') && (
                                 <span className="text-[11px] opacity-70 flex items-center gap-1">
                                     {file.status === 'uploading' && <span className="text-[var(--muted-foreground)]">Uploading…</span>}

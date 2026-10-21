@@ -253,8 +253,6 @@ export interface ChatMessage {
   attachedFiles?: { id: string; name: string; type: string }[]
   /** Whitelisted URLs the agent was asked to prioritize reading this turn. */
   sourceUrls?: string[]
-  /** Long text the user pasted into the composer, sent inline as `pasted_content` (never an uploaded file, never a source). */
-  pastedContents?: string[]
   follow_up_content?: string
   sources?: Source[]
   steps?: TimelineStep[]

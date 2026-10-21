@@ -28,8 +28,10 @@ export function useFileUpload() {
         setAttachedFiles([])
     }, [])
 
-    const uploadFile = useCallback(async (file: File, currentThreadId?: string) => {
-        if (!isSignedIn) {
+    // `allowGuest`: a lifted paste (lib/pasted-content.ts) is uploaded for guests
+    // too — the backend takes a guest id on every upload route.
+    const uploadFile = useCallback(async (file: File, currentThreadId?: string, opts?: { allowGuest?: boolean }) => {
+        if (!isSignedIn && !opts?.allowGuest) {
             throw new Error("Must be signed in to upload files")
         }
 
