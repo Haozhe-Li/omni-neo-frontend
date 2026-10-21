@@ -21,28 +21,12 @@ const TICK_STAGGER_MS = 70
 
 export function ResearchProgress({ todos, done }: ResearchProgressProps) {
   const items: TodoItem[] = done ? todos.map((t) => ({ ...t, status: 'completed' })) : todos
-  const finished = items.filter((t) => t.status === 'completed').length
 
   return (
     <div className="omni-trace mt-3 px-5 py-4" style={{ animation: 'omni-rise 240ms ease both' }}>
-      <div className="flex items-baseline justify-between gap-3">
-        {done ? (
-          <span className="flex items-center gap-2 text-[14.5px] font-medium leading-[1.45] text-[var(--ink)]">
-            Deep research complete
-          </span>
-        ) : (
-          <span className="omni-flow-text text-[14.5px] font-medium leading-[1.45]">Running Deep Researching ...</span>
-        )}
-        {items.length > 0 && (
-          <span className="shrink-0 text-[12.5px] tabular-nums text-[var(--ink-faint)]">
-            {finished}/{items.length}
-          </span>
-        )}
-      </div>
-
       {items.length === 0 ? (
         // The skill has loaded but the plan hasn't arrived yet.
-        <div className="mt-3.5 space-y-3" aria-hidden>
+        <div className="space-y-3" aria-hidden>
           {[0, 1, 2].map((i) => (
             <div key={i} className="flex items-center gap-3">
               <div className="h-4 w-4 shrink-0 rounded-full bg-[var(--line)]" style={{ animation: 'omni-soft-pulse 1.4s ease-in-out infinite' }} />
@@ -54,7 +38,7 @@ export function ResearchProgress({ todos, done }: ResearchProgressProps) {
           ))}
         </div>
       ) : (
-        <ul className="mt-3.5 flex flex-col gap-2.5">
+        <ul className="flex flex-col gap-2.5">
           {items.map((todo, i) => (
             <TodoRow key={i} todo={todo} delayMs={done ? i * TICK_STAGGER_MS : 0} />
           ))}
