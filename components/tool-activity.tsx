@@ -829,21 +829,17 @@ function HeaderRow({
   open,
   onToggle,
   shimmer = false,
-  labelOnly = false,
 }: {
   label: HeaderLabelSpec
   open: boolean
   onToggle: () => void
   /** The label flows with the teal sweep — the turn is still running. */
   shimmer?: boolean
-  /** Just the label: no "View steps" affordance, and nothing to click. */
-  labelOnly?: boolean
 }) {
   return (
     <button
       onClick={onToggle}
-      disabled={labelOnly}
-      className={`group flex max-w-full items-baseline gap-2 pl-0.5 text-[13.5px] text-[var(--ink-muted)] transition-colors ${labelOnly ? 'cursor-default' : 'hover:text-[var(--teal)]'}`}
+      className="group flex max-w-full items-baseline gap-2 pl-0.5 text-[13.5px] text-[var(--ink-muted)] transition-colors hover:text-[var(--teal)]"
     >
       <span className="mb-px h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--ink-fainter)]" />
       {'text' in label ? (
@@ -851,19 +847,15 @@ function HeaderRow({
       ) : (
         <CountHeaderLabel prefix={label.prefix} count={label.count} suffix={label.suffix} />
       )}
-      {!labelOnly && (
-        <>
-          <span className="shrink-0 text-[var(--ink-fainter)]">·</span>
-          <span className="shrink-0">{open ? 'Hide steps' : 'View steps'}</span>
-          {/* A 6px corner rather than a chevron glyph: at this size an icon-set
-              chevron is mostly antialiasing, and this rotates cleanly. */}
-          <span
-            aria-hidden
-            className="mt-0.5 h-1.5 w-1.5 shrink-0 border-l-[1.5px] border-t-[1.5px] border-[var(--ink-fainter)] transition-transform"
-            style={{ transform: `rotate(${open ? 45 : 135}deg)` }}
-          />
-        </>
-      )}
+      <span className="shrink-0 text-[var(--ink-fainter)]">·</span>
+      <span className="shrink-0">{open ? 'Hide steps' : 'View steps'}</span>
+      {/* A 6px corner rather than a chevron glyph: at this size an icon-set
+          chevron is mostly antialiasing, and this rotates cleanly. */}
+      <span
+        aria-hidden
+        className="mt-0.5 h-1.5 w-1.5 shrink-0 border-l-[1.5px] border-t-[1.5px] border-[var(--ink-fainter)] transition-transform"
+        style={{ transform: `rotate(${open ? 45 : 135}deg)` }}
+      />
     </button>
   )
 }
@@ -1240,8 +1232,9 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   const doneLabel: HeaderLabelSpec = {
     text: research ? `Researched · ${items.length} step${items.length === 1 ? '' : 's'}` : `${items.length} step${items.length === 1 ? '' : 's'}`,
   }
-  // Until the answer starts the line just says "Researching", shimmering; the
-  // step count only matters once the work is reference material.
+  // Until the answer starts the line says "Researching", shimmering, with the
+  // usual "View steps" toggle; the step count only matters once the work is
+  // reference material.
   const researchRunning = !!research && thinking
   const researchLabel: HeaderLabelSpec = { text: 'Researching' }
   // Present tense while the turn is still running, and the count demoted to a
@@ -1281,7 +1274,9 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
   const [open, setOpen] = useState(false)
   // Live turns are always expanded and have nothing to toggle; `open` only
   // governs a finished trace.
-  const bodyOpen = research && researchRunning ? false : isLive || open
+  // A research turn is collapsed by default even while live, but the "Researching"
+  // line stays clickable to open the step trace.
+  const bodyOpen = isLive || open
 
   // The collapse is pure CSS now (`grid-template-rows: 0fr → 1fr` on the body
   // below), so there is no height to measure, no ref, and no rAF dance — and
@@ -1338,7 +1333,6 @@ export function ToolActivity({ steps = [], isStreaming, answered, drafting, idPr
           <HeaderRow
             label={researchRunning ? researchLabel : showLiveRow && !research ? workingLabel : doneLabel}
             shimmer={researchRunning}
-            labelOnly={researchRunning}
             open={open}
             onToggle={() => setOpen((v) => !v)}
           />
